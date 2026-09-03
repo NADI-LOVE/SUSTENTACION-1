@@ -53,7 +53,7 @@ namespace SUSTENTACION
             {
                 Width = 380,
                 Dock = DockStyle.Left,
-                BackColor = Color.FromArgb(15, 32, 67) // Color azul oscuro de respaldo
+                BackColor = Color.FromArgb(15, 32, 67) // Color azul oscuro
             };
             this.Controls.Add(panelIzquierdo);
 
@@ -154,7 +154,7 @@ namespace SUSTENTACION
             };
             panelDerecho.Controls.Add(lblForgot);
 
-            // Botón "Login" con bordes redondeados
+            // Botón "Login"
             btnLogin = new Button
             {
                 Text = "Login",
@@ -169,7 +169,6 @@ namespace SUSTENTACION
             btnLogin.FlatAppearance.BorderSize = 0;
             AplicarBordesRedondeados(btnLogin, 20);
 
-            // Evento Clic del Botón Login
             btnLogin.Click += BtnLogin_Click;
             panelDerecho.Controls.Add(btnLogin);
 
@@ -197,13 +196,12 @@ namespace SUSTENTACION
             panelDerecho.Controls.Add(lblSignUpLink);
         }
 
-        // --- Lógica para conectar y validar en la Base de Datos mostrando el Rol ---
+        // --- Lógica de Inicio de Sesión con Redirección según Rol ---
         private void BtnLogin_Click(object sender, EventArgs e)
         {
             string email = txtEmail.Text.Trim();
             string password = txtPassword.Text.Trim();
 
-            // Validar que los campos no estén vacíos
             if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(password))
             {
                 MessageBox.Show("Por favor ingresa tu correo y contraseña.", "Campos requeridos", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -216,7 +214,6 @@ namespace SUSTENTACION
             {
                 using (MySqlConnection conn = conexionBD.ObtenerConexion())
                 {
-                    // Consulta con JOIN entre la tabla 'trabajadores' y 'roles'
                     string query = @"SELECT t.nombre, r.nombre_rol 
                                      FROM trabajadores t 
                                      INNER JOIN roles r ON t.id_rol = r.id_rol 
@@ -229,7 +226,7 @@ namespace SUSTENTACION
 
                         using (MySqlDataReader reader = cmd.ExecuteReader())
                         {
-                            if (reader.Read()) // Si encuentra coincidencia
+                            if (reader.Read())
                             {
                                 string nombreTrabajador = reader["nombre"].ToString();
                                 string nombreRol = reader["nombre_rol"].ToString();
@@ -237,9 +234,24 @@ namespace SUSTENTACION
                                 MessageBox.Show($"¡Bienvenido {nombreTrabajador}!\nSe inició sesión con éxito como: {nombreRol}",
                                                 "Bienvenido", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
-                                // Limpiar los campos después del login
+                                // Limpiar cajas de texto
                                 txtEmail.Clear();
                                 txtPassword.Clear();
+
+                                // Ocultar pantalla Login
+                                this.Hide();
+
+                                // Evaluamos el rol para abrir la ventana correspondiente
+                                if (nombreRol.Equals("Administrador", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    FormAdmin dashboardAdmin = new FormAdmin(nombreTrabajador, nombreRol);
+                                    dashboardAdmin.Show();
+                                }
+                                else
+                                {
+                                    FormTrabajador dashboardTrabajador = new FormTrabajador(nombreTrabajador, nombreRol);
+                                    dashboardTrabajador.Show();
+                                }
                             }
                             else
                             {
@@ -259,7 +271,6 @@ namespace SUSTENTACION
             }
         }
 
-        // Método auxiliar para redondear las esquinas del botón
         private void AplicarBordesRedondeados(Control control, int radio)
         {
             GraphicsPath path = new GraphicsPath();
