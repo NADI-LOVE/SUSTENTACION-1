@@ -44,17 +44,11 @@ namespace SUSTENTACION
             this.BackColor = bgDark;
             this.DoubleBuffered = true;
 
-            // 1. Sidebar Izquierdo (Menú)
-            CrearSidebar();
-
-            // 2. Sidebar Derecho (Notificaciones)
-            CrearRightSidebar();
-
-            // 3. Header Superior (Barra con usuario y Cerrar Sesión)
-            CrearHeader();
-
-            // 4. Panel de Contenido Central (Tarjetas y Tablas)
-            CrearMainContent();
+            // Orden estricto de instanciación para acoplado correcto
+            CrearSidebar();        // Dock = Left
+            CrearRightSidebar();   // Dock = Right
+            CrearHeader();         // Dock = Top
+            CrearMainContent();    // Dock = Fill (debe ser el último agregado)
         }
 
         private void CrearSidebar()
@@ -92,7 +86,7 @@ namespace SUSTENTACION
             // Botón Activo
             Button btnOverview = new Button
             {
-                Text = "   Overview",
+                Text = "    Overview",
                 Size = new Size(190, 40),
                 Location = new Point(15, 90),
                 BackColor = accentGreen,
@@ -113,7 +107,7 @@ namespace SUSTENTACION
             {
                 Button btn = new Button
                 {
-                    Text = $"   {item}",
+                    Text = $"    {item}",
                     Size = new Size(190, 36),
                     Location = new Point(15, topPos),
                     BackColor = Color.Transparent,
@@ -195,7 +189,7 @@ namespace SUSTENTACION
 
             Label lblContactName = new Label
             {
-                Text = $"👤 {nombreUsuario}\n   Role: {rolUsuario}",
+                Text = $"👤 {nombreUsuario}\n    Role: {rolUsuario}",
                 Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
                 ForeColor = Color.Black,
                 Location = new Point(12, 9),
@@ -231,7 +225,6 @@ namespace SUSTENTACION
             {
                 Text = "Cerrar Sesión",
                 Size = new Size(120, 35),
-                Location = new Point(panelHeader.Width - 140, 12),
                 Anchor = AnchorStyles.Top | AnchorStyles.Right,
                 BackColor = Color.FromArgb(220, 38, 38), // Rojo
                 ForeColor = Color.White,
@@ -239,6 +232,7 @@ namespace SUSTENTACION
                 Font = new Font("Segoe UI", 9f, FontStyle.Bold),
                 Cursor = Cursors.Hand
             };
+            btnCerrarSesion.Location = new Point(panelHeader.Width - 140, 12);
             btnCerrarSesion.FlatAppearance.BorderSize = 0;
             AplicarBordesRedondeados(btnCerrarSesion, 10);
             btnCerrarSesion.Click += BtnCerrarSesion_Click;
@@ -253,134 +247,72 @@ namespace SUSTENTACION
                 Dock = DockStyle.Fill,
                 BackColor = bgDark,
                 AutoScroll = true,
-                Padding = new Padding(20)
+                Padding = new Padding(25)
             };
+            // Se agrega al final para garantizar el Docking libre entre Left, Right y Top
             this.Controls.Add(panelMainContent);
+            panelMainContent.BringToFront();
 
+            // Título
             Label lblOverview = new Label
             {
                 Text = "Resumen General",
                 Font = new Font("Segoe UI", 18f, FontStyle.Bold),
                 ForeColor = textWhite,
-                Location = new Point(20, 10),
-                AutoSize = true
+                Dock = DockStyle.Top,
+                Height = 45
             };
             panelMainContent.Controls.Add(lblOverview);
 
+            // Contenedor vertical principal para el contenido dinámico
+            FlowLayoutPanel flowContainer = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                AutoScroll = true,
+                FlowDirection = FlowDirection.TopDown,
+                WrapContents = false,
+                BackColor = Color.Transparent,
+                Padding = new Padding(0, 10, 0, 0)
+            };
+            panelMainContent.Controls.Add(flowContainer);
+            flowContainer.BringToFront();
+
             // --- FILA 1: KPIs ---
-            CrearCardKPI("Total Productos", "1,248", "^ 3.2% este mes", 20, 55, 180);
-            CrearCardKPI("Stock Disponible", "18,221", "Unidades en almacén", 215, 55, 180);
-            CrearCardKPI("Meta de Ventas", "84%", "Objetivo $50K", 410, 55, 180);
-            CrearCardKPI("Bajo Stock", "12", "Requieren pedido", 605, 55, 180);
+            FlowLayoutPanel rowKPIs = new FlowLayoutPanel
+            {
+                AutoSize = true,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = true,
+                Margin = new Padding(0, 0, 0, 20)
+            };
+            rowKPIs.Controls.Add(CrearCardKPI("Total Productos", "1,248", "^ 3.2% este mes"));
+            rowKPIs.Controls.Add(CrearCardKPI("Stock Disponible", "18,221", "Unidades en almacén"));
+            rowKPIs.Controls.Add(CrearCardKPI("Meta de Ventas", "84%", "Objetivo $50K"));
+            rowKPIs.Controls.Add(CrearCardKPI("Bajo Stock", "12", "Requieren pedido"));
+            flowContainer.Controls.Add(rowKPIs);
 
             // --- FILA 2: GRÁFICO DONUT + BANNER DESTACADO ---
-            Panel cardSales = new Panel
+            FlowLayoutPanel rowMiddle = new FlowLayoutPanel
             {
-                Size = new Size(490, 210),
-                Location = new Point(20, 170),
-                BackColor = bgCard
+                AutoSize = true,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = true,
+                Margin = new Padding(0, 0, 0, 20)
             };
-            AplicarBordesRedondeados(cardSales, 15);
-
-            Label lblSalesTitle = new Label
-            {
-                Text = "Distribución de Inventario",
-                Font = new Font("Segoe UI", 11f, FontStyle.Bold),
-                ForeColor = textWhite,
-                Location = new Point(15, 15),
-                AutoSize = true
-            };
-            cardSales.Controls.Add(lblSalesTitle);
-
-            cardSales.Paint += (s, e) =>
-            {
-                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-                using (Pen pGreen = new Pen(accentGreen, 12))
-                using (Pen pDark = new Pen(Color.FromArgb(60, 60, 60), 12))
-                {
-                    e.Graphics.DrawArc(pDark, 20, 55, 120, 120, 0, 360);
-                    e.Graphics.DrawArc(pGreen, 20, 55, 120, 120, -90, 240);
-                }
-            };
-
-            Label lblDonutText = new Label
-            {
-                Text = "102k\nUnidades",
-                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
-                ForeColor = textWhite,
-                Location = new Point(50, 95),
-                TextAlign = ContentAlignment.MiddleCenter,
-                AutoSize = true
-            };
-            cardSales.Controls.Add(lblDonutText);
-
-            Label lblLegend = new Label
-            {
-                Text = "● Electrónica: 55,640\n\n● Herramientas: 11,420\n\n● Ropa / Accesorios: 1,840",
-                Font = new Font("Segoe UI", 8.5f),
-                ForeColor = textGray,
-                Location = new Point(165, 60),
-                AutoSize = true
-            };
-            cardSales.Controls.Add(lblLegend);
-            panelMainContent.Controls.Add(cardSales);
-
-            // Card Banner Promocional / Alerta
-            Panel cardGreenBanner = new Panel
-            {
-                Size = new Size(275, 210),
-                Location = new Point(525, 170),
-                BackColor = Color.FromArgb(20, 50, 25)
-            };
-            AplicarBordesRedondeados(cardGreenBanner, 15);
-
-            Label lblBannerPrice = new Label
-            {
-                Text = "Artemusa Pro",
-                Font = new Font("Segoe UI", 18f, FontStyle.Bold),
-                ForeColor = accentGreen,
-                Location = new Point(15, 20),
-                AutoSize = true
-            };
-            cardGreenBanner.Controls.Add(lblBannerPrice);
-
-            Label lblBannerDesc = new Label
-            {
-                Text = "Gestiona permisos de usuarios, alertas automáticas de stock y exportaciones a Excel.",
-                Font = new Font("Segoe UI", 8.5f),
-                ForeColor = textWhite,
-                Location = new Point(18, 65),
-                Size = new Size(240, 60)
-            };
-            cardGreenBanner.Controls.Add(lblBannerDesc);
-
-            Button btnGetStarted = new Button
-            {
-                Text = "Ver Módulos",
-                Size = new Size(235, 35),
-                Location = new Point(20, 145),
-                BackColor = accentGreen,
-                ForeColor = Color.Black,
-                FlatStyle = FlatStyle.Flat,
-                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-                Cursor = Cursors.Hand
-            };
-            btnGetStarted.FlatAppearance.BorderSize = 0;
-            AplicarBordesRedondeados(btnGetStarted, 10);
-            cardGreenBanner.Controls.Add(btnGetStarted);
-
-            panelMainContent.Controls.Add(cardGreenBanner);
+            rowMiddle.Controls.Add(CrearCardGraficoDona());
+            rowMiddle.Controls.Add(CrearCardBannerPro());
+            flowContainer.Controls.Add(rowMiddle);
 
             // --- FILA 3: TABLA DE PRODUCTOS Y MOVIMIENTOS ---
-            CrearTablaProductos(20, 400);
+            flowContainer.Controls.Add(CrearCardTablaProductos());
         }
 
-        private void CrearCardKPI(string titulo, string valor, string subtexto, int x, int y, int width)
+        private Panel CrearCardKPI(string titulo, string valor, string subtexto)
         {
             Panel card = new Panel
             {
-                Size = new Size(width, 95),
-                Location = new Point(x, y),
+                Size = new Size(185, 95),
+                Margin = new Padding(0, 0, 15, 10),
                 BackColor = bgCard
             };
             AplicarBordesRedondeados(card, 12);
@@ -415,15 +347,118 @@ namespace SUSTENTACION
             };
             card.Controls.Add(lblSub);
 
-            panelMainContent.Controls.Add(card);
+            return card;
         }
 
-        private void CrearTablaProductos(int x, int y)
+        private Panel CrearCardGraficoDona()
+        {
+            Panel cardSales = new Panel
+            {
+                Size = new Size(490, 210),
+                Margin = new Padding(0, 0, 15, 10),
+                BackColor = bgCard
+            };
+            AplicarBordesRedondeados(cardSales, 15);
+
+            Label lblSalesTitle = new Label
+            {
+                Text = "Distribución de Inventario",
+                Font = new Font("Segoe UI", 11f, FontStyle.Bold),
+                ForeColor = textWhite,
+                Location = new Point(15, 15),
+                AutoSize = true
+            };
+            cardSales.Controls.Add(lblSalesTitle);
+
+            cardSales.Paint += (s, e) =>
+            {
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                using (Pen pGreen = new Pen(accentGreen, 12))
+                using (Pen pDark = new Pen(Color.FromArgb(60, 60, 60), 12))
+                {
+                    e.Graphics.DrawArc(pDark, 20, 55, 120, 120, 0, 360);
+                    e.Graphics.DrawArc(pGreen, 20, 55, 120, 120, -90, 240);
+                }
+            };
+
+            Label lblDonutText = new Label
+            {
+                Text = "102k\nUnidades",
+                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+                ForeColor = textWhite,
+                Location = new Point(48, 95),
+                TextAlign = ContentAlignment.MiddleCenter,
+                AutoSize = true
+            };
+            cardSales.Controls.Add(lblDonutText);
+
+            Label lblLegend = new Label
+            {
+                Text = "● Electrónica: 55,640\n\n● Herramientas: 11,420\n\n● Ropa / Accesorios: 1,840",
+                Font = new Font("Segoe UI", 8.5f),
+                ForeColor = textGray,
+                Location = new Point(165, 60),
+                AutoSize = true
+            };
+            cardSales.Controls.Add(lblLegend);
+
+            return cardSales;
+        }
+
+        private Panel CrearCardBannerPro()
+        {
+            Panel cardGreenBanner = new Panel
+            {
+                Size = new Size(280, 210),
+                Margin = new Padding(0, 0, 0, 10),
+                BackColor = Color.FromArgb(20, 50, 25)
+            };
+            AplicarBordesRedondeados(cardGreenBanner, 15);
+
+            Label lblBannerPrice = new Label
+            {
+                Text = "Artemusa Pro",
+                Font = new Font("Segoe UI", 18f, FontStyle.Bold),
+                ForeColor = accentGreen,
+                Location = new Point(15, 20),
+                AutoSize = true
+            };
+            cardGreenBanner.Controls.Add(lblBannerPrice);
+
+            Label lblBannerDesc = new Label
+            {
+                Text = "Gestiona permisos de usuarios, alertas automáticas de stock y exportaciones a Excel.",
+                Font = new Font("Segoe UI", 8.5f),
+                ForeColor = textWhite,
+                Location = new Point(18, 65),
+                Size = new Size(240, 60)
+            };
+            cardGreenBanner.Controls.Add(lblBannerDesc);
+
+            Button btnGetStarted = new Button
+            {
+                Text = "Ver Módulos",
+                Size = new Size(240, 35),
+                Location = new Point(20, 145),
+                BackColor = accentGreen,
+                ForeColor = Color.Black,
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                Cursor = Cursors.Hand
+            };
+            btnGetStarted.FlatAppearance.BorderSize = 0;
+            AplicarBordesRedondeados(btnGetStarted, 10);
+            cardGreenBanner.Controls.Add(btnGetStarted);
+
+            return cardGreenBanner;
+        }
+
+        private Panel CrearCardTablaProductos()
         {
             Panel cardTable = new Panel
             {
-                Size = new Size(780, 220),
-                Location = new Point(x, y),
+                Size = new Size(785, 220),
+                Margin = new Padding(0, 0, 0, 15),
                 BackColor = bgCard
             };
             AplicarBordesRedondeados(cardTable, 15);
@@ -441,7 +476,7 @@ namespace SUSTENTACION
             DataGridView dgv = new DataGridView
             {
                 Location = new Point(15, 45),
-                Size = new Size(750, 155),
+                Size = new Size(755, 155),
                 BackgroundColor = bgCard,
                 BorderStyle = BorderStyle.None,
                 CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal,
@@ -453,7 +488,7 @@ namespace SUSTENTACION
                 SelectionMode = DataGridViewSelectionMode.FullRowSelect
             };
 
-            // Estilos para encajar en el Modo Oscuro
+            // Estilos
             dgv.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(45, 45, 45);
             dgv.ColumnHeadersDefaultCellStyle.ForeColor = accentGreen;
             dgv.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
@@ -472,13 +507,13 @@ namespace SUSTENTACION
             dgv.Columns[1].Width = 150;
             dgv.Columns[2].Width = 200;
 
-            // Filas de prueba adaptadas al inventario
+            // Filas
             dgv.Rows.Add("Laptop ASUS TUF Gaming", "15 Unidades", "$18,750");
             dgv.Rows.Add("Teclado Mecánico RGB", "45 Unidades", "$2,250");
             dgv.Rows.Add("Monitor LG 27\" IPS 144Hz", "20 Unidades", "$5,800");
 
             cardTable.Controls.Add(dgv);
-            panelMainContent.Controls.Add(cardTable);
+            return cardTable;
         }
 
         private void BtnCerrarSesion_Click(object sender, EventArgs e)
@@ -498,13 +533,23 @@ namespace SUSTENTACION
 
         private void AplicarBordesRedondeados(Control control, int radio)
         {
-            GraphicsPath path = new GraphicsPath();
-            path.AddArc(0, 0, radio, radio, 180, 90);
-            path.AddArc(control.Width - radio, 0, radio, radio, 270, 90);
-            path.AddArc(control.Width - radio, control.Height - radio, radio, radio, 0, 90);
-            path.AddArc(0, control.Height - radio, radio, radio, 90, 90);
-            path.CloseAllFigures();
-            control.Region = new Region(path);
+            Action recalcularRegion = () =>
+            {
+                if (control.Width <= 0 || control.Height <= 0) return;
+
+                using (GraphicsPath path = new GraphicsPath())
+                {
+                    path.AddArc(0, 0, radio, radio, 180, 90);
+                    path.AddArc(control.Width - radio, 0, radio, radio, 270, 90);
+                    path.AddArc(control.Width - radio, control.Height - radio, radio, radio, 0, 90);
+                    path.AddArc(0, control.Height - radio, radio, radio, 90, 90);
+                    path.CloseAllFigures();
+                    control.Region = new Region(path);
+                }
+            };
+
+            control.Resize += (s, e) => recalcularRegion();
+            recalcularRegion();
         }
     }
 }

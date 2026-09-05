@@ -35,7 +35,7 @@ namespace SUSTENTACION
 
         private void ConstruirInterfaz()
         {
-            // Ventana Principal mejor proporcionada
+            // Ventana Principal
             this.Size = new Size(1360, 780);
             this.MinimumSize = new Size(1150, 720);
             this.StartPosition = FormStartPosition.CenterScreen;
@@ -43,10 +43,10 @@ namespace SUSTENTACION
             this.BackColor = bgLight;
             this.DoubleBuffered = true;
 
-            // EL ORDEN DEL DOCK ES CLAVE: 1. Sidebar, 2. Header, 3. MainContent
-            CrearSidebar();
-            CrearHeader();
-            CrearMainContent();
+            // Orden estricto de instanciación para acoplado correcto
+            CrearSidebar();     // Dock = Left
+            CrearHeader();      // Dock = Top
+            CrearMainContent(); // Dock = Fill (debe quedar al frente)
         }
 
         private void CrearSidebar()
@@ -84,7 +84,7 @@ namespace SUSTENTACION
             // Botón Activo
             Button btnDashboard = new Button
             {
-                Text = "  Dashboard",
+                Text = "    Dashboard",
                 Size = new Size(190, 40),
                 Location = new Point(15, 85),
                 BackColor = Color.White,
@@ -106,7 +106,7 @@ namespace SUSTENTACION
             {
                 Button btn = new Button
                 {
-                    Text = $"  {opc}",
+                    Text = $"    {opc}",
                     Size = new Size(190, 36),
                     Location = new Point(15, topPos),
                     BackColor = Color.Transparent,
@@ -195,15 +195,35 @@ namespace SUSTENTACION
                 Dock = DockStyle.Fill,
                 BackColor = bgLight,
                 AutoScroll = true,
-                Padding = new Padding(20)
+                Padding = new Padding(25)
             };
             this.Controls.Add(panelMainContent);
+            panelMainContent.BringToFront(); // Evita solapamiento bajo las barras
 
-            // 1. Tarjeta Usuario / Turno (Lado Izquierdo Arriba)
+            FlowLayoutPanel flowContainer = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                AutoScroll = true,
+                FlowDirection = FlowDirection.TopDown,
+                WrapContents = false,
+                BackColor = Color.Transparent
+            };
+            panelMainContent.Controls.Add(flowContainer);
+
+            // --- FILA 1: STATUS USUARIO + KPIs ---
+            FlowLayoutPanel rowTop = new FlowLayoutPanel
+            {
+                AutoSize = true,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = true,
+                Margin = new Padding(0, 0, 0, 20)
+            };
+
+            // Card Usuario
             Panel cardUserStatus = new Panel
             {
-                Size = new Size(250, 190),
-                Location = new Point(20, 10),
+                Size = new Size(230, 185),
+                Margin = new Padding(0, 0, 20, 10),
                 BackColor = bgWhite
             };
             AplicarBordesRedondeados(cardUserStatus, 15);
@@ -211,9 +231,9 @@ namespace SUSTENTACION
             Label lblStatusTitle = new Label
             {
                 Text = "Turno Disponible",
-                Font = new Font("Segoe UI", 10.5f, FontStyle.Bold),
+                Font = new Font("Segoe UI", 10f, FontStyle.Bold),
                 ForeColor = greenPrimary,
-                Location = new Point(65, 12),
+                Location = new Point(55, 12),
                 AutoSize = true
             };
             cardUserStatus.Controls.Add(lblStatusTitle);
@@ -221,8 +241,8 @@ namespace SUSTENTACION
             Label lblAvatar = new Label
             {
                 Text = "🧑‍💼",
-                Font = new Font("Segoe UI", 32f),
-                Location = new Point(95, 40),
+                Font = new Font("Segoe UI", 28f),
+                Location = new Point(85, 38),
                 AutoSize = true
             };
             cardUserStatus.Controls.Add(lblAvatar);
@@ -233,33 +253,45 @@ namespace SUSTENTACION
                 Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
                 ForeColor = textDark,
                 TextAlign = ContentAlignment.MiddleCenter,
-                Location = new Point(45, 125),
+                Location = new Point(35, 120),
                 AutoSize = true
             };
             cardUserStatus.Controls.Add(lblWorkingInfo);
-            panelMainContent.Controls.Add(cardUserStatus);
+            rowTop.Controls.Add(cardUserStatus);
 
-            // 2. Bloque de Muestras / KPI Cards (Matriz de 3x2 organizada)
-            int kpiX = 290;
-            int kpiY = 10;
-            int kpiWidth = 160;
-            int kpiHeight = 85;
+            // Matriz de KPIs (Contenedor adaptable de 3x2)
+            FlowLayoutPanel gridKPIs = new FlowLayoutPanel
+            {
+                Size = new Size(550, 185),
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = true,
+                Margin = new Padding(0)
+            };
 
-            // Fila 1
-            CrearKPICard("40", "Entradas Hoy", "Ayer: 32 Entradas", kpiX, kpiY, kpiWidth, kpiHeight);
-            CrearKPICard("21", "Salidas Hoy", "Ayer: 18 Salidas", kpiX + 175, kpiY, kpiWidth, kpiHeight);
-            CrearKPICard("14", "Revisiones", "Pendientes: 2", kpiX + 350, kpiY, kpiWidth, kpiHeight);
+            gridKPIs.Controls.Add(CrearKPICard("40", "Entradas Hoy", "Ayer: 32 Entradas"));
+            gridKPIs.Controls.Add(CrearKPICard("21", "Salidas Hoy", "Ayer: 18 Salidas"));
+            gridKPIs.Controls.Add(CrearKPICard("14", "Revisiones", "Pendientes: 2"));
+            gridKPIs.Controls.Add(CrearKPICard("15", "Categorías", "Actualizadas"));
+            gridKPIs.Controls.Add(CrearKPICard("36", "Productos", "Bajo Stock"));
+            gridKPIs.Controls.Add(CrearKPICard("S/ 52,140", "Valor Almacén", "Total registrado"));
 
-            // Fila 2
-            CrearKPICard("15", "Categorías", "Actualizadas", kpiX, kpiY + 100, kpiWidth, kpiHeight);
-            CrearKPICard("36", "Productos", "Bajo Stock", kpiX + 175, kpiY + 100, kpiWidth, kpiHeight);
-            CrearKPICard("S/ 52,140", "Valor Almacén", "Total registrado", kpiX + 350, kpiY + 100, kpiWidth, kpiHeight);
+            rowTop.Controls.Add(gridKPIs);
+            flowContainer.Controls.Add(rowTop);
 
-            // 3. Gráfico (Lado Izquierdo Abajo)
+            // --- FILA 2: GRÁFICO + CALENDARIO ---
+            FlowLayoutPanel rowBottom = new FlowLayoutPanel
+            {
+                AutoSize = true,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = true,
+                Margin = new Padding(0)
+            };
+
+            // Gráfico
             Panel cardChart = new Panel
             {
-                Size = new Size(520, 260),
-                Location = new Point(20, 220),
+                Size = new Size(500, 260),
+                Margin = new Padding(0, 0, 20, 10),
                 BackColor = bgWhite
             };
             AplicarBordesRedondeados(cardChart, 15);
@@ -282,40 +314,42 @@ namespace SUSTENTACION
                 int[] entradas = { 40, 60, 30, 80, 50, 90, 70 };
                 int[] salidas = { 30, 40, 50, 60, 40, 80, 60 };
 
-                int x = 45;
+                int x = 40;
                 for (int i = 0; i < entradas.Length; i++)
                 {
-                    g.FillRectangle(new SolidBrush(greenPrimary), x, 210 - entradas[i] * 1.6f, 14, entradas[i] * 1.6f);
-                    g.FillRectangle(new SolidBrush(Color.FromArgb(240, 180, 40)), x + 18, 210 - salidas[i] * 1.6f, 14, salidas[i] * 1.6f);
-                    x += 65;
+                    g.FillRectangle(new SolidBrush(greenPrimary), x, 210 - entradas[i] * 1.5f, 14, entradas[i] * 1.5f);
+                    g.FillRectangle(new SolidBrush(Color.FromArgb(240, 180, 40)), x + 18, 210 - salidas[i] * 1.5f, 14, salidas[i] * 1.5f);
+                    x += 62;
                 }
             };
-            panelMainContent.Controls.Add(cardChart);
+            rowBottom.Controls.Add(cardChart);
 
-            // 4. Calendario (Lado Derecho Abajo)
+            // Calendario
             Panel cardCalendar = new Panel
             {
-                Size = new Size(270, 260),
-                Location = new Point(560, 220),
+                Size = new Size(280, 260),
+                Margin = new Padding(0, 0, 0, 10),
                 BackColor = bgWhite
             };
             AplicarBordesRedondeados(cardCalendar, 15);
 
             MonthCalendar calendar = new MonthCalendar
             {
-                Location = new Point(18, 20),
+                Location = new Point(22, 20),
                 ShowTodayCircle = true
             };
             cardCalendar.Controls.Add(calendar);
-            panelMainContent.Controls.Add(cardCalendar);
+            rowBottom.Controls.Add(cardCalendar);
+
+            flowContainer.Controls.Add(rowBottom);
         }
 
-        private void CrearKPICard(string valor, string titulo, string subtexto, int x, int y, int width, int height)
+        private Panel CrearKPICard(string valor, string titulo, string subtexto)
         {
             Panel card = new Panel
             {
-                Size = new Size(width, height),
-                Location = new Point(x, y),
+                Size = new Size(165, 85),
+                Margin = new Padding(0, 0, 15, 12),
                 BackColor = bgWhite
             };
             AplicarBordesRedondeados(card, 12);
@@ -323,9 +357,9 @@ namespace SUSTENTACION
             Label lblV = new Label
             {
                 Text = valor,
-                Font = new Font("Segoe UI", 13f, FontStyle.Bold),
+                Font = new Font("Segoe UI", 12f, FontStyle.Bold),
                 ForeColor = textDark,
-                Location = new Point(12, 8),
+                Location = new Point(10, 8),
                 AutoSize = true
             };
             card.Controls.Add(lblV);
@@ -335,7 +369,7 @@ namespace SUSTENTACION
                 Text = titulo,
                 Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
                 ForeColor = greenPrimary,
-                Location = new Point(12, 36),
+                Location = new Point(10, 34),
                 AutoSize = true
             };
             card.Controls.Add(lblT);
@@ -345,12 +379,12 @@ namespace SUSTENTACION
                 Text = subtexto,
                 Font = new Font("Segoe UI", 7.5f),
                 ForeColor = textGray,
-                Location = new Point(12, 58),
+                Location = new Point(10, 56),
                 AutoSize = true
             };
             card.Controls.Add(lblS);
 
-            panelMainContent.Controls.Add(card);
+            return card;
         }
 
         private void BtnCerrarSesion_Click(object sender, EventArgs e)
@@ -370,13 +404,23 @@ namespace SUSTENTACION
 
         private void AplicarBordesRedondeados(Control control, int radio)
         {
-            GraphicsPath path = new GraphicsPath();
-            path.AddArc(0, 0, radio, radio, 180, 90);
-            path.AddArc(control.Width - radio, 0, radio, radio, 270, 90);
-            path.AddArc(control.Width - radio, control.Height - radio, radio, radio, 0, 90);
-            path.AddArc(0, control.Height - radio, radio, radio, 90, 90);
-            path.CloseAllFigures();
-            control.Region = new Region(path);
+            Action recalcularRegion = () =>
+            {
+                if (control.Width <= 0 || control.Height <= 0) return;
+
+                using (GraphicsPath path = new GraphicsPath())
+                {
+                    path.AddArc(0, 0, radio, radio, 180, 90);
+                    path.AddArc(control.Width - radio, 0, radio, radio, 270, 90);
+                    path.AddArc(control.Width - radio, control.Height - radio, radio, radio, 0, 90);
+                    path.AddArc(0, control.Height - radio, radio, radio, 90, 90);
+                    path.CloseAllFigures();
+                    control.Region = new Region(path);
+                }
+            };
+
+            control.Resize += (s, e) => recalcularRegion();
+            recalcularRegion();
         }
     }
 }
