@@ -45,6 +45,14 @@ CREATE TABLE trabajadores (
     FOREIGN KEY (id_rol) REFERENCES roles(id_rol) ON DELETE CASCADE ON UPDATE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS eventos (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    fecha DATE NOT NULL,
+    titulo VARCHAR(150) NOT NULL,
+    horario VARCHAR(100),
+    detalles VARCHAR(255)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- 4. Inserción de datos iniciales (Roles)
 INSERT INTO roles (nombre_rol) VALUES 
 ('Administrador'),
@@ -54,6 +62,10 @@ INSERT INTO roles (nombre_rol) VALUES
 INSERT INTO trabajadores (nombre, correo, password, id_rol) VALUES 
 ('Juan Pérez', 'juan.admin@artemusa.com', 'admin123', 1),
 ('María López', 'maria.empleado@artemusa.com', 'user123', 2);
+
+INSERT INTO eventos (fecha, titulo, horario, detalles) VALUES 
+(CURDATE(), 'Mantenimiento Laptop Dell', '09:00 - 11:00 AM', 'EQ-001'),
+(DATE_ADD(CURDATE(), INTERVAL 2 DAY), 'Salida de Monitores LG', '02:00 - 04:00 PM', 'EQ-002');
 
 ```
 
