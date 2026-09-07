@@ -2,6 +2,7 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
+using SUSTENTACION.PanelTrabajador; // 1. Importante para ver la clase SalidaEntradaEquipos
 
 namespace SUSTENTACION
 {
@@ -19,6 +20,9 @@ namespace SUSTENTACION
         private Panel panelSidebar;
         private Panel panelHeader;
         private Panel panelMainContent;
+
+        // Referencia al botón activo para resaltarlo
+        private Button botonActivo = null;
 
         // Datos del usuario
         private string nombreUsuario;
@@ -43,10 +47,10 @@ namespace SUSTENTACION
             this.BackColor = bgLight;
             this.DoubleBuffered = true;
 
-            // Orden estricto de instanciación para acoplado correcto
+            // Orden estricto de instanciación
             CrearSidebar();     // Dock = Left
             CrearHeader();      // Dock = Top
-            CrearMainContent(); // Dock = Fill (debe quedar al frente)
+            CrearMainContent(); // Dock = Fill
         }
 
         private void CrearSidebar()
@@ -81,7 +85,7 @@ namespace SUSTENTACION
             };
             panelSidebar.Controls.Add(lblRoleSub);
 
-            // Botón Activo
+            // Botón Dashboard
             Button btnDashboard = new Button
             {
                 Text = "    Dashboard",
@@ -96,10 +100,16 @@ namespace SUSTENTACION
             };
             btnDashboard.FlatAppearance.BorderSize = 0;
             AplicarBordesRedondeados(btnDashboard, 12);
+            btnDashboard.Click += (s, e) =>
+            {
+                ActivarBoton(btnDashboard);
+                CargarDashboardDefault();
+            };
             panelSidebar.Controls.Add(btnDashboard);
+            botonActivo = btnDashboard;
 
             // Menú de opciones
-            string[] opciones = { "Mis Pedidos", "Stock Productos", "Registrar Entrada", "Registrar Salida", "Soporte" };
+            string[] opciones = { "Gestión de Equipos", "Stock Productos", "Registrar Entrada", "Registrar Salida", "Soporte" };
             int topPos = 135;
 
             foreach (string opc in opciones)
@@ -114,15 +124,20 @@ namespace SUSTENTACION
                     FlatStyle = FlatStyle.Flat,
                     Font = new Font("Segoe UI", 9f, FontStyle.Bold),
                     TextAlign = ContentAlignment.MiddleLeft,
-                    Cursor = Cursors.Hand
+                    Cursor = Cursors.Hand,
+                    Tag = opc // 2. Guardamos la etiqueta para saber cuál se presionó
                 };
                 btn.FlatAppearance.BorderSize = 0;
                 btn.FlatAppearance.MouseOverBackColor = greenHover;
+
+                // 3. Conectamos el evento Click
+                btn.Click += MenuButton_Click;
+
                 panelSidebar.Controls.Add(btn);
                 topPos += 42;
             }
 
-            // BOTÓN CERRAR SESIÓN (Fijo abajo)
+            // BOTÓN CERRAR SESIÓN
             Button btnCerrarSesion = new Button
             {
                 Text = "🚪  Cerrar Sesión",
@@ -143,6 +158,59 @@ namespace SUSTENTACION
             panelSidebar.Controls.Add(btnCerrarSesion);
         }
 
+        // Evento que gestiona las opciones del menú
+        private void MenuButton_Click(object sender, EventArgs e)
+        {
+            Button btn = sender as Button;
+            if (btn == null) return;
+
+            ActivarBoton(btn);
+
+            string opcion = btn.Tag?.ToString();
+
+            switch (opcion)
+            {
+                case "Registrar Entrada":
+                case "Registrar Salida":
+                case "Gestión de Equipos":
+                    // Cargamos el UserControl creado
+                    AbrirUserControl(new SalidaEntradaEquipos());
+                    break;
+
+                case "Stock Productos":
+                    // Aquí cargarás tu UC_Stock cuando lo crees
+                    break;
+
+                case "Soporte":
+                    // Aquí cargarás tu UC_Soporte cuando lo crees
+                    break;
+            }
+        }
+
+        // Método encargado de limpiar el panel central y cargar la nueva vista
+        private void AbrirUserControl(UserControl uc)
+        {
+            panelMainContent.Controls.Clear();
+            uc.Dock = DockStyle.Fill;
+            panelMainContent.Controls.Add(uc);
+            uc.BringToFront();
+        }
+
+        // Cambia la apariencia visual del botón seleccionado
+        private void ActivarBoton(Button btn)
+        {
+            if (botonActivo != null)
+            {
+                botonActivo.BackColor = Color.Transparent;
+                botonActivo.ForeColor = Color.White;
+            }
+
+            botonActivo = btn;
+            botonActivo.BackColor = Color.White;
+            botonActivo.ForeColor = greenPrimary;
+            AplicarBordesRedondeados(botonActivo, 12);
+        }
+
         private void CrearHeader()
         {
             panelHeader = new Panel
@@ -154,7 +222,6 @@ namespace SUSTENTACION
             };
             this.Controls.Add(panelHeader);
 
-            // Caja de búsqueda ajustada
             Panel panelSearch = new Panel
             {
                 Size = new Size(260, 36),
@@ -175,7 +242,6 @@ namespace SUSTENTACION
             panelSearch.Controls.Add(txtSearch);
             panelHeader.Controls.Add(panelSearch);
 
-            // Perfil Usuario (Arriba a la derecha)
             Label lblUser = new Label
             {
                 Text = $"👤 {nombreUsuario} ({rolUsuario})",
@@ -198,7 +264,14 @@ namespace SUSTENTACION
                 Padding = new Padding(25)
             };
             this.Controls.Add(panelMainContent);
-            panelMainContent.BringToFront(); // Evita solapamiento bajo las barras
+            panelMainContent.BringToFront();
+
+            CargarDashboardDefault();
+        }
+
+        private void CargarDashboardDefault()
+        {
+            panelMainContent.Controls.Clear();
 
             FlowLayoutPanel flowContainer = new FlowLayoutPanel
             {
@@ -208,9 +281,8 @@ namespace SUSTENTACION
                 WrapContents = false,
                 BackColor = Color.Transparent
             };
-            panelMainContent.Controls.Add(flowContainer);
 
-            // --- FILA 1: STATUS USUARIO + KPIs ---
+            // FILA 1: STATUS USUARIO + KPIs
             FlowLayoutPanel rowTop = new FlowLayoutPanel
             {
                 AutoSize = true,
@@ -219,7 +291,6 @@ namespace SUSTENTACION
                 Margin = new Padding(0, 0, 0, 20)
             };
 
-            // Card Usuario
             Panel cardUserStatus = new Panel
             {
                 Size = new Size(230, 185),
@@ -259,7 +330,6 @@ namespace SUSTENTACION
             cardUserStatus.Controls.Add(lblWorkingInfo);
             rowTop.Controls.Add(cardUserStatus);
 
-            // Matriz de KPIs (Contenedor adaptable de 3x2)
             FlowLayoutPanel gridKPIs = new FlowLayoutPanel
             {
                 Size = new Size(550, 185),
@@ -278,7 +348,7 @@ namespace SUSTENTACION
             rowTop.Controls.Add(gridKPIs);
             flowContainer.Controls.Add(rowTop);
 
-            // --- FILA 2: GRÁFICO + CALENDARIO ---
+            // FILA 2: GRÁFICO + CALENDARIO
             FlowLayoutPanel rowBottom = new FlowLayoutPanel
             {
                 AutoSize = true,
@@ -287,7 +357,6 @@ namespace SUSTENTACION
                 Margin = new Padding(0)
             };
 
-            // Gráfico
             Panel cardChart = new Panel
             {
                 Size = new Size(500, 260),
@@ -324,7 +393,6 @@ namespace SUSTENTACION
             };
             rowBottom.Controls.Add(cardChart);
 
-            // Calendario
             Panel cardCalendar = new Panel
             {
                 Size = new Size(280, 260),
@@ -342,6 +410,7 @@ namespace SUSTENTACION
             rowBottom.Controls.Add(cardCalendar);
 
             flowContainer.Controls.Add(rowBottom);
+            panelMainContent.Controls.Add(flowContainer);
         }
 
         private Panel CrearKPICard(string valor, string titulo, string subtexto)

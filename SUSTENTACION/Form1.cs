@@ -8,21 +8,22 @@ namespace SUSTENTACION
 {
     public partial class Form1 : Form
     {
-        // Declaración de controles
-        private Panel panelIzquierdo;
-        private Panel panelDerecho;
-        private Label lblWelcome;
-        private Label lblLoginTitle;
-        private Label lblEmailPlaceholder;
+        // Contenedor principal personalizado con la división diagonal
+        private DiagonalPanel panelBackground;
+
+        // Controles del lado izquierdo (Blanco)
+        private Label lblLogoIcon;
+        private Label lblAppTitle;
+        private Label lblAppSubtitle;
+
+        // Controles del lado derecho (Azul - Formulario)
+        private Label lblEmail;
         private TextBox txtEmail;
-        private Panel lineEmail;
-        private Label lblPasswordPlaceholder;
+        private Label lblPassword;
         private TextBox txtPassword;
-        private Panel linePassword;
-        private LinkLabel lblForgot;
+        private CheckBox chkRememberMe;
+        private LinkLabel lblRecoverPassword;
         private Button btnLogin;
-        private Label lblSignUpPrefix;
-        private LinkLabel lblSignUpLink;
 
         public Form1()
         {
@@ -32,171 +33,158 @@ namespace SUSTENTACION
 
         private void ConstruirInterfaz()
         {
-            // --- Configuración del Formulario ---
-            this.Size = new Size(850, 550);
+            // --- Configuración básica de la ventana ---
+            this.Size = new Size(850, 520);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.FormBorderStyle = FormBorderStyle.FixedSingle;
             this.MaximizeBox = false;
-            this.Text = "Login - Artemusa Inventario";
-            this.BackColor = Color.FromArgb(240, 240, 240);
+            this.Text = "Iniciar Sesión - Artemusa Inventario";
 
-            // --- Contenedor Principal (Panel Derecho / Formulario) ---
-            panelDerecho = new Panel
+            // Panel contenedor que dibuja la división diagonal tipo UI moderna
+            panelBackground = new DiagonalPanel
             {
-                Dock = DockStyle.Fill,
-                BackColor = Color.White
+                Dock = DockStyle.Fill
             };
-            this.Controls.Add(panelDerecho);
+            this.Controls.Add(panelBackground);
 
-            // --- Panel Izquierdo (Imagen / Bienvenida) ---
-            panelIzquierdo = new Panel
-            {
-                Width = 380,
-                Dock = DockStyle.Left,
-                BackColor = Color.FromArgb(15, 32, 67) // Color azul oscuro
-            };
-            this.Controls.Add(panelIzquierdo);
+            // ==========================================
+            // LADO IZQUIERDO: Marca / Logotipo (Fondo Blanco)
+            // ==========================================
 
-            // Texto "WELCOME"
-            lblWelcome = new Label
+            // Ícono de flor/hoja (Representación mediante símbolo)
+            lblLogoIcon = new Label
             {
-                Text = "WELCOME",
-                ForeColor = Color.White,
-                Font = new Font("Segoe UI", 18, FontStyle.Bold),
+                Text = "🍁",
+                Font = new Font("Segoe UI Symbol", 55, FontStyle.Regular),
+                ForeColor = Color.FromArgb(28, 86, 170),
                 AutoSize = true,
-                Location = new Point(110, 140),
+                Location = new Point(140, 150),
                 BackColor = Color.Transparent
             };
-            panelIzquierdo.Controls.Add(lblWelcome);
+            panelBackground.Controls.Add(lblLogoIcon);
 
-            // --- Elementos del Formulario (Panel Derecho) ---
-
-            // Título "Login"
-            lblLoginTitle = new Label
+            // Título Principal
+            lblAppTitle = new Label
             {
-                Text = "Login",
-                Font = new Font("Segoe UI", 24, FontStyle.Bold),
-                ForeColor = Color.FromArgb(30, 30, 30),
+                Text = "ARTEMUSA",
+                Font = new Font("Segoe UI", 20, FontStyle.Bold),
+                ForeColor = Color.FromArgb(20, 50, 100),
                 AutoSize = true,
-                Location = new Point(180, 80)
+                Location = new Point(100, 240),
+                BackColor = Color.Transparent
             };
-            panelDerecho.Controls.Add(lblLoginTitle);
+            panelBackground.Controls.Add(lblAppTitle);
 
-            // Campo Email
-            lblEmailPlaceholder = new Label
+            // Subtítulo
+            lblAppSubtitle = new Label
             {
-                Text = "Email",
-                Font = new Font("Segoe UI", 9.5f),
-                ForeColor = Color.Gray,
-                Location = new Point(80, 150),
-                AutoSize = true
+                Text = "Sistema de Gestión e Inventario",
+                Font = new Font("Segoe UI", 9, FontStyle.Italic),
+                ForeColor = Color.FromArgb(100, 110, 130),
+                AutoSize = true,
+                Location = new Point(95, 280),
+                BackColor = Color.Transparent
             };
-            panelDerecho.Controls.Add(lblEmailPlaceholder);
+            panelBackground.Controls.Add(lblAppSubtitle);
 
+
+            // ==========================================
+            // LADO DERECHO: Formulario de Login (Fondo Azul)
+            // ==========================================
+
+            int startX = 490; // Posición horizontal para alinear controles en el lado azul
+
+            // Label Correo Electrónico
+            lblEmail = new Label
+            {
+                Text = "Tu correo electrónico",
+                Font = new Font("Segoe UI", 9.5f, FontStyle.Regular),
+                ForeColor = Color.FromArgb(220, 235, 255),
+                Location = new Point(startX, 115),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            };
+            panelBackground.Controls.Add(lblEmail);
+
+            // Input Correo Electrónico
             txtEmail = new TextBox
             {
-                BorderStyle = BorderStyle.None,
-                Font = new Font("Segoe UI", 10f),
-                Location = new Point(80, 175),
-                Size = new Size(300, 20),
-                ForeColor = Color.FromArgb(40, 40, 40)
+                Font = new Font("Segoe UI", 11f),
+                Location = new Point(startX, 140),
+                Size = new Size(270, 30),
+                ForeColor = Color.FromArgb(40, 40, 40),
+                BorderStyle = BorderStyle.FixedSingle
             };
-            panelDerecho.Controls.Add(txtEmail);
+            panelBackground.Controls.Add(txtEmail);
 
-            lineEmail = new Panel
+            // Label Contraseña
+            lblPassword = new Label
             {
-                Size = new Size(300, 1),
-                Location = new Point(80, 198),
-                BackColor = Color.Silver
+                Text = "Contraseña",
+                Font = new Font("Segoe UI", 9.5f, FontStyle.Regular),
+                ForeColor = Color.FromArgb(220, 235, 255),
+                Location = new Point(startX, 190),
+                AutoSize = true,
+                BackColor = Color.Transparent
             };
-            panelDerecho.Controls.Add(lineEmail);
+            panelBackground.Controls.Add(lblPassword);
 
-            // Campo Password
-            lblPasswordPlaceholder = new Label
-            {
-                Text = "Password",
-                Font = new Font("Segoe UI", 9.5f),
-                ForeColor = Color.Gray,
-                Location = new Point(80, 220),
-                AutoSize = true
-            };
-            panelDerecho.Controls.Add(lblPasswordPlaceholder);
-
+            // Input Contraseña
             txtPassword = new TextBox
             {
-                BorderStyle = BorderStyle.None,
-                Font = new Font("Segoe UI", 10f),
-                Location = new Point(80, 245),
-                Size = new Size(300, 20),
+                Font = new Font("Segoe UI", 11f),
+                Location = new Point(startX, 215),
+                Size = new Size(270, 30),
                 UseSystemPasswordChar = true,
-                ForeColor = Color.FromArgb(40, 40, 40)
+                ForeColor = Color.FromArgb(40, 40, 40),
+                BorderStyle = BorderStyle.FixedSingle
             };
-            panelDerecho.Controls.Add(txtPassword);
+            panelBackground.Controls.Add(txtPassword);
 
-            linePassword = new Panel
+            // Checkbox Recordarme
+            chkRememberMe = new CheckBox
             {
-                Size = new Size(300, 1),
-                Location = new Point(80, 268),
-                BackColor = Color.Silver
-            };
-            panelDerecho.Controls.Add(linePassword);
-
-            // Link "¿Forgot password?"
-            lblForgot = new LinkLabel
-            {
-                Text = "Forgot password?",
-                Font = new Font("Segoe UI", 8f),
-                LinkColor = Color.Gray,
-                ActiveLinkColor = Color.FromArgb(10, 25, 70),
-                VisitedLinkColor = Color.Gray,
+                Text = "Recordarme",
+                Font = new Font("Segoe UI", 8.5f),
+                ForeColor = Color.FromArgb(220, 235, 255),
+                Location = new Point(startX, 260),
                 AutoSize = true,
-                Location = new Point(285, 275)
+                BackColor = Color.Transparent
             };
-            panelDerecho.Controls.Add(lblForgot);
+            panelBackground.Controls.Add(chkRememberMe);
 
-            // Botón "Login"
+            // Enlace Recuperar Contraseña
+            lblRecoverPassword = new LinkLabel
+            {
+                Text = "Recuperar contraseña",
+                Font = new Font("Segoe UI", 8.5f),
+                LinkColor = Color.FromArgb(170, 205, 255),
+                ActiveLinkColor = Color.White,
+                VisitedLinkColor = Color.FromArgb(170, 205, 255),
+                AutoSize = true,
+                Location = new Point(startX + 140, 261),
+                BackColor = Color.Transparent
+            };
+            panelBackground.Controls.Add(lblRecoverPassword);
+
+            // Botón Iniciar Sesión (Azul más claro destacado)
             btnLogin = new Button
             {
-                Text = "Login",
-                Size = new Size(300, 42),
-                Location = new Point(80, 320),
-                BackColor = Color.FromArgb(10, 25, 70),
+                Text = "INICIAR SESIÓN",
+                Size = new Size(270, 40),
+                Location = new Point(startX, 305),
+                BackColor = Color.FromArgb(85, 130, 255),
                 ForeColor = Color.White,
                 FlatStyle = FlatStyle.Flat,
-                Font = new Font("Segoe UI", 10f, FontStyle.Bold),
+                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
                 Cursor = Cursors.Hand
             };
             btnLogin.FlatAppearance.BorderSize = 0;
-            AplicarBordesRedondeados(btnLogin, 20);
-
             btnLogin.Click += BtnLogin_Click;
-            panelDerecho.Controls.Add(btnLogin);
-
-            // Texto inferior "Don't have an account? Sign up"
-            lblSignUpPrefix = new Label
-            {
-                Text = "Don't have an account?",
-                Font = new Font("Segoe UI", 9f),
-                ForeColor = Color.Gray,
-                AutoSize = true,
-                Location = new Point(125, 430)
-            };
-            panelDerecho.Controls.Add(lblSignUpPrefix);
-
-            lblSignUpLink = new LinkLabel
-            {
-                Text = "Sign up",
-                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-                LinkColor = Color.FromArgb(10, 25, 70),
-                ActiveLinkColor = Color.Blue,
-                VisitedLinkColor = Color.FromArgb(10, 25, 70),
-                AutoSize = true,
-                Location = new Point(275, 430)
-            };
-            panelDerecho.Controls.Add(lblSignUpLink);
+            panelBackground.Controls.Add(btnLogin);
         }
 
-        // --- Lógica de Inicio de Sesión con Redirección según Rol ---
+        // --- Lógica de Inicio de Sesión ---
         private void BtnLogin_Click(object sender, EventArgs e)
         {
             string email = txtEmail.Text.Trim();
@@ -234,14 +222,11 @@ namespace SUSTENTACION
                                 MessageBox.Show($"¡Bienvenido {nombreTrabajador}!\nSe inició sesión con éxito como: {nombreRol}",
                                                 "Bienvenido", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
-                                // Limpiar cajas de texto
                                 txtEmail.Clear();
                                 txtPassword.Clear();
 
-                                // Ocultar pantalla Login
                                 this.Hide();
 
-                                // Evaluamos el rol para abrir la ventana correspondiente
                                 if (nombreRol.Equals("Administrador", StringComparison.OrdinalIgnoreCase))
                                 {
                                     FormAdmin dashboardAdmin = new FormAdmin(nombreTrabajador, nombreRol);
@@ -270,16 +255,98 @@ namespace SUSTENTACION
                 conexionBD.CerrarConexion();
             }
         }
+    }
 
-        private void AplicarBordesRedondeados(Control control, int radio)
+    // --- Clase Auxiliar para dibujar el corte diagonal azul/blanco ---
+    public class DiagonalPanel : Panel
+    {
+        public DiagonalPanel()
         {
-            GraphicsPath path = new GraphicsPath();
-            path.AddArc(0, 0, radio, radio, 180, 90);
-            path.AddArc(control.Width - radio, 0, radio, radio, 270, 90);
-            path.AddArc(control.Width - radio, control.Height - radio, radio, radio, 0, 90);
-            path.AddArc(0, control.Height - radio, radio, radio, 90, 90);
-            path.CloseAllFigures();
-            control.Region = new Region(path);
+            this.DoubleBuffered = true;
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            Graphics g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+
+            // 1. Color de fondo general de la ventana (Gris azulado claro tipo Muestra)
+            Color fondoGeneral = Color.FromArgb(235, 240, 248);
+            g.Clear(fondoGeneral);
+
+            // 2. Definir las dimensiones de la tarjeta central
+            int marginHorizontal = 30;
+            int marginVertical = 35;
+            Rectangle cardRect = new Rectangle(
+                marginHorizontal,
+                marginVertical,
+                this.Width - (marginHorizontal * 2),
+                this.Height - (marginVertical * 2)
+            );
+
+            // 3. Puntos de la diagonal extendida (Sobresale arriba y abajo del panel blanco)
+            Point[] diagonalPoints = new Point[]
+            {
+            new Point((int)(this.Width * 0.52), 0),             // Arriba en el borde superior completo
+            new Point(this.Width, 0),                           // Esquina superior derecha
+            new Point(this.Width, this.Height),                // Esquina inferior derecha
+            new Point((int)(this.Width * 0.36), this.Height)    // Abajo en el borde inferior completo
+            };
+
+            // 4. Dibujar Sombra Proyectada debajo de la Tarjeta Blanca
+            for (int i = 1; i <= 10; i++)
+            {
+                int alpha = (int)(20 * (1.0 - (i / 10.0)));
+                using (SolidBrush shadowBrush = new SolidBrush(Color.FromArgb(alpha, 0, 0, 0)))
+                {
+                    Rectangle shadowRect = new Rectangle(
+                        cardRect.X - i / 2,
+                        cardRect.Y + i / 2,
+                        cardRect.Width + i,
+                        cardRect.Height + i
+                    );
+                    g.FillRectangle(shadowBrush, shadowRect);
+                }
+            }
+
+            // 5. Dibujar el lado Izquierdo Blanco (Tarjeta central)
+            using (SolidBrush whiteBrush = new SolidBrush(Color.White))
+            {
+                g.FillRectangle(whiteBrush, cardRect);
+            }
+
+            // 6. Dibujar el Polígono Azul Diagonal Completo
+            Color azulMuestra = Color.FromArgb(24, 85, 165);
+            using (SolidBrush blueBrush = new SolidBrush(azulMuestra))
+            {
+                g.FillPolygon(blueBrush, diagonalPoints);
+            }
+
+            // 7. Sombra de relieve en el borde inclinado para la profundidad
+            using (GraphicsPath path = new GraphicsPath())
+            {
+                path.AddLine(
+                    (int)(this.Width * 0.52), 0,
+                    (int)(this.Width * 0.36), this.Height
+                );
+
+                // Sombra suave en el borde de la corteza azul
+                using (Pen penSombra = new Pen(Color.FromArgb(60, 0, 0, 0), 6f))
+                {
+                    g.DrawPath(penSombra, path);
+                }
+                using (Pen penLuz = new Pen(Color.FromArgb(30, 255, 255, 255), 2f))
+                {
+                    g.DrawPath(penLuz, path);
+                }
+            }
+        }
+
+        protected override void OnResize(EventArgs eventargs)
+        {
+            base.OnResize(eventargs);
+            this.Invalidate();
         }
     }
 }
