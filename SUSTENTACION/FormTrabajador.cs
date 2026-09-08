@@ -2,55 +2,51 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
-using SUSTENTACION.PanelTrabajador; // 1. Importante para ver la clase SalidaEntradaEquipos
+using SUSTENTACION;
+using SUSTENTACION.PanelTrabajador;
 
 namespace SUSTENTACION
 {
     public partial class FormTrabajador : Form
     {
-        // Paleta de Colores (Light / Emerald Green)
-        private readonly Color greenPrimary = Color.FromArgb(0, 178, 107);
-        private readonly Color greenHover = Color.FromArgb(0, 150, 90);
-        private readonly Color bgLight = Color.FromArgb(242, 244, 247);
+        // Paleta de colores consistente
+        private readonly Color greenPrimary = Color.FromArgb(76, 175, 80);
+        private readonly Color greenHover = Color.FromArgb(67, 160, 71);
+        private readonly Color bgLight = Color.FromArgb(245, 247, 250);
         private readonly Color bgWhite = Color.White;
-        private readonly Color textDark = Color.FromArgb(40, 50, 60);
-        private readonly Color textGray = Color.FromArgb(130, 140, 150);
+        private readonly Color textDark = Color.FromArgb(33, 33, 33);
+        private readonly Color textGray = Color.FromArgb(117, 117, 117);
 
-        // Paneles principales
+        // Referencias a paneles principales y estado de navegación
         private Panel panelSidebar;
         private Panel panelHeader;
         private Panel panelMainContent;
-
-        // Referencia al botón activo para resaltarlo
         private Button botonActivo = null;
 
-        // Datos del usuario
+        // Propiedades del usuario que inicia sesión
         private string nombreUsuario;
         private string rolUsuario;
 
-        public FormTrabajador(string nombre, string rol)
+        public FormTrabajador(string nombre = "Trabajador", string rol = "Operador")
         {
             InitializeComponent();
-            this.nombreUsuario = nombre;
-            this.rolUsuario = rol;
+            this.nombreUsuario = nombre ?? "Trabajador";
+            this.rolUsuario = rol ?? "Operador";
 
-            ConstruirInterfaz();
+            ConfigurarVentana();
+            CrearSidebar();
+            CrearHeader();
+            CrearMainContent();
         }
 
-        private void ConstruirInterfaz()
+        private void ConfigurarVentana()
         {
-            // Ventana Principal
-            this.Size = new Size(1360, 780);
-            this.MinimumSize = new Size(1150, 720);
+            this.Text = "Panel de Trabajador - Sistema de Gestión de Almacén";
+            this.Size = new Size(1100, 700);
             this.StartPosition = FormStartPosition.CenterScreen;
-            this.Text = "Artemusa Inventario - Panel de Trabajador";
             this.BackColor = bgLight;
+            this.Font = new Font("Segoe UI", 9f, FontStyle.Regular);
             this.DoubleBuffered = true;
-
-            // Orden estricto de instanciación
-            CrearSidebar();     // Dock = Left
-            CrearHeader();      // Dock = Top
-            CrearMainContent(); // Dock = Fill
         }
 
         private void CrearSidebar()
@@ -60,102 +56,84 @@ namespace SUSTENTACION
                 Width = 220,
                 Dock = DockStyle.Left,
                 BackColor = greenPrimary,
-                Padding = new Padding(15)
+                Padding = new Padding(10)
             };
             this.Controls.Add(panelSidebar);
 
-            // LOGO Superior
-            Label lblLogo = new Label
+            // Título / Logo
+            Label lblBrand = new Label
             {
-                Text = "💚 ARTEMUSA",
-                Font = new Font("Segoe UI", 12f, FontStyle.Bold),
+                Text = "ALMACÉN",
+                Font = new Font("Segoe UI", 14f, FontStyle.Bold),
                 ForeColor = Color.White,
-                Location = new Point(15, 20),
-                AutoSize = true
+                Dock = DockStyle.Top,
+                Height = 60,
+                TextAlign = ContentAlignment.MiddleCenter
             };
-            panelSidebar.Controls.Add(lblLogo);
+            panelSidebar.Controls.Add(lblBrand);
 
-            Label lblRoleSub = new Label
+            // Contenedor de botones para mantenerlos ordenados
+            FlowLayoutPanel menuPanel = new FlowLayoutPanel
             {
-                Text = "PANEL TRABAJADOR",
-                Font = new Font("Segoe UI", 7.5f, FontStyle.Bold),
-                ForeColor = Color.FromArgb(200, 245, 220),
-                Location = new Point(18, 45),
-                AutoSize = true
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.TopDown,
+                WrapContents = false,
+                AutoScroll = true
             };
-            panelSidebar.Controls.Add(lblRoleSub);
+            panelSidebar.Controls.Add(menuPanel);
+            lblBrand.SendToBack();
 
-            // Botón Dashboard
-            Button btnDashboard = new Button
-            {
-                Text = "    Dashboard",
-                Size = new Size(190, 40),
-                Location = new Point(15, 85),
-                BackColor = Color.White,
-                ForeColor = greenPrimary,
-                FlatStyle = FlatStyle.Flat,
-                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
-                TextAlign = ContentAlignment.MiddleLeft,
-                Cursor = Cursors.Hand
-            };
-            btnDashboard.FlatAppearance.BorderSize = 0;
-            AplicarBordesRedondeados(btnDashboard, 12);
-            btnDashboard.Click += (s, e) =>
-            {
-                ActivarBoton(btnDashboard);
-                CargarDashboardDefault();
-            };
-            panelSidebar.Controls.Add(btnDashboard);
-            botonActivo = btnDashboard;
+            // Creación de botones del menú
+            AgregarBotonMenu(menuPanel, "📥 Registrar Entrada", "Registrar Entrada");
+            AgregarBotonMenu(menuPanel, "📤 Registrar Salida", "Registrar Salida");
+            AgregarBotonMenu(menuPanel, "📦 Gestión Equipos", "Gestión de Equipos");
+            AgregarBotonMenu(menuPanel, "🛠️ Stock Productos", "Stock Productos");
+            AgregarBotonMenu(menuPanel, "💬 Soporte", "Soporte");
 
-            // Menú de opciones
-            string[] opciones = { "Gestión de Equipos", "Stock Productos", "Registrar Entrada", "Registrar Salida", "Soporte" };
-            int topPos = 135;
-
-            foreach (string opc in opciones)
-            {
-                Button btn = new Button
-                {
-                    Text = $"    {opc}",
-                    Size = new Size(190, 36),
-                    Location = new Point(15, topPos),
-                    BackColor = Color.Transparent,
-                    ForeColor = Color.White,
-                    FlatStyle = FlatStyle.Flat,
-                    Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-                    TextAlign = ContentAlignment.MiddleLeft,
-                    Cursor = Cursors.Hand,
-                    Tag = opc // 2. Guardamos la etiqueta para saber cuál se presionó
-                };
-                btn.FlatAppearance.BorderSize = 0;
-                btn.FlatAppearance.MouseOverBackColor = greenHover;
-
-                // 3. Conectamos el evento Click
-                btn.Click += MenuButton_Click;
-
-                panelSidebar.Controls.Add(btn);
-                topPos += 42;
-            }
-
-            // BOTÓN CERRAR SESIÓN
+            // Botón de Cerrar Sesión en la parte inferior
             Button btnCerrarSesion = new Button
             {
-                Text = "🚪  Cerrar Sesión",
-                Size = new Size(190, 40),
-                Location = new Point(15, panelSidebar.Height - 60),
-                Anchor = AnchorStyles.Bottom | AnchorStyles.Left,
-                BackColor = Color.FromArgb(220, 38, 38),
-                ForeColor = Color.White,
-                FlatStyle = FlatStyle.Flat,
+                Text = "🚪 Cerrar Sesión",
                 Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
-                TextAlign = ContentAlignment.MiddleLeft,
+                ForeColor = Color.White,
+                BackColor = Color.FromArgb(200, 230, 80, 80),
+                FlatStyle = FlatStyle.Flat,
+                Height = 40,
+                Width = 195,
+                Dock = DockStyle.Bottom,
+                Margin = new Padding(0, 10, 0, 10),
                 Cursor = Cursors.Hand
             };
             btnCerrarSesion.FlatAppearance.BorderSize = 0;
-            AplicarBordesRedondeados(btnCerrarSesion, 10);
             btnCerrarSesion.Click += BtnCerrarSesion_Click;
-
+            AplicarBordesRedondeados(btnCerrarSesion, 12);
             panelSidebar.Controls.Add(btnCerrarSesion);
+        }
+
+        private void AgregarBotonMenu(Control contenedor, string texto, string tag)
+        {
+            Button btn = new Button
+            {
+                Text = texto,
+                Tag = tag,
+                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+                ForeColor = Color.White,
+                BackColor = Color.Transparent,
+                FlatStyle = FlatStyle.Flat,
+                Height = 42,
+                Width = 195,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Padding = new Padding(15, 0, 0, 0),
+                Margin = new Padding(0, 0, 0, 8),
+                Cursor = Cursors.Hand
+            };
+            btn.FlatAppearance.BorderSize = 0;
+            btn.Click += MenuButton_Click;
+
+            btn.MouseEnter += (s, e) => { if (btn != botonActivo) btn.BackColor = greenHover; };
+            btn.MouseLeave += (s, e) => { if (btn != botonActivo) btn.BackColor = Color.Transparent; };
+
+            contenedor.Controls.Add(btn);
         }
 
         // Evento que gestiona las opciones del menú
@@ -172,17 +150,23 @@ namespace SUSTENTACION
             {
                 case "Registrar Entrada":
                 case "Registrar Salida":
-                case "Gestión de Equipos":
-                    // Cargamos el UserControl creado
+                    // Cargamos el UserControl de Salida y Entrada de Equipos
                     AbrirUserControl(new SalidaEntradaEquipos());
                     break;
 
+                case "Gestión de Equipos":
+                    // Muestra la interfaz de Gestión de Equipos / Almacén TV con la tabla
+                    AbrirUserControl(new GestionEquipo());
+                    break;
+
                 case "Stock Productos":
-                    // Aquí cargarás tu UC_Stock cuando lo crees
+                    // Limpia el contenido para dejarlo vacío
+                    panelMainContent.Controls.Clear();
                     break;
 
                 case "Soporte":
-                    // Aquí cargarás tu UC_Soporte cuando lo crees
+                    // Reservado para el módulo de soporte
+                    panelMainContent.Controls.Clear();
                     break;
             }
         }
@@ -490,6 +474,11 @@ namespace SUSTENTACION
 
             control.Resize += (s, e) => recalcularRegion();
             recalcularRegion();
+        }
+
+        private void FormTrabajador_Load(object sender, EventArgs e)
+        {
+
         }
     }
 }
