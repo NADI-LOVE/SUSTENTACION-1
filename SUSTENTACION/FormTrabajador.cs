@@ -1,39 +1,47 @@
 ﻿using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Globalization;
 using System.Windows.Forms;
-using SUSTENTACION;
+// Se agrega la directiva using para acceder al UserControl GestionEquipo
 using SUSTENTACION.PanelTrabajador;
 
 namespace SUSTENTACION
 {
     public partial class FormTrabajador : Form
     {
-        // Paleta de colores consistente
-        private readonly Color greenPrimary = Color.FromArgb(76, 175, 80);
-        private readonly Color greenHover = Color.FromArgb(67, 160, 71);
-        private readonly Color bgLight = Color.FromArgb(245, 247, 250);
-        private readonly Color bgWhite = Color.White;
-        private readonly Color textDark = Color.FromArgb(33, 33, 33);
-        private readonly Color textGray = Color.FromArgb(117, 117, 117);
+        // Paleta de colores
+        private readonly Color bgMain = Color.FromArgb(21, 22, 37);
+        private readonly Color bgSidebar = Color.FromArgb(16, 17, 28);
+        private readonly Color bgCard = Color.FromArgb(30, 31, 48);
+        private readonly Color bgCardSelected = Color.FromArgb(255, 128, 191);
+        private readonly Color purpleAccent = Color.FromArgb(92, 84, 241);
+        private readonly Color textWhite = Color.White;
+        private readonly Color textMuted = Color.FromArgb(130, 134, 158);
 
-        // Referencias a paneles principales y estado de navegación
         private Panel panelSidebar;
         private Panel panelHeader;
         private Panel panelMainContent;
         private Button botonActivo = null;
 
-        // Propiedades del usuario que inicia sesión
         private string nombreUsuario;
         private string rolUsuario;
+        private DateTime fechaSeleccionada = DateTime.Now;
 
-        public FormTrabajador(string nombre = "Trabajador", string rol = "Operador")
+        // Variables para la animación del Sidebar
+        private System.Windows.Forms.Timer timerSidebar;
+        private bool sidebarExpandido = true;
+        private const int ANCHO_MAX = 220;
+        private const int ANCHO_MIN = 60;
+
+        public FormTrabajador(string nombre = "María López", string rol = "Trabajador")
         {
             InitializeComponent();
-            this.nombreUsuario = nombre ?? "Trabajador";
-            this.rolUsuario = rol ?? "Operador";
+            this.nombreUsuario = nombre;
+            this.rolUsuario = rol;
 
             ConfigurarVentana();
+            InicializarTimerSidebar();
             CrearSidebar();
             CrearHeader();
             CrearMainContent();
@@ -41,158 +49,216 @@ namespace SUSTENTACION
 
         private void ConfigurarVentana()
         {
-            this.Text = "Panel de Trabajador - Sistema de Gestión de Almacén";
-            this.Size = new Size(1100, 700);
+            this.Text = "ARTEMISA - Panel de Trabajador";
+            this.Size = new Size(1280, 800);
             this.StartPosition = FormStartPosition.CenterScreen;
-            this.BackColor = bgLight;
+            this.BackColor = bgMain;
             this.Font = new Font("Segoe UI", 9f, FontStyle.Regular);
             this.DoubleBuffered = true;
+            this.FormBorderStyle = FormBorderStyle.Sizable;
+        }
+
+        private void InicializarTimerSidebar()
+        {
+            timerSidebar = new System.Windows.Forms.Timer();
+            timerSidebar.Interval = 10; // Velocidad de la animación
+            timerSidebar.Tick += (s, e) =>
+            {
+                if (sidebarExpandido)
+                {
+                    panelSidebar.Width -= 15;
+                    if (panelSidebar.Width <= ANCHO_MIN)
+                    {
+                        panelSidebar.Width = ANCHO_MIN;
+                        timerSidebar.Stop();
+                        sidebarExpandido = false;
+                    }
+                }
+                else
+                {
+                    panelSidebar.Width += 15;
+                    if (panelSidebar.Width >= ANCHO_MAX)
+                    {
+                        panelSidebar.Width = ANCHO_MAX;
+                        timerSidebar.Stop();
+                        sidebarExpandido = true;
+                    }
+                }
+            };
         }
 
         private void CrearSidebar()
         {
             panelSidebar = new Panel
             {
-                Width = 220,
+                Width = ANCHO_MAX,
                 Dock = DockStyle.Left,
-                BackColor = greenPrimary,
-                Padding = new Padding(10)
+                BackColor = bgSidebar,
+                Padding = new Padding(8)
             };
             this.Controls.Add(panelSidebar);
 
-            // Título / Logo
-            Label lblBrand = new Label
+            // Logo Marca ARTEMISA
+            Panel logoPanel = new Panel { Height = 50, Dock = DockStyle.Top, BackColor = Color.Transparent };
+            Label lblLogoIcon = new Label
             {
-                Text = "ALMACÉN",
-                Font = new Font("Segoe UI", 14f, FontStyle.Bold),
-                ForeColor = Color.White,
-                Dock = DockStyle.Top,
-                Height = 60,
+                Text = "ART",
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                ForeColor = textWhite,
+                BackColor = purpleAccent,
+                Size = new Size(32, 32),
+                Location = new Point(6, 8),
                 TextAlign = ContentAlignment.MiddleCenter
             };
-            panelSidebar.Controls.Add(lblBrand);
+            AplicarBordesRedondeados(lblLogoIcon, 16);
 
-            // Contenedor de botones para mantenerlos ordenados
+            Label lblLogoText = new Label
+            {
+                Text = "ARTEMISA\nPanel del Trabajador",
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                ForeColor = textWhite,
+                Location = new Point(44, 8),
+                AutoSize = true
+            };
+
+            logoPanel.Controls.Add(lblLogoIcon);
+            logoPanel.Controls.Add(lblLogoText);
+            panelSidebar.Controls.Add(logoPanel);
+
+            // Tarjeta Perfil
+            Panel userCard = new Panel
+            {
+                Size = new Size(200, 50),
+                Location = new Point(5, 65),
+                BackColor = Color.FromArgb(27, 29, 45)
+            };
+            AplicarBordesRedondeados(userCard, 10);
+
+            Label lblAvatar = new Label
+            {
+                Text = "👤",
+                Font = new Font("Segoe UI", 12f),
+                BackColor = Color.FromArgb(235, 180, 120),
+                Size = new Size(32, 32),
+                Location = new Point(6, 9),
+                TextAlign = ContentAlignment.MiddleCenter
+            };
+            AplicarBordesRedondeados(lblAvatar, 16);
+
+            Label lblUserInfo = new Label
+            {
+                Text = $"{nombreUsuario}\n{rolUsuario}",
+                Font = new Font("Segoe UI", 7.5f, FontStyle.Bold),
+                ForeColor = textWhite,
+                Location = new Point(44, 11),
+                AutoSize = true
+            };
+
+            userCard.Controls.Add(lblAvatar);
+            userCard.Controls.Add(lblUserInfo);
+            panelSidebar.Controls.Add(userCard);
+
+            // Menú Principal
             FlowLayoutPanel menuPanel = new FlowLayoutPanel
             {
-                Dock = DockStyle.Fill,
+                Location = new Point(0, 125),
+                Size = new Size(220, 600),
                 FlowDirection = FlowDirection.TopDown,
                 WrapContents = false,
-                AutoScroll = true
+                AutoScroll = false,
+                BackColor = Color.Transparent
             };
+
+            AgregarEtiquetaSeccion(menuPanel, "Menú Principal");
+            AgregarBotonMenu(menuPanel, "░", "Panel de Control", "Dashboard", true);
+
+            // CAMBIO: Se cambió el nombre de "Mensajes" a "Gestión de Equipos"
+            AgregarBotonMenu(menuPanel, "💬", "Gestión de Equipos", "Chat", false);
+
+            // CAMBIO: Se cambió el nombre de "estudiantes" a "Informacion"
+            AgregarBotonMenu(menuPanel, "ℹ️", "Información", "Info", false);
+            AgregarBotonMenu(menuPanel, "👥", "Docentes", "Teacher", false);
+            AgregarBotonMenu(menuPanel, "📅", "Eventos", "Event", false);
+
+            AgregarEtiquetaSeccion(menuPanel, "Otros");
+            AgregarBotonMenu(menuPanel, "📊", "Finanzas", "Finance", false);
+            AgregarBotonMenu(menuPanel, "🍴", "Servicios", "Food", false);
+            AgregarBotonMenu(menuPanel, "⚙️", "Ajustes", "Settings", false);
+
             panelSidebar.Controls.Add(menuPanel);
-            lblBrand.SendToBack();
-
-            // Creación de botones del menú
-            AgregarBotonMenu(menuPanel, "📥 Registrar Entrada", "Registrar Entrada");
-            AgregarBotonMenu(menuPanel, "📤 Registrar Salida", "Registrar Salida");
-            AgregarBotonMenu(menuPanel, "📦 Gestión Equipos", "Gestión de Equipos");
-            AgregarBotonMenu(menuPanel, "🛠️ Stock Productos", "Stock Productos");
-            AgregarBotonMenu(menuPanel, "💬 Soporte", "Soporte");
-
-            // Botón de Cerrar Sesión en la parte inferior
-            Button btnCerrarSesion = new Button
-            {
-                Text = "🚪 Cerrar Sesión",
-                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
-                ForeColor = Color.White,
-                BackColor = Color.FromArgb(200, 230, 80, 80),
-                FlatStyle = FlatStyle.Flat,
-                Height = 40,
-                Width = 195,
-                Dock = DockStyle.Bottom,
-                Margin = new Padding(0, 10, 0, 10),
-                Cursor = Cursors.Hand
-            };
-            btnCerrarSesion.FlatAppearance.BorderSize = 0;
-            btnCerrarSesion.Click += BtnCerrarSesion_Click;
-            AplicarBordesRedondeados(btnCerrarSesion, 12);
-            panelSidebar.Controls.Add(btnCerrarSesion);
         }
 
-        private void AgregarBotonMenu(Control contenedor, string texto, string tag)
+        private void AgregarEtiquetaSeccion(Control container, string texto)
+        {
+            Label lbl = new Label
+            {
+                Text = texto,
+                Font = new Font("Segoe UI", 7.5f, FontStyle.Bold),
+                ForeColor = textMuted,
+                Margin = new Padding(10, 12, 0, 6),
+                AutoSize = true
+            };
+            container.Controls.Add(lbl);
+        }
+
+        private void AgregarBotonMenu(Control contenedor, string icono, string texto, string tag, bool esActivo)
         {
             Button btn = new Button
             {
-                Text = texto,
+                Text = $"   {icono}   {texto}",
                 Tag = tag,
-                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
-                ForeColor = Color.White,
-                BackColor = Color.Transparent,
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                ForeColor = esActivo ? textWhite : textMuted,
+                BackColor = esActivo ? purpleAccent : Color.Transparent,
                 FlatStyle = FlatStyle.Flat,
-                Height = 42,
-                Width = 195,
+                Height = 38,
+                Width = 204,
                 TextAlign = ContentAlignment.MiddleLeft,
-                Padding = new Padding(15, 0, 0, 0),
-                Margin = new Padding(0, 0, 0, 8),
+                Margin = new Padding(0, 0, 0, 4),
                 Cursor = Cursors.Hand
             };
             btn.FlatAppearance.BorderSize = 0;
-            btn.Click += MenuButton_Click;
+            AplicarBordesRedondeados(btn, 8);
 
-            btn.MouseEnter += (s, e) => { if (btn != botonActivo) btn.BackColor = greenHover; };
-            btn.MouseLeave += (s, e) => { if (btn != botonActivo) btn.BackColor = Color.Transparent; };
+            if (esActivo) botonActivo = btn;
+
+            btn.Click += (s, e) =>
+            {
+                // Gestionar estado visual de botones
+                if (botonActivo != null)
+                {
+                    botonActivo.BackColor = Color.Transparent;
+                    botonActivo.ForeColor = textMuted;
+                }
+                botonActivo = btn;
+                btn.BackColor = purpleAccent;
+                btn.ForeColor = textWhite;
+
+                // Lógica de navegación
+                string opcion = btn.Tag?.ToString();
+                panelMainContent.Controls.Clear(); // Limpiar panel principal
+
+                switch (opcion)
+                {
+                    case "Dashboard":
+                        ConstruirCalendarioEvents();
+                        break;
+                    case "Chat":
+                        GestionEquipo vistaGestion = new GestionEquipo();
+                        vistaGestion.Dock = DockStyle.Fill;
+                        panelMainContent.Controls.Add(vistaGestion);
+                        break;
+                    case "Info": // NUEVO CASO
+                        InfoPanel vistaInfo = new InfoPanel();
+                        vistaInfo.Dock = DockStyle.Fill;
+                        panelMainContent.Controls.Add(vistaInfo);
+                        break;
+                    default:
+                        break;
+                }
+            };
 
             contenedor.Controls.Add(btn);
-        }
-
-        // Evento que gestiona las opciones del menú
-        private void MenuButton_Click(object sender, EventArgs e)
-        {
-            Button btn = sender as Button;
-            if (btn == null) return;
-
-            ActivarBoton(btn);
-
-            string opcion = btn.Tag?.ToString();
-
-            switch (opcion)
-            {
-                case "Registrar Entrada":
-                case "Registrar Salida":
-                    // Cargamos el UserControl de Salida y Entrada de Equipos
-                    AbrirUserControl(new SalidaEntradaEquipos());
-                    break;
-
-                case "Gestión de Equipos":
-                    // Muestra la interfaz de Gestión de Equipos / Almacén TV con la tabla
-                    AbrirUserControl(new GestionEquipo());
-                    break;
-
-                case "Stock Productos":
-                    // Limpia el contenido para dejarlo vacío
-                    panelMainContent.Controls.Clear();
-                    break;
-
-                case "Soporte":
-                    // Reservado para el módulo de soporte
-                    panelMainContent.Controls.Clear();
-                    break;
-            }
-        }
-
-        // Método encargado de limpiar el panel central y cargar la nueva vista
-        private void AbrirUserControl(UserControl uc)
-        {
-            panelMainContent.Controls.Clear();
-            uc.Dock = DockStyle.Fill;
-            panelMainContent.Controls.Add(uc);
-            uc.BringToFront();
-        }
-
-        // Cambia la apariencia visual del botón seleccionado
-        private void ActivarBoton(Button btn)
-        {
-            if (botonActivo != null)
-            {
-                botonActivo.BackColor = Color.Transparent;
-                botonActivo.ForeColor = Color.White;
-            }
-
-            botonActivo = btn;
-            botonActivo.BackColor = Color.White;
-            botonActivo.ForeColor = greenPrimary;
-            AplicarBordesRedondeados(botonActivo, 12);
         }
 
         private void CrearHeader()
@@ -201,41 +267,62 @@ namespace SUSTENTACION
             {
                 Height = 60,
                 Dock = DockStyle.Top,
-                BackColor = bgLight,
-                Padding = new Padding(20, 10, 20, 10)
+                BackColor = bgMain,
+                Padding = new Padding(15, 10, 15, 10)
             };
             this.Controls.Add(panelHeader);
 
-            Panel panelSearch = new Panel
+            // Botón Hamburguesa de Tres Rayas (Inicia la animación)
+            Button btnMenuToggle = new Button
             {
-                Size = new Size(260, 36),
-                Location = new Point(20, 12),
-                BackColor = bgWhite
+                Text = "≡",
+                Font = new Font("Segoe UI", 14f, FontStyle.Bold),
+                ForeColor = textWhite,
+                BackColor = Color.Transparent,
+                FlatStyle = FlatStyle.Flat,
+                Size = new Size(35, 35),
+                Location = new Point(10, 12),
+                Cursor = Cursors.Hand
             };
-            AplicarBordesRedondeados(panelSearch, 15);
+            btnMenuToggle.FlatAppearance.BorderSize = 0;
+            btnMenuToggle.Click += (s, e) => timerSidebar.Start();
+            panelHeader.Controls.Add(btnMenuToggle);
 
-            TextBox txtSearch = new TextBox
+            Label lblTitle = new Label
             {
-                Text = "Buscar en inventario...",
-                Font = new Font("Segoe UI", 9f),
-                ForeColor = textGray,
-                BorderStyle = BorderStyle.None,
-                Size = new Size(210, 20),
-                Location = new Point(15, 9)
-            };
-            panelSearch.Controls.Add(txtSearch);
-            panelHeader.Controls.Add(panelSearch);
-
-            Label lblUser = new Label
-            {
-                Text = $"👤 {nombreUsuario} ({rolUsuario})",
-                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
-                ForeColor = textDark,
-                Location = new Point(panelHeader.Width - 280, 20),
-                Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                Text = "Panel del Trabajador",
+                Font = new Font("Segoe UI", 13f, FontStyle.Bold),
+                ForeColor = textWhite,
+                Location = new Point(50, 16),
                 AutoSize = true
             };
-            panelHeader.Controls.Add(lblUser);
+            panelHeader.Controls.Add(lblTitle);
+
+            // Botón Cerrar Sesión (Reemplaza a Buscar y + Nuevo)
+            Button btnCerrarSesion = new Button
+            {
+                Text = "🚪 Cerrar Sesión",
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                ForeColor = textWhite,
+                BackColor = Color.FromArgb(220, 53, 69), // Color rojo elegante
+                FlatStyle = FlatStyle.Flat,
+                Size = new Size(130, 32),
+                Location = new Point(panelHeader.Width - 145, 14),
+                Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                Cursor = Cursors.Hand
+            };
+            btnCerrarSesion.FlatAppearance.BorderSize = 0;
+            AplicarBordesRedondeados(btnCerrarSesion, 8);
+
+            btnCerrarSesion.Click += (s, e) =>
+            {
+                if (MessageBox.Show("¿Está seguro de que desea cerrar sesión?", "ARTEMISA", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+                {
+                    this.Close();
+                }
+            };
+
+            panelHeader.Controls.Add(btnCerrarSesion);
         }
 
         private void CrearMainContent()
@@ -243,216 +330,211 @@ namespace SUSTENTACION
             panelMainContent = new Panel
             {
                 Dock = DockStyle.Fill,
-                BackColor = bgLight,
-                AutoScroll = true,
-                Padding = new Padding(25)
+                BackColor = bgMain,
+                Padding = new Padding(15)
             };
             this.Controls.Add(panelMainContent);
             panelMainContent.BringToFront();
 
-            CargarDashboardDefault();
+            ConstruirCalendarioEvents();
         }
 
-        private void CargarDashboardDefault()
+        private void ConstruirCalendarioEvents()
         {
             panelMainContent.Controls.Clear();
 
-            FlowLayoutPanel flowContainer = new FlowLayoutPanel
+            // 1. Panel lateral derecho (Lista de Eventos)
+            Panel panelEventList = new Panel
+            {
+                Width = 240,
+                Dock = DockStyle.Right,
+                BackColor = bgCard,
+                Padding = new Padding(10)
+            };
+            AplicarBordesRedondeados(panelEventList, 12);
+
+            Label lblEventListTitle = new Label
+            {
+                Text = "Lista de Eventos\nActividades programadas",
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                ForeColor = textWhite,
+                Dock = DockStyle.Top,
+                Height = 38
+            };
+            panelEventList.Controls.Add(lblEventListTitle);
+
+            FlowLayoutPanel flowEvents = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                AutoScroll = true,
                 FlowDirection = FlowDirection.TopDown,
                 WrapContents = false,
+                AutoScroll = true
+            };
+            flowEvents.Controls.Add(CrearTarjetaEvento("Septiembre 2026", "Reunión de ARTEMISA", "Gratis", "09:00 - 10:00 AM"));
+            flowEvents.Controls.Add(CrearTarjetaEvento("Septiembre 2026", "Capacitación Trabajadores", "$10.0", "02:00 - 05:00 PM"));
+            flowEvents.Controls.Add(CrearTarjetaEvento("Septiembre 2026", "Sustentación de Proyecto", "Gratis", "08:00 - 12:00 PM"));
+
+            panelEventList.Controls.Add(flowEvents);
+            lblEventListTitle.SendToBack();
+
+            // 2. Área Central del Calendario
+            Panel calendarArea = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = Color.Transparent,
+                Padding = new Padding(0, 0, 10, 0)
+            };
+
+            Panel panelMonthHeader = new Panel
+            {
+                Dock = DockStyle.Top,
+                Height = 35,
                 BackColor = Color.Transparent
             };
 
-            // FILA 1: STATUS USUARIO + KPIs
-            FlowLayoutPanel rowTop = new FlowLayoutPanel
+            ComboBox cbMeses = new ComboBox
             {
-                AutoSize = true,
-                FlowDirection = FlowDirection.LeftToRight,
-                WrapContents = true,
-                Margin = new Padding(0, 0, 0, 20)
-            };
-
-            Panel cardUserStatus = new Panel
-            {
-                Size = new Size(230, 185),
-                Margin = new Padding(0, 0, 20, 10),
-                BackColor = bgWhite
-            };
-            AplicarBordesRedondeados(cardUserStatus, 15);
-
-            Label lblStatusTitle = new Label
-            {
-                Text = "Turno Disponible",
+                DropDownStyle = ComboBoxStyle.DropDownList,
                 Font = new Font("Segoe UI", 10f, FontStyle.Bold),
-                ForeColor = greenPrimary,
-                Location = new Point(55, 12),
-                AutoSize = true
-            };
-            cardUserStatus.Controls.Add(lblStatusTitle);
-
-            Label lblAvatar = new Label
-            {
-                Text = "🧑‍💼",
-                Font = new Font("Segoe UI", 28f),
-                Location = new Point(85, 38),
-                AutoSize = true
-            };
-            cardUserStatus.Controls.Add(lblAvatar);
-
-            Label lblWorkingInfo = new Label
-            {
-                Text = $"{nombreUsuario}\n08:00 AM - 05:00 PM",
-                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-                ForeColor = textDark,
-                TextAlign = ContentAlignment.MiddleCenter,
-                Location = new Point(35, 120),
-                AutoSize = true
-            };
-            cardUserStatus.Controls.Add(lblWorkingInfo);
-            rowTop.Controls.Add(cardUserStatus);
-
-            FlowLayoutPanel gridKPIs = new FlowLayoutPanel
-            {
-                Size = new Size(550, 185),
-                FlowDirection = FlowDirection.LeftToRight,
-                WrapContents = true,
-                Margin = new Padding(0)
+                ForeColor = textWhite,
+                BackColor = bgCard,
+                Width = 180,
+                FlatStyle = FlatStyle.Flat,
+                Location = new Point(0, 2)
             };
 
-            gridKPIs.Controls.Add(CrearKPICard("40", "Entradas Hoy", "Ayer: 32 Entradas"));
-            gridKPIs.Controls.Add(CrearKPICard("21", "Salidas Hoy", "Ayer: 18 Salidas"));
-            gridKPIs.Controls.Add(CrearKPICard("14", "Revisiones", "Pendientes: 2"));
-            gridKPIs.Controls.Add(CrearKPICard("15", "Categorías", "Actualizadas"));
-            gridKPIs.Controls.Add(CrearKPICard("36", "Productos", "Bajo Stock"));
-            gridKPIs.Controls.Add(CrearKPICard("S/ 52,140", "Valor Almacén", "Total registrado"));
-
-            rowTop.Controls.Add(gridKPIs);
-            flowContainer.Controls.Add(rowTop);
-
-            // FILA 2: GRÁFICO + CALENDARIO
-            FlowLayoutPanel rowBottom = new FlowLayoutPanel
+            DateTime baseDate = new DateTime(fechaSeleccionada.Year, 1, 1);
+            for (int i = 0; i < 12; i++)
             {
-                AutoSize = true,
-                FlowDirection = FlowDirection.LeftToRight,
-                WrapContents = true,
-                Margin = new Padding(0)
+                DateTime m = baseDate.AddMonths(i);
+                cbMeses.Items.Add($"{m.ToString("MMMM", new CultureInfo("es-ES"))} {m.Year}");
+            }
+            cbMeses.SelectedIndex = fechaSeleccionada.Month - 1;
+
+            cbMeses.SelectedIndexChanged += (s, e) =>
+            {
+                fechaSeleccionada = new DateTime(fechaSeleccionada.Year, cbMeses.SelectedIndex + 1, 1);
+                ConstruirCalendarioEvents();
             };
 
-            Panel cardChart = new Panel
+            panelMonthHeader.Controls.Add(cbMeses);
+            calendarArea.Controls.Add(panelMonthHeader);
+
+            TableLayoutPanel gridDiasHeader = new TableLayoutPanel
             {
-                Size = new Size(500, 260),
-                Margin = new Padding(0, 0, 20, 10),
-                BackColor = bgWhite
+                RowCount = 1,
+                ColumnCount = 7,
+                Dock = DockStyle.Top,
+                Height = 22,
+                BackColor = Color.Transparent
             };
-            AplicarBordesRedondeados(cardChart, 15);
+            for (int col = 0; col < 7; col++)
+                gridDiasHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 14.2857f));
 
-            Label lblChartTitle = new Label
+            string[] dias = { "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom" };
+            for (int i = 0; i < 7; i++)
             {
-                Text = "Reporte de Movimientos Mensual",
-                Font = new Font("Segoe UI", 11f, FontStyle.Bold),
-                ForeColor = textDark,
-                Location = new Point(20, 15),
-                AutoSize = true
-            };
-            cardChart.Controls.Add(lblChartTitle);
-
-            cardChart.Paint += (s, e) =>
-            {
-                Graphics g = e.Graphics;
-                g.SmoothingMode = SmoothingMode.AntiAlias;
-
-                int[] entradas = { 40, 60, 30, 80, 50, 90, 70 };
-                int[] salidas = { 30, 40, 50, 60, 40, 80, 60 };
-
-                int x = 40;
-                for (int i = 0; i < entradas.Length; i++)
+                Label lblDia = new Label
                 {
-                    g.FillRectangle(new SolidBrush(greenPrimary), x, 210 - entradas[i] * 1.5f, 14, entradas[i] * 1.5f);
-                    g.FillRectangle(new SolidBrush(Color.FromArgb(240, 180, 40)), x + 18, 210 - salidas[i] * 1.5f, 14, salidas[i] * 1.5f);
-                    x += 62;
+                    Text = dias[i],
+                    Font = new Font("Segoe UI", 8f, FontStyle.Bold),
+                    ForeColor = textMuted,
+                    Dock = DockStyle.Fill,
+                    TextAlign = ContentAlignment.MiddleCenter
+                };
+                gridDiasHeader.Controls.Add(lblDia, i, 0);
+            }
+            calendarArea.Controls.Add(gridDiasHeader);
+
+            DateTime primerDiaDelMes = new DateTime(fechaSeleccionada.Year, fechaSeleccionada.Month, 1);
+            int diasEnMes = DateTime.DaysInMonth(fechaSeleccionada.Year, fechaSeleccionada.Month);
+
+            TableLayoutPanel gridCalendar = new TableLayoutPanel
+            {
+                RowCount = 6,
+                ColumnCount = 7,
+                Dock = DockStyle.Fill,
+                BackColor = Color.Transparent
+            };
+
+            for (int col = 0; col < 7; col++)
+                gridCalendar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 14.2857f));
+            for (int row = 0; row < 6; row++)
+                gridCalendar.RowStyles.Add(new RowStyle(SizeType.Percent, 16.6666f));
+
+            int offsetInicio = ((int)primerDiaDelMes.DayOfWeek + 6) % 7;
+            int contadorDia = 1;
+
+            for (int r = 0; r < 6; r++)
+            {
+                for (int c = 0; c < 7; c++)
+                {
+                    int indiceCelda = (r * 7) + c;
+                    Panel pnlDia = new Panel
+                    {
+                        Dock = DockStyle.Fill,
+                        Margin = new Padding(2),
+                        BackColor = bgCard
+                    };
+
+                    if (indiceCelda >= offsetInicio && contadorDia <= diasEnMes)
+                    {
+                        bool esHoy = (contadorDia == DateTime.Now.Day && fechaSeleccionada.Month == DateTime.Now.Month && fechaSeleccionada.Year == DateTime.Now.Year);
+                        if (esHoy)
+                        {
+                            pnlDia.BackColor = bgCardSelected;
+                        }
+
+                        AplicarBordesRedondeados(pnlDia, 6);
+
+                        Label lblNum = new Label
+                        {
+                            Text = contadorDia.ToString(),
+                            Font = new Font("Segoe UI", 8f, FontStyle.Bold),
+                            ForeColor = esHoy ? Color.Black : textWhite,
+                            Location = new Point(4, 4),
+                            AutoSize = true
+                        };
+                        pnlDia.Controls.Add(lblNum);
+                        contadorDia++;
+                    }
+                    else
+                    {
+                        pnlDia.BackColor = Color.Transparent;
+                    }
+
+                    gridCalendar.Controls.Add(pnlDia, c, r);
                 }
-            };
-            rowBottom.Controls.Add(cardChart);
+            }
 
-            Panel cardCalendar = new Panel
-            {
-                Size = new Size(280, 260),
-                Margin = new Padding(0, 0, 0, 10),
-                BackColor = bgWhite
-            };
-            AplicarBordesRedondeados(cardCalendar, 15);
+            calendarArea.Controls.Add(gridCalendar);
+            gridCalendar.BringToFront();
 
-            MonthCalendar calendar = new MonthCalendar
-            {
-                Location = new Point(22, 20),
-                ShowTodayCircle = true
-            };
-            cardCalendar.Controls.Add(calendar);
-            rowBottom.Controls.Add(cardCalendar);
-
-            flowContainer.Controls.Add(rowBottom);
-            panelMainContent.Controls.Add(flowContainer);
+            panelMainContent.Controls.Add(calendarArea);
+            panelMainContent.Controls.Add(panelEventList);
         }
 
-        private Panel CrearKPICard(string valor, string titulo, string subtexto)
+        private Panel CrearTarjetaEvento(string fecha, string titulo, string precio, string hora)
         {
             Panel card = new Panel
             {
-                Size = new Size(165, 85),
-                Margin = new Padding(0, 0, 15, 12),
-                BackColor = bgWhite
+                Size = new Size(215, 70),
+                Margin = new Padding(0, 0, 0, 8),
+                BackColor = Color.FromArgb(24, 25, 40)
             };
-            AplicarBordesRedondeados(card, 12);
+            AplicarBordesRedondeados(card, 8);
 
-            Label lblV = new Label
-            {
-                Text = valor,
-                Font = new Font("Segoe UI", 12f, FontStyle.Bold),
-                ForeColor = textDark,
-                Location = new Point(10, 8),
-                AutoSize = true
-            };
-            card.Controls.Add(lblV);
+            Label lblFecha = new Label { Text = fecha, Font = new Font("Segoe UI", 7f), ForeColor = purpleAccent, Location = new Point(6, 6), AutoSize = true };
+            Label lblTitulo = new Label { Text = titulo, Font = new Font("Segoe UI", 8.5f, FontStyle.Bold), ForeColor = textWhite, Location = new Point(6, 20), AutoSize = true };
+            Label lblHora = new Label { Text = $"🕒 {hora}", Font = new Font("Segoe UI", 7f), ForeColor = textMuted, Location = new Point(6, 44), AutoSize = true };
+            Label lblPrecio = new Label { Text = precio, Font = new Font("Segoe UI", 8.5f, FontStyle.Bold), ForeColor = textWhite, Location = new Point(170, 20), AutoSize = true };
 
-            Label lblT = new Label
-            {
-                Text = titulo,
-                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-                ForeColor = greenPrimary,
-                Location = new Point(10, 34),
-                AutoSize = true
-            };
-            card.Controls.Add(lblT);
-
-            Label lblS = new Label
-            {
-                Text = subtexto,
-                Font = new Font("Segoe UI", 7.5f),
-                ForeColor = textGray,
-                Location = new Point(10, 56),
-                AutoSize = true
-            };
-            card.Controls.Add(lblS);
+            card.Controls.Add(lblFecha);
+            card.Controls.Add(lblTitulo);
+            card.Controls.Add(lblHora);
+            card.Controls.Add(lblPrecio);
 
             return card;
-        }
-
-        private void BtnCerrarSesion_Click(object sender, EventArgs e)
-        {
-            DialogResult result = MessageBox.Show("¿Estás seguro de que deseas cerrar sesión?",
-                                                "Cerrar Sesión",
-                                                MessageBoxButtons.YesNo,
-                                                MessageBoxIcon.Question);
-
-            if (result == DialogResult.Yes)
-            {
-                Form1 login = new Form1();
-                login.Show();
-                this.Close();
-            }
         }
 
         private void AplicarBordesRedondeados(Control control, int radio)
@@ -478,7 +560,6 @@ namespace SUSTENTACION
 
         private void FormTrabajador_Load(object sender, EventArgs e)
         {
-
         }
     }
 }
