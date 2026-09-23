@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "SUSTENTACION": {
+      "commandName": "Project",
+      "sqlDebugging": true
+    }
+  }
+}
