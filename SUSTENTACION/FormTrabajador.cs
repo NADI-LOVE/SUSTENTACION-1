@@ -1,10 +1,11 @@
-﻿using System;
+﻿using MySql.Data.MySqlClient;
+using SUSTENTACION;
+using SUSTENTACION.PanelTrabajador;
+using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.Windows.Forms;
-// Se agrega la directiva using para acceder al UserControl GestionEquipo
-using SUSTENTACION.PanelTrabajador;
 
 namespace SUSTENTACION
 {
@@ -34,9 +35,13 @@ namespace SUSTENTACION
         private const int ANCHO_MAX = 220;
         private const int ANCHO_MIN = 60;
 
-        public FormTrabajador(string nombre = "María López", string rol = "Trabajador")
+        // Variable para guardar el ID del trabajador logueado
+        private int idTrabajador;
+
+        public FormTrabajador(int id = 1, string nombre = "María López", string rol = "Trabajador")
         {
             InitializeComponent();
+            this.idTrabajador = id;
             this.nombreUsuario = nombre;
             this.rolUsuario = rol;
 
@@ -61,7 +66,7 @@ namespace SUSTENTACION
         private void InicializarTimerSidebar()
         {
             timerSidebar = new System.Windows.Forms.Timer();
-            timerSidebar.Interval = 10; // Velocidad de la animación
+            timerSidebar.Interval = 10;
             timerSidebar.Tick += (s, e) =>
             {
                 if (sidebarExpandido)
@@ -171,11 +176,7 @@ namespace SUSTENTACION
 
             AgregarEtiquetaSeccion(menuPanel, "Menú Principal");
             AgregarBotonMenu(menuPanel, "░", "Panel de Control", "Dashboard", true);
-
-            // CAMBIO: Se cambió el nombre de "Mensajes" a "Gestión de Equipos"
             AgregarBotonMenu(menuPanel, "💬", "Gestión de Equipos", "Chat", false);
-
-            // CAMBIO: Se cambió el nombre de "estudiantes" a "Informacion"
             AgregarBotonMenu(menuPanel, "ℹ️", "Información", "Info", false);
             AgregarBotonMenu(menuPanel, "👥", "Docentes", "Teacher", false);
             AgregarBotonMenu(menuPanel, "📅", "Eventos", "Event", false);
@@ -224,7 +225,6 @@ namespace SUSTENTACION
 
             btn.Click += (s, e) =>
             {
-                // Gestionar estado visual de botones
                 if (botonActivo != null)
                 {
                     botonActivo.BackColor = Color.Transparent;
@@ -234,9 +234,8 @@ namespace SUSTENTACION
                 btn.BackColor = purpleAccent;
                 btn.ForeColor = textWhite;
 
-                // Lógica de navegación
                 string opcion = btn.Tag?.ToString();
-                panelMainContent.Controls.Clear(); // Limpiar panel principal
+                panelMainContent.Controls.Clear();
 
                 switch (opcion)
                 {
@@ -248,8 +247,8 @@ namespace SUSTENTACION
                         vistaGestion.Dock = DockStyle.Fill;
                         panelMainContent.Controls.Add(vistaGestion);
                         break;
-                    case "Info": // NUEVO CASO
-                        InfoPanel vistaInfo = new InfoPanel();
+                    case "Info":
+                        InfoPanel vistaInfo = new InfoPanel(this.idTrabajador, this.nombreUsuario);
                         vistaInfo.Dock = DockStyle.Fill;
                         panelMainContent.Controls.Add(vistaInfo);
                         break;
@@ -272,7 +271,6 @@ namespace SUSTENTACION
             };
             this.Controls.Add(panelHeader);
 
-            // Botón Hamburguesa de Tres Rayas (Inicia la animación)
             Button btnMenuToggle = new Button
             {
                 Text = "≡",
@@ -298,13 +296,12 @@ namespace SUSTENTACION
             };
             panelHeader.Controls.Add(lblTitle);
 
-            // Botón Cerrar Sesión (Reemplaza a Buscar y + Nuevo)
             Button btnCerrarSesion = new Button
             {
                 Text = "🚪 Cerrar Sesión",
                 Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
                 ForeColor = textWhite,
-                BackColor = Color.FromArgb(220, 53, 69), // Color rojo elegante
+                BackColor = Color.FromArgb(220, 53, 69),
                 FlatStyle = FlatStyle.Flat,
                 Size = new Size(130, 32),
                 Location = new Point(panelHeader.Width - 145, 14),
@@ -370,9 +367,11 @@ namespace SUSTENTACION
                 WrapContents = false,
                 AutoScroll = true
             };
-            flowEvents.Controls.Add(CrearTarjetaEvento("Septiembre 2026", "Reunión de ARTEMISA", "Gratis", "09:00 - 10:00 AM"));
-            flowEvents.Controls.Add(CrearTarjetaEvento("Septiembre 2026", "Capacitación Trabajadores", "$10.0", "02:00 - 05:00 PM"));
-            flowEvents.Controls.Add(CrearTarjetaEvento("Septiembre 2026", "Sustentación de Proyecto", "Gratis", "08:00 - 12:00 PM"));
+
+            // ==========================================
+            // CARGAR EVENTOS REALES DESDE LA BASE DE DATOS
+            // ==========================================
+            CargarEventosEnLista(flowEvents, fechaSeleccionada);
 
             panelEventList.Controls.Add(flowEvents);
             lblEventListTitle.SendToBack();
@@ -496,6 +495,41 @@ namespace SUSTENTACION
                             AutoSize = true
                         };
                         pnlDia.Controls.Add(lblNum);
+
+                        // ==========================================
+                        // GUARDAMOS EL DÍA ACTUAL ANTES DE INCREMENTAR
+                        // ==========================================
+                        int diaActual = contadorDia;
+                        DateTime fechaDelPanel = new DateTime(fechaSeleccionada.Year, fechaSeleccionada.Month, diaActual);
+
+                        // Solo permitir clic en fechas de hoy o futuras
+                        if (fechaDelPanel >= DateTime.Today)
+                        {
+                            pnlDia.Cursor = Cursors.Hand;
+                            pnlDia.Click += (s, ev) =>
+                            {
+                                using (var formSalida = new FormSalidaEquipo(this.idTrabajador, this.nombreUsuario, fechaDelPanel))
+                                {
+                                    if (formSalida.ShowDialog() == DialogResult.OK)
+                                    {
+                                        ConstruirCalendarioEvents(); // Recargar el calendario
+                                    }
+                                }
+                            };
+
+                            // Efecto hover
+                            pnlDia.MouseEnter += (s, ev) => pnlDia.BackColor = Color.FromArgb(60, 62, 90);
+                            pnlDia.MouseLeave += (s, ev) =>
+                            {
+                                if (!esHoy) pnlDia.BackColor = bgCard;
+                                else pnlDia.BackColor = bgCardSelected;
+                            };
+                        }
+                        else
+                        {
+                            pnlDia.Cursor = Cursors.No;
+                        }
+
                         contadorDia++;
                     }
                     else
@@ -512,6 +546,71 @@ namespace SUSTENTACION
 
             panelMainContent.Controls.Add(calendarArea);
             panelMainContent.Controls.Add(panelEventList);
+        }
+
+        // ==========================================
+        // CARGAR EVENTOS EN LA LISTA LATERAL (desde MySQL)
+        // ==========================================
+        private void CargarEventosEnLista(FlowLayoutPanel contenedor, DateTime mes)
+        {
+            Conexion conexionDB = new Conexion();
+            try
+            {
+                MySqlConnection con = conexionDB.ObtenerConexion();
+
+                string query = @"SELECT s.id_salida, s.fecha_salida, s.encargado, s.ubicacion, s.detalles,
+                                 GROUP_CONCAT(e.nombre SEPARATOR ', ') AS equipos
+                                 FROM salidas s
+                                 LEFT JOIN salida_equipos se ON s.id_salida = se.id_salida
+                                 LEFT JOIN equipos e ON se.id_equipo = e.id
+                                 WHERE MONTH(s.fecha_salida) = @mes AND YEAR(s.fecha_salida) = @anio
+                                 GROUP BY s.id_salida
+                                 ORDER BY s.fecha_salida ASC";
+
+                MySqlCommand cmd = new MySqlCommand(query, con);
+                cmd.Parameters.AddWithValue("@mes", mes.Month);
+                cmd.Parameters.AddWithValue("@anio", mes.Year);
+
+                MySqlDataReader reader = cmd.ExecuteReader();
+
+                bool hay = false;
+                while (reader.Read())
+                {
+                    hay = true;
+                    DateTime fecha = Convert.ToDateTime(reader["fecha_salida"]);
+                    string encargado = reader["encargado"].ToString();
+                    string ubicacion = reader["ubicacion"].ToString();
+                    string equipos = reader["equipos"].ToString();
+
+                    string fechaTexto = fecha.ToString("dd MMM yyyy", new CultureInfo("es-ES"));
+                    string titulo = $"Salida - {encargado}";
+                    string detalles = $"{equipos} | {ubicacion}";
+
+                    Panel tarjeta = CrearTarjetaEvento(fechaTexto, titulo, detalles, fecha.ToString("HH:mm"));
+                    contenedor.Controls.Add(tarjeta);
+                }
+
+                if (!hay)
+                {
+                    Label lblVacio = new Label
+                    {
+                        Text = "No hay salidas programadas este mes.",
+                        Font = new Font("Segoe UI", 8.5f, FontStyle.Italic),
+                        ForeColor = textMuted,
+                        AutoSize = true,
+                        Margin = new Padding(10)
+                    };
+                    contenedor.Controls.Add(lblVacio);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Error al cargar salidas: " + ex.Message, "Error MySQL", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                conexionDB.CerrarConexion();
+            }
         }
 
         private Panel CrearTarjetaEvento(string fecha, string titulo, string precio, string hora)
