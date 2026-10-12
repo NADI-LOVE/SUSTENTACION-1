@@ -41,19 +41,23 @@ namespace SUSTENTACION.PanelTrabajador
             this.BackColor = bgMain;
             this.Padding = new Padding(20);
 
+            // Estructura limpia de 4 filas
             TableLayoutPanel mainLayout = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = 3,
+                RowCount = 4,
                 BackColor = Color.Transparent
             };
-            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 65f));
-            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 175f));
-            mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 50f));  // 1. Header Título
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 180f)); // 2. Tarjetas KPI
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 45f));  // 3. Barra de Búsqueda y Filtros
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));  // 4. Tabla Inventario
 
-            // HEADER
-            Panel headerPanel = new Panel { Dock = DockStyle.Fill, Margin = new Padding(0, 0, 0, 10) };
+            // ==========================================
+            // 1. HEADER TÍTULO
+            // ==========================================
+            Panel headerPanel = new Panel { Dock = DockStyle.Fill, Margin = new Padding(0, 0, 0, 5) };
 
             Label lblTitulo = new Label
             {
@@ -64,41 +68,7 @@ namespace SUSTENTACION.PanelTrabajador
                 AutoSize = true
             };
 
-            txtBuscar = new TextBox
-            {
-                Width = 200,
-                Location = new Point(140, 6),
-                BackColor = bgCard,
-                ForeColor = textWhite,
-                BorderStyle = BorderStyle.FixedSingle,
-                Font = new Font("Segoe UI", 9.5f)
-            };
-            txtBuscar.Text = "Buscar equipo...";
-            txtBuscar.GotFocus += (s, e) => { if (txtBuscar.Text == "Buscar equipo...") txtBuscar.Text = ""; };
-            txtBuscar.LostFocus += (s, e) => { if (string.IsNullOrWhiteSpace(txtBuscar.Text)) txtBuscar.Text = "Buscar equipo..."; };
-            txtBuscar.TextChanged += (s, e) => CargarInventarioEquipos();
-
-            FlowLayoutPanel pnlFiltros = new FlowLayoutPanel
-            {
-                Dock = DockStyle.Right,
-                AutoSize = true,
-                WrapContents = false,
-                Padding = new Padding(0)
-            };
-
-            cmbCategoria = CrearComboBoxFiltro(new string[] { "Categoría: Todas" });
-            cmbEstado = CrearComboBoxFiltro(new string[] { "Estado: Todos", "Disponible", "En Evento", "En Mantenimiento", "Dañado" });
-            cmbTecnico = CrearComboBoxFiltro(new string[] { "Técnico: Todos" });
-
-            cmbCategoria.SelectedIndexChanged += (s, e) => CargarInventarioEquipos();
-            cmbEstado.SelectedIndexChanged += (s, e) => CargarInventarioEquipos();
-            cmbTecnico.SelectedIndexChanged += (s, e) => CargarInventarioEquipos();
-
-            pnlFiltros.Controls.AddRange(new Control[] { cmbCategoria, cmbEstado, cmbTecnico });
-
             headerPanel.Controls.Add(lblTitulo);
-            headerPanel.Controls.Add(txtBuscar);
-            headerPanel.Controls.Add(pnlFiltros);
 
             // TARJETAS KPI
             TableLayoutPanel kpiLayout = new TableLayoutPanel
@@ -106,7 +76,7 @@ namespace SUSTENTACION.PanelTrabajador
                 Dock = DockStyle.Fill,
                 ColumnCount = 3,
                 RowCount = 2,
-                Margin = new Padding(0, 0, 0, 15)
+                Margin = new Padding(0, 0, 0, 10)
             };
             kpiLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33f));
             kpiLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33f));
@@ -114,12 +84,12 @@ namespace SUSTENTACION.PanelTrabajador
             kpiLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 50f));
             kpiLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 50f));
 
-            Panel cardTotal = CrearTarjetaKPI("TOTAL UNIDADES", "0", Color.FromArgb(0, 180, 216), "📦", out lblValTotal);
-            Panel cardEvento = CrearTarjetaKPI("EQUIPOS EN EVENTO", "0", Color.FromArgb(114, 9, 183), "🚚", out lblValEvento);
-            Panel cardDisp = CrearTarjetaKPI("UNIDADES DISPONIBLES", "0", accentGreen, "✅", out lblValDisponibles);
-            Panel cardRes = CrearTarjetaKPI("UNIDADES RESERVADAS", "0", Color.FromArgb(247, 127, 0), "⏳", out lblValReservadas);
-            Panel cardDan = CrearTarjetaKPI("EQUIPOS DAÑADOS", "0", Color.FromArgb(214, 40, 40), "⚠️", out lblValDanados);
-            Panel cardDev = CrearTarjetaKPI("DEVUELVEN HOY", "0", Color.FromArgb(72, 149, 239), "🕒", out lblValDevuelvenHoy);
+            Panel cardTotal = CrearTarjetaKPI("TOTAL UNIDADES", "0", Color.FromArgb(59, 130, 246), "📦", out lblValTotal);
+            Panel cardEvento = CrearTarjetaKPI("EQUIPOS EN EVENTO (FUERA)", "0", Color.FromArgb(139, 92, 246), "🚚", out lblValEvento);
+            Panel cardDisp = CrearTarjetaKPI("UNIDADES DISPONIBLES", "0", Color.FromArgb(16, 185, 129), "✅", out lblValDisponibles);
+            Panel cardRes = CrearTarjetaKPI("UNIDADES RESERVADAS", "0", Color.FromArgb(245, 158, 11), "⏳", out lblValReservadas);
+            Panel cardDan = CrearTarjetaKPI("EQUIPOS DAÑADOS / REVISIÓN", "0", Color.FromArgb(239, 68, 68), "⚠️", out lblValDanados);
+            Panel cardDev = CrearTarjetaKPI("DEVUELVEN HOY", "0", Color.FromArgb(168, 85, 247), "🕒", out lblValDevuelvenHoy);
 
             cardDev.Cursor = Cursors.Hand;
             cardDev.Click += (s, e) => FiltrarEquiposDevuelvenHoy();
@@ -131,7 +101,72 @@ namespace SUSTENTACION.PanelTrabajador
             kpiLayout.Controls.Add(cardDan, 1, 1);
             kpiLayout.Controls.Add(cardDev, 2, 1);
 
-            // TABLA
+            // ==========================================
+            // 3. BARRA DE BÚSQUEDA Y FILTROS (Debajo de los KPI)
+            // ==========================================
+            Panel pnlBarraHerramientas = new Panel
+            {
+                Dock = DockStyle.Fill,
+                Margin = new Padding(0, 0, 0, 5)
+            };
+
+            // Buscador a la izquierda
+            txtBuscar = new TextBox
+            {
+                Location = new Point(0, 5),
+                Width = 240,
+                Font = new Font("Segoe UI", 9.5f),
+                ForeColor = Color.Gray,
+                Text = "Buscar en inventario..."
+            };
+
+            txtBuscar.Enter += (s, e) =>
+            {
+                if (txtBuscar.Text == "Buscar en inventario...")
+                {
+                    txtBuscar.Text = "";
+                    txtBuscar.ForeColor = textWhite;
+                }
+            };
+
+            txtBuscar.Leave += (s, e) =>
+            {
+                if (string.IsNullOrWhiteSpace(txtBuscar.Text))
+                {
+                    txtBuscar.Text = "Buscar en inventario...";
+                    txtBuscar.ForeColor = Color.Gray;
+                }
+            };
+
+            txtBuscar.TextChanged += (s, e) => CargarInventarioEquipos();
+
+            // Filtros desplegables alineados a la derecha
+            FlowLayoutPanel pnlBarraFiltros = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Right,
+                FlowDirection = FlowDirection.RightToLeft,
+                WrapContents = false,
+                AutoSize = true
+            };
+
+            cmbCategoria = CrearComboBoxFiltro(new string[] { "Categoría: Todas" });
+            cmbEstado = CrearComboBoxFiltro(new string[] { "Estado: Todos", "Disponible", "En Evento", "En Mantenimiento", "Dañado" });
+            cmbTecnico = CrearComboBoxFiltro(new string[] { "Técnico: Todos" });
+
+            cmbCategoria.SelectedIndexChanged += (s, e) => CargarInventarioEquipos();
+            cmbEstado.SelectedIndexChanged += (s, e) => CargarInventarioEquipos();
+            cmbTecnico.SelectedIndexChanged += (s, e) => CargarInventarioEquipos();
+
+            pnlBarraFiltros.Controls.Add(cmbTecnico);
+            pnlBarraFiltros.Controls.Add(cmbEstado);
+            pnlBarraFiltros.Controls.Add(cmbCategoria);
+
+            pnlBarraHerramientas.Controls.Add(txtBuscar);
+            pnlBarraHerramientas.Controls.Add(pnlBarraFiltros);
+
+            // ==========================================
+            // 4. TABLA DE INVENTARIO
+            // ==========================================
             Panel containerTabla = new Panel
             {
                 Dock = DockStyle.Fill,
@@ -178,9 +213,11 @@ namespace SUSTENTACION.PanelTrabajador
 
             containerTabla.Controls.Add(dgvInventario);
 
+            // Integración en el layout principal
             mainLayout.Controls.Add(headerPanel, 0, 0);
             mainLayout.Controls.Add(kpiLayout, 0, 1);
-            mainLayout.Controls.Add(containerTabla, 0, 2);
+            mainLayout.Controls.Add(pnlBarraHerramientas, 0, 2);
+            mainLayout.Controls.Add(containerTabla, 0, 3);
 
             this.Controls.Add(mainLayout);
         }
@@ -255,7 +292,7 @@ namespace SUSTENTACION.PanelTrabajador
         {
             ComboBox cb = new ComboBox
             {
-                Width = 150,
+                Width = 190,
                 DropDownStyle = ComboBoxStyle.DropDownList,
                 Font = new Font("Segoe UI", 8.5f),
                 BackColor = bgCard,
@@ -285,6 +322,52 @@ namespace SUSTENTACION.PanelTrabajador
             lblValOut = lblVal;
             card.Controls.AddRange(new Control[] { iconBg, lblTitle, lblVal });
             return card;
+        }
+
+        // ==========================================
+        // LÓGICA Y CÁLCULOS DE BASE DE DATOS MYSQL
+        // ==========================================
+
+        private void CalcularMetricasKPI()
+        {
+            Conexion conexionDB = new Conexion();
+            try
+            {
+                MySqlConnection con = conexionDB.ObtenerConexion();
+
+                string sqlEquipos = @"SELECT 
+                                        IFNULL(SUM(stock), 0) AS total,
+                                        IFNULL(SUM(CASE WHEN estado = 'Disponible' THEN stock ELSE 0 END), 0) AS disponibles,
+                                        IFNULL(SUM(CASE WHEN estado = 'En Evento' THEN stock ELSE 0 END), 0) AS en_evento,
+                                        IFNULL(SUM(CASE WHEN estado = 'Reservado' THEN stock ELSE 0 END), 0) AS reservados,
+                                        IFNULL(SUM(CASE WHEN estado IN ('Dañado', 'En Mantenimiento') THEN stock ELSE 0 END), 0) AS danados
+                                     FROM equipos";
+
+                MySqlCommand cmdEq = new MySqlCommand(sqlEquipos, con);
+                using (MySqlDataReader rd = cmdEq.ExecuteReader())
+                {
+                    if (rd.Read())
+                    {
+                        lblValTotal.Text = rd["total"].ToString();
+                        lblValDisponibles.Text = rd["disponibles"].ToString();
+                        lblValEvento.Text = rd["en_evento"].ToString();
+                        lblValReservadas.Text = rd["reservados"].ToString();
+                        lblValDanados.Text = rd["danados"].ToString();
+                    }
+                }
+
+                string sqlHoy = "SELECT COUNT(*) FROM eventos WHERE fecha = CURDATE()";
+                MySqlCommand cmdHoy = new MySqlCommand(sqlHoy, con);
+                lblValDevuelvenHoy.Text = cmdHoy.ExecuteScalar().ToString();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Error al calcular tarjetas KPI: " + ex.Message, "Error MySQL", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                conexionDB.CerrarConexion();
+            }
         }
 
         private void CargarFiltroTecnicos()
@@ -317,54 +400,6 @@ namespace SUSTENTACION.PanelTrabajador
             finally { conexionDB.CerrarConexion(); }
         }
 
-        private void CalcularMetricasKPI()
-        {
-            Conexion conexionDB = new Conexion();
-            try
-            {
-                MySqlConnection con = conexionDB.ObtenerConexion();
-
-                // 1. Métricas de la tabla 'equipos'
-                // CAMBIO CLAVE: Usamos COUNT(*) para contar los EQUIPOS (modelos) registrados,
-                // en lugar de SUM(stock) que suma las unidades físicas.
-                string sqlEquipos = @"SELECT 
-                COUNT(*) AS total_equipos,
-                IFNULL(SUM(CASE WHEN LOWER(TRIM(estado)) = 'disponible' THEN stock ELSE 0 END), 0) AS disponibles,
-                IFNULL(SUM(CASE WHEN LOWER(TRIM(estado)) = 'en evento' THEN stock ELSE 0 END), 0) AS en_evento,
-                IFNULL(SUM(CASE WHEN LOWER(TRIM(estado)) = 'reservado' THEN stock ELSE 0 END), 0) AS reservados,
-                IFNULL(SUM(CASE WHEN LOWER(TRIM(estado)) IN ('dañado', 'en mantenimiento', 'mantenimiento') THEN stock ELSE 0 END), 0) AS danados
-             FROM equipos";
-
-                MySqlCommand cmdEq = new MySqlCommand(sqlEquipos, con);
-                using (MySqlDataReader rd = cmdEq.ExecuteReader())
-                {
-                    if (rd.Read())
-                    {
-                        // Asignamos el CONTEO de equipos al label de Total Unidades
-                        lblValTotal.Text = rd["total_equipos"].ToString();
-                        lblValDisponibles.Text = rd["disponibles"].ToString();
-                        lblValEvento.Text = rd["en_evento"].ToString();
-                        lblValReservadas.Text = rd["reservados"].ToString();
-                        lblValDanados.Text = rd["danados"].ToString();
-                    }
-                }
-
-                // 2. Métricas de la tabla 'eventos'
-                string sqlHoy = "SELECT COUNT(*) FROM eventos WHERE DATE(fecha) = CURDATE()";
-                MySqlCommand cmdHoy = new MySqlCommand(sqlHoy, con);
-                object resHoy = cmdHoy.ExecuteScalar();
-                lblValDevuelvenHoy.Text = resHoy != null ? resHoy.ToString() : "0";
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Error al calcular KPIs: " + ex.Message, "Error MySQL", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-            finally
-            {
-                conexionDB.CerrarConexion();
-            }
-        }
-
         private void CargarInventarioEquipos()
         {
             Conexion conexionDB = new Conexion();
@@ -383,27 +418,29 @@ namespace SUSTENTACION.PanelTrabajador
                     descripcion AS 'Descripción' 
                  FROM equipos WHERE 1=1";
 
-                if (txtBuscar != null && !string.IsNullOrWhiteSpace(txtBuscar.Text) && txtBuscar.Text != "Buscar equipo...")
-                    query += " AND (nombre LIKE @busqueda OR codigo LIKE @busqueda OR categoria LIKE @busqueda)";
-
                 if (cmbCategoria != null && cmbCategoria.SelectedIndex > 0)
                     query += " AND categoria = @categoria";
 
                 if (cmbEstado != null && cmbEstado.SelectedIndex > 0)
                     query += " AND estado = @estado";
 
+                if (txtBuscar != null && !string.IsNullOrWhiteSpace(txtBuscar.Text) && txtBuscar.Text != "Buscar en inventario..." && txtBuscar.Text != "Buscar equipo...")
+                {
+                    query += " AND (codigo LIKE @busqueda OR nombre LIKE @busqueda OR ubicacion LIKE @busqueda OR descripcion LIKE @busqueda)";
+                }
+
                 query += " ORDER BY id ASC";
 
                 MySqlCommand cmd = new MySqlCommand(query, con);
-
-                if (txtBuscar != null && !string.IsNullOrWhiteSpace(txtBuscar.Text) && txtBuscar.Text != "Buscar equipo...")
-                    cmd.Parameters.AddWithValue("@busqueda", "%" + txtBuscar.Text.Trim() + "%");
 
                 if (cmbCategoria != null && cmbCategoria.SelectedIndex > 0)
                     cmd.Parameters.AddWithValue("@categoria", cmbCategoria.SelectedItem.ToString());
 
                 if (cmbEstado != null && cmbEstado.SelectedIndex > 0)
                     cmd.Parameters.AddWithValue("@estado", cmbEstado.SelectedItem.ToString());
+
+                if (txtBuscar != null && !string.IsNullOrWhiteSpace(txtBuscar.Text) && txtBuscar.Text != "Buscar en inventario..." && txtBuscar.Text != "Buscar equipo...")
+                    cmd.Parameters.AddWithValue("@busqueda", "%" + txtBuscar.Text.Trim() + "%");
 
                 MySqlDataAdapter adapter = new MySqlDataAdapter(cmd);
                 DataTable dt = new DataTable();

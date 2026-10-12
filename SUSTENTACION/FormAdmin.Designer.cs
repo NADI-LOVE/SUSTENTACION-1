@@ -17,8 +17,16 @@
 
         private void InitializeComponent()
         {
-            this.components = new System.ComponentModel.Container();
-            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
+            SuspendLayout();
+            // 
+            // FormAdmin
+            // 
+            AutoScaleDimensions = new SizeF(8F, 20F);
+            AutoScaleMode = AutoScaleMode.Font;
+            ClientSize = new Size(282, 253);
+            Name = "FormAdmin";
+            //Load += FormAdmin_Load;
+            ResumeLayout(false);
         }
 
         #endregion

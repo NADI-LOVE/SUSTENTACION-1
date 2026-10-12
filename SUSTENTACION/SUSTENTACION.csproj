@@ -1,61 +1,80 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <OutputType>WinExe</OutputType>
-    <TargetFramework>net9.0-windows7.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <UseWindowsForms>true</UseWindowsForms>
-    <ImplicitUsings>enable</ImplicitUsings>
-  </PropertyGroup>
+	<PropertyGroup>
+		<OutputType>WinExe</OutputType>
+		<TargetFramework>net9.0-windows7.0</TargetFramework>
+		<Nullable>enable</Nullable>
+		<UseWindowsForms>true</UseWindowsForms>
+		<ImplicitUsings>enable</ImplicitUsings>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <None Remove="PanelTrabajador\Mapas\mapa.html" />
-  </ItemGroup>
+	<!-- ==========================================
+       ARCHIVO HTML DEL MAPA
+       ========================================== -->
 
-  <ItemGroup>
-    <Content Include="PanelTrabajador\Mapas\mapa.html">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
+	<ItemGroup>
+		<None Remove="PanelTrabajador\Mapas\mapa.html" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" />
-    <PackageReference Include="MySql.Data" Version="26.7.0" />
-  </ItemGroup>
+	<ItemGroup>
+		<Content Include="PanelTrabajador\Mapas\mapa.html">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
+	</ItemGroup>
 
-  <ItemGroup>
-    <Compile Update="Properties\Resources.Designer.cs">
-      <DesignTime>True</DesignTime>
-      <AutoGen>True</AutoGen>
-      <DependentUpon>Resources.resx</DependentUpon>
-    </Compile>
-    <Compile Update="Properties\Settings.Designer.cs">
-      <DesignTimeSharedInput>True</DesignTimeSharedInput>
-      <AutoGen>True</AutoGen>
-      <DependentUpon>Settings.settings</DependentUpon>
-    </Compile>
-  </ItemGroup>
+	<!-- ==========================================
+       DEPENDENCIAS DE AMBAS RAMAS
+       ========================================== -->
 
-  <ItemGroup>
-    <EmbeddedResource Update="Properties\Resources.resx">
-      <Generator>ResXFileCodeGenerator</Generator>
-      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
-    </EmbeddedResource>
-  </ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" />
+		<PackageReference Include="Microsoft.Data.SqlClient" Version="7.1.1" />
+		<PackageReference Include="MySql.Data" Version="26.7.0" />
+		<PackageReference Include="Twilio" Version="8.0.0" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <None Update="Properties\Settings.settings">
-      <Generator>SettingsSingleFileGenerator</Generator>
-      <LastGenOutput>Settings.Designer.cs</LastGenOutput>
-    </None>
-  </ItemGroup>
+	<!-- ==========================================
+       RECURSOS Y CONFIGURACIONES
+       ========================================== -->
 
-    <ItemGroup>
-	    <None Update="PanelTrabajador\Mapas\css\style.css"
-			    CopyToOutputDirectory="PreserveNewest" />
+	<ItemGroup>
+		<Compile Update="Properties\Resources.Designer.cs">
+			<DesignTime>True</DesignTime>
+			<AutoGen>True</AutoGen>
+			<DependentUpon>Resources.resx</DependentUpon>
+		</Compile>
 
-	    <None Update="PanelTrabajador\Mapas\js\script.js"
-			    CopyToOutputDirectory="PreserveNewest" />
-    </ItemGroup>
+		<Compile Update="Properties\Settings.Designer.cs">
+			<DesignTimeSharedInput>True</DesignTimeSharedInput>
+			<AutoGen>True</AutoGen>
+			<DependentUpon>Settings.settings</DependentUpon>
+		</Compile>
+	</ItemGroup>
+
+	<ItemGroup>
+		<EmbeddedResource Update="Properties\Resources.resx">
+			<Generator>ResXFileCodeGenerator</Generator>
+			<LastGenOutput>Resources.Designer.cs</LastGenOutput>
+		</EmbeddedResource>
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Update="Properties\Settings.settings">
+			<Generator>SettingsSingleFileGenerator</Generator>
+			<LastGenOutput>Settings.Designer.cs</LastGenOutput>
+		</None>
+	</ItemGroup>
+
+	<!-- ==========================================
+       ARCHIVOS CSS Y JAVASCRIPT
+       ========================================== -->
+
+	<ItemGroup>
+		<None Update="PanelTrabajador\Mapas\css\style.css"
+			  CopyToOutputDirectory="PreserveNewest" />
+
+		<None Update="PanelTrabajador\Mapas\js\script.js"
+			  CopyToOutputDirectory="PreserveNewest" />
+	</ItemGroup>
 
 </Project>
