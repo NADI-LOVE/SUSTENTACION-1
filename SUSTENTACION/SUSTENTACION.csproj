@@ -50,4 +50,12 @@
     </None>
   </ItemGroup>
 
+    <ItemGroup>
+	    <None Update="PanelTrabajador\Mapas\css\style.css"
+			    CopyToOutputDirectory="PreserveNewest" />
+
+	    <None Update="PanelTrabajador\Mapas\js\script.js"
+			    CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+
 </Project>
