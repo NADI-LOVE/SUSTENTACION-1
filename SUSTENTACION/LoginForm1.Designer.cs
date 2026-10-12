@@ -1,6 +1,6 @@
 ﻿namespace SUSTENTACION
 {
-    partial class Form1
+    partial class LoginForm1
     {
         /// <summary>
         ///  Required designer variable.

@@ -80,7 +80,7 @@ INSERT INTO trabajadores (nombre, correo, password, id_rol) VALUES
 ('Juan Pérez', 'juan.admin@artemusa.com', 'admin123', 1),
 ('Maria López', 'maria.empleado@artemusa.com', 'user123', 2);
 
-INSERT INTO equipos (codigo, nombre, categoria, ubicacion, stock, estado, descripcion) VALUES
+INSERT INTO equipos (codigo, nombre, categoria, ubicacion, estado, descripcion) VALUES
 ('CAM-001', 'Cámara Sony FX3', 'Cámaras y Lentes', 'Rack A1', 2, 'Disponible', 'Cámara principal de estudio'),
 ('MIC-002', 'Micrófono Shure SM7B', 'Audio y Micrófonos', 'Estante B2', 5, 'Disponible', 'Micrófono para cabina de radio/TV');
 

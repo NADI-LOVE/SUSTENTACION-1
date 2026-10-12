@@ -6,7 +6,7 @@ using System.Windows.Forms;
 
 namespace SUSTENTACION
 {
-    public partial class Form1 : Form
+    public partial class LoginForm1 : Form
     {
         // Contenedor principal personalizado con la división diagonal
         private DiagonalPanel panelBackground;
@@ -30,7 +30,7 @@ namespace SUSTENTACION
         private LinkLabel lblRecoverPassword;
         private Button btnLogin;
 
-        public Form1()
+        public LoginForm1()
         {
             InitializeComponent();
             ConstruirInterfaz();
@@ -274,7 +274,7 @@ namespace SUSTENTACION
                 ActiveLinkColor = Color.White,
                 VisitedLinkColor = Color.FromArgb(195, 220, 255),
                 AutoSize = true,
-                Location = new Point(startX + 145),
+                Location = new Point(startX + 145, 296),
                 BackColor = Color.Transparent
             };
             lblRecoverPassword.Location = new Point(startX + 145, 296);

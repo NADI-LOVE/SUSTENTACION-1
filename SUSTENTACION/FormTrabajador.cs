@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Threading.Tasks;
 using System.Globalization;
 using System.Windows.Forms;
 // Se agrega la directiva using para acceder al UserControl GestionEquipo
@@ -19,14 +20,21 @@ namespace SUSTENTACION
         private readonly Color textWhite = Color.White;
         private readonly Color textMuted = Color.FromArgb(130, 134, 158);
 
-        private Panel panelSidebar;
-        private Panel panelHeader;
-        private Panel panelMainContent;
-        private Button botonActivo = null;
+        // Referencias a paneles principales y estado de navegación
+        private Panel panelSidebar = null!;
+        private Panel panelHeader = null!;
+        private Panel panelMainContent = null!;
+        private Button? botonActivo = null;
 
-        private string nombreUsuario;
-        private string rolUsuario;
+        // Propiedades del usuario que inicia sesión
+        private readonly string nombreUsuario;
+        private readonly string rolUsuario;
+
+        // Timer para la ejecución periódica
+        private System.Windows.Forms.Timer? timerReporte;
+
         private DateTime fechaSeleccionada = DateTime.Now;
+
 
         // Variables para la animación del Sidebar
         private System.Windows.Forms.Timer timerSidebar;
@@ -37,14 +45,20 @@ namespace SUSTENTACION
         public FormTrabajador(string nombre = "María López", string rol = "Trabajador")
         {
             InitializeComponent();
-            this.nombreUsuario = nombre;
-            this.rolUsuario = rol;
+
+            this.nombreUsuario = !string.IsNullOrWhiteSpace(nombre) ? nombre : "Trabajador";
+            this.rolUsuario = !string.IsNullOrWhiteSpace(rol) ? rol : "Operador";
+
 
             ConfigurarVentana();
             InicializarTimerSidebar();
             CrearSidebar();
             CrearHeader();
             CrearMainContent();
+
+            // Enlace seguro de eventos del ciclo de vida del formulario
+            this.Load += FormTrabajador_Load;
+            this.FormClosing += FormTrabajador_FormClosing;
         }
 
         private void ConfigurarVentana()
@@ -259,6 +273,7 @@ namespace SUSTENTACION
             };
 
             contenedor.Controls.Add(btn);
+
         }
 
         private void CrearHeader()
@@ -537,6 +552,21 @@ namespace SUSTENTACION
             return card;
         }
 
+        private void BtnCerrarSesion_Click(object? sender, EventArgs e)
+        {
+            DialogResult result = MessageBox.Show("¿Estás seguro de que deseas cerrar sesión?",
+                                                "Cerrar Sesión",
+                                                MessageBoxButtons.YesNo,
+                                                MessageBoxIcon.Question);
+
+            if (result == DialogResult.Yes)
+            {
+                LoginForm1 login = new LoginForm1();
+                login.Show();
+                this.Close();
+            }
+        }
+
         private void AplicarBordesRedondeados(Control control, int radio)
         {
             Action recalcularRegion = () =>
@@ -558,8 +588,58 @@ namespace SUSTENTACION
             recalcularRegion();
         }
 
-        private void FormTrabajador_Load(object sender, EventArgs e)
+        // ==========================================
+        // CONTROL ASÍNCRONO DEL REPORTE AUTOMÁTICO
+        // ==========================================
+        private async void FormTrabajador_Load(object? sender, EventArgs e)
         {
+            // 1. Envío inicial directo (con await sin Task.Run para permitir alertas visuales sin bloquear la UI)
+            try
+            {
+                await SUSTENTACION.ServicioWhatsApp.ServicioWhatsApp.EnviarReporteInventarioAsync();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error al enviar reporte inicial: {ex.Message}", "Aviso de Envío", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+
+            // 2. Configurar el timer para cada 3 minutos (180,000 ms)
+            timerReporte = new System.Windows.Forms.Timer();
+            timerReporte.Interval = 180000;
+            timerReporte.Tick += TimerReporte_Tick;
+            timerReporte.Start();
+        }
+
+        private async void TimerReporte_Tick(object? sender, EventArgs e)
+        {
+            if (timerReporte == null) return;
+
+            try
+            {
+                timerReporte.Stop();
+                await SUSTENTACION.ServicioWhatsApp.ServicioWhatsApp.EnviarReporteInventarioAsync();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error en reporte automático: {ex.Message}");
+            }
+            finally
+            {
+                if (timerReporte != null)
+                {
+                    timerReporte.Start();
+                }
+            }
+        }
+
+        private void FormTrabajador_FormClosing(object? sender, FormClosingEventArgs e)
+        {
+            if (timerReporte != null)
+            {
+                timerReporte.Stop();
+                timerReporte.Dispose();
+                timerReporte = null;
+            }
         }
     }
 }
