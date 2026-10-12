@@ -6,7 +6,7 @@ using System.IO;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.WinForms;
 using Microsoft.Web.WebView2.Core;
-using MySql.Data.MySqlClient;
+using Npgsql;
 
 namespace SUSTENTACION.PanelTrabajador
 {
@@ -721,20 +721,20 @@ namespace SUSTENTACION.PanelTrabajador
 
             try
             {
-                MySqlConnection con =
+                NpgsqlConnection con =
                     conexionDB.ObtenerConexion();
 
                 string query =
                     "SELECT id, codigo, nombre " +
                     "FROM equipos WHERE codigo = @codigo";
 
-                using (MySqlCommand cmd =
-                    new MySqlCommand(query, con))
+                using (NpgsqlCommand cmd =
+                    new NpgsqlCommand(query, con))
                 {
                     cmd.Parameters.AddWithValue(
                         "@codigo", codigo);
 
-                    using (MySqlDataReader reader =
+                    using (NpgsqlDataReader reader =
                         cmd.ExecuteReader())
                     {
                         if (reader.Read())
@@ -847,12 +847,12 @@ namespace SUSTENTACION.PanelTrabajador
 
             try
             {
-                MySqlConnection con =
+                NpgsqlConnection con =
                     conexionDB.ObtenerConexion();
 
                 // Una transacción mantiene unidos
                 // el encabezado y los equipos.
-                using (MySqlTransaction transaccion =
+                using (NpgsqlTransaction transaccion =
                     con.BeginTransaction())
                 {
                     try
@@ -875,12 +875,13 @@ namespace SUSTENTACION.PanelTrabajador
                                 @ubicacion,
                                 @detalles,
                                 'Programada'
-                            )";
+                            )
+                            RETURNING id";        // ← AGREGA ESTA LÍNEA
 
                         long idSalida;
 
-                        using (MySqlCommand cmd =
-                            new MySqlCommand(
+                        using (NpgsqlCommand cmd =
+                            new NpgsqlCommand(
                                 sqlSalida, con, transaccion))
                         {
                             cmd.Parameters.AddWithValue(
@@ -901,9 +902,7 @@ namespace SUSTENTACION.PanelTrabajador
                                 "@detalles",
                                 txtDetalles.Text.Trim());
 
-                            cmd.ExecuteNonQuery();
-
-                            idSalida = cmd.LastInsertedId;
+                            idSalida = Convert.ToInt32(cmd.ExecuteScalar());
                         }
 
                         string sqlEquipo = @"
@@ -913,8 +912,8 @@ namespace SUSTENTACION.PanelTrabajador
 
                         foreach (int idEquipo in equiposIds)
                         {
-                            using (MySqlCommand cmdEquipo =
-                                new MySqlCommand(
+                            using (NpgsqlCommand cmdEquipo =
+                                new NpgsqlCommand(
                                     sqlEquipo,
                                     con,
                                     transaccion))

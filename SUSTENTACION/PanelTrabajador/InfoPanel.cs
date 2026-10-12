@@ -3,7 +3,7 @@ using System.Data;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
-using MySql.Data.MySqlClient;
+using Npgsql;
 
 namespace SUSTENTACION.PanelTrabajador
 {
@@ -235,7 +235,7 @@ namespace SUSTENTACION.PanelTrabajador
             Conexion conexionDB = new Conexion();
             try
             {
-                MySqlConnection con = conexionDB.ObtenerConexion();
+                NpgsqlConnection con = conexionDB.ObtenerConexion();
 
                 // 1. Equipos asignados a este trabajador (asumiendo que hay una tabla 'asignaciones' o similar)
                 string sqlEquipos = @"SELECT 
@@ -244,9 +244,9 @@ namespace SUSTENTACION.PanelTrabajador
                     IFNULL(SUM(CASE WHEN LOWER(TRIM(estado)) = 'en evento' THEN 1 ELSE 0 END), 0) AS en_evento
                     FROM equipos WHERE id_trabajador = @idTrabajador";
 
-                MySqlCommand cmdEq = new MySqlCommand(sqlEquipos, con);
+                NpgsqlCommand cmdEq = new NpgsqlCommand(sqlEquipos, con);
                 cmdEq.Parameters.AddWithValue("@idTrabajador", idTrabajador);
-                using (MySqlDataReader rd = cmdEq.ExecuteReader())
+                using (NpgsqlDataReader rd = cmdEq.ExecuteReader())
                 {
                     if (rd.Read())
                     {
@@ -258,7 +258,7 @@ namespace SUSTENTACION.PanelTrabajador
 
                 // 2. Eventos asignados a este trabajador
                 string sqlEventos = "SELECT COUNT(*) FROM eventos WHERE id_trabajador = @idTrabajador";
-                MySqlCommand cmdEv = new MySqlCommand(sqlEventos, con);
+                NpgsqlCommand cmdEv = new NpgsqlCommand(sqlEventos, con);
                 cmdEv.Parameters.AddWithValue("@idTrabajador", idTrabajador);
                 object resEv = cmdEv.ExecuteScalar();
                 totalEventos = resEv != null ? Convert.ToInt32(resEv) : 0;
@@ -268,9 +268,9 @@ namespace SUSTENTACION.PanelTrabajador
                     IFNULL(SUM(ingreso), 0) AS total_ingresos,
                     IFNULL(SUM(gasto), 0) AS total_gastos
                     FROM eventos WHERE id_trabajador = @idTrabajador";
-                MySqlCommand cmdFin = new MySqlCommand(sqlFinanzas, con);
+                NpgsqlCommand cmdFin = new NpgsqlCommand(sqlFinanzas, con);
                 cmdFin.Parameters.AddWithValue("@idTrabajador", idTrabajador);
-                using (MySqlDataReader rd = cmdFin.ExecuteReader())
+                using (NpgsqlDataReader rd = cmdFin.ExecuteReader())
                 {
                     if (rd.Read())
                     {

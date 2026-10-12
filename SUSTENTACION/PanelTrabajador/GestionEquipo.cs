@@ -1,4 +1,4 @@
-﻿using MySql.Data.MySqlClient;
+﻿using Npgsql;
 using System;
 using System.Data;
 using System.Drawing;
@@ -292,9 +292,9 @@ namespace SUSTENTACION.PanelTrabajador
             Conexion conexionDB = new Conexion();
             try
             {
-                MySqlConnection con = conexionDB.ObtenerConexion();
-                MySqlCommand cmd = new MySqlCommand("SELECT nombre FROM trabajadores ORDER BY nombre ASC", con);
-                MySqlDataReader reader = cmd.ExecuteReader();
+                NpgsqlConnection con = conexionDB.ObtenerConexion();
+                NpgsqlCommand cmd = new NpgsqlCommand("SELECT nombre FROM trabajadores ORDER BY nombre ASC", con);
+                NpgsqlDataReader reader = cmd.ExecuteReader();
                 while (reader.Read())
                     cmbTecnico.Items.Add(reader["nombre"].ToString());
             }
@@ -307,9 +307,9 @@ namespace SUSTENTACION.PanelTrabajador
             Conexion conexionDB = new Conexion();
             try
             {
-                MySqlConnection con = conexionDB.ObtenerConexion();
-                MySqlCommand cmd = new MySqlCommand("SELECT DISTINCT categoria FROM equipos WHERE categoria IS NOT NULL AND categoria != ''", con);
-                MySqlDataReader reader = cmd.ExecuteReader();
+                NpgsqlConnection con = conexionDB.ObtenerConexion();
+                NpgsqlCommand cmd = new NpgsqlCommand("SELECT DISTINCT categoria FROM equipos WHERE categoria IS NOT NULL AND categoria != ''", con);
+                NpgsqlDataReader reader = cmd.ExecuteReader();
                 while (reader.Read())
                     cmbCategoria.Items.Add(reader["categoria"].ToString());
             }
@@ -322,7 +322,7 @@ namespace SUSTENTACION.PanelTrabajador
             Conexion conexionDB = new Conexion();
             try
             {
-                MySqlConnection con = conexionDB.ObtenerConexion();
+                NpgsqlConnection con = conexionDB.ObtenerConexion();
 
                 // 1. Métricas de la tabla 'equipos'
                 // CAMBIO CLAVE: Usamos COUNT(*) para contar los EQUIPOS (modelos) registrados,
@@ -335,8 +335,8 @@ namespace SUSTENTACION.PanelTrabajador
                 IFNULL(SUM(CASE WHEN LOWER(TRIM(estado)) IN ('dañado', 'en mantenimiento', 'mantenimiento') THEN stock ELSE 0 END), 0) AS danados
              FROM equipos";
 
-                MySqlCommand cmdEq = new MySqlCommand(sqlEquipos, con);
-                using (MySqlDataReader rd = cmdEq.ExecuteReader())
+                NpgsqlCommand cmdEq = new NpgsqlCommand(sqlEquipos, con);
+                using (NpgsqlDataReader rd = cmdEq.ExecuteReader())
                 {
                     if (rd.Read())
                     {
@@ -351,7 +351,7 @@ namespace SUSTENTACION.PanelTrabajador
 
                 // 2. Métricas de la tabla 'eventos'
                 string sqlHoy = "SELECT COUNT(*) FROM eventos WHERE DATE(fecha) = CURDATE()";
-                MySqlCommand cmdHoy = new MySqlCommand(sqlHoy, con);
+                NpgsqlCommand cmdHoy = new NpgsqlCommand(sqlHoy, con);
                 object resHoy = cmdHoy.ExecuteScalar();
                 lblValDevuelvenHoy.Text = resHoy != null ? resHoy.ToString() : "0";
             }
@@ -370,7 +370,7 @@ namespace SUSTENTACION.PanelTrabajador
             Conexion conexionDB = new Conexion();
             try
             {
-                MySqlConnection con = conexionDB.ObtenerConexion();
+                NpgsqlConnection con = conexionDB.ObtenerConexion();
 
                 string query = @"SELECT 
                     id AS 'ID', 
@@ -394,7 +394,7 @@ namespace SUSTENTACION.PanelTrabajador
 
                 query += " ORDER BY id ASC";
 
-                MySqlCommand cmd = new MySqlCommand(query, con);
+                NpgsqlCommand cmd = new NpgsqlCommand(query, con);
 
                 if (txtBuscar != null && !string.IsNullOrWhiteSpace(txtBuscar.Text) && txtBuscar.Text != "Buscar equipo...")
                     cmd.Parameters.AddWithValue("@busqueda", "%" + txtBuscar.Text.Trim() + "%");
@@ -405,7 +405,7 @@ namespace SUSTENTACION.PanelTrabajador
                 if (cmbEstado != null && cmbEstado.SelectedIndex > 0)
                     cmd.Parameters.AddWithValue("@estado", cmbEstado.SelectedItem.ToString());
 
-                MySqlDataAdapter adapter = new MySqlDataAdapter(cmd);
+                NpgsqlDataAdapter adapter = new NpgsqlDataAdapter(cmd);
                 DataTable dt = new DataTable();
                 adapter.Fill(dt);
 
@@ -426,7 +426,7 @@ namespace SUSTENTACION.PanelTrabajador
             Conexion conexionDB = new Conexion();
             try
             {
-                MySqlConnection con = conexionDB.ObtenerConexion();
+                NpgsqlConnection con = conexionDB.ObtenerConexion();
 
                 string query = @"SELECT 
                             id AS 'ID Evento', 
@@ -437,8 +437,8 @@ namespace SUSTENTACION.PanelTrabajador
                          FROM eventos 
                          WHERE DATE(fecha) = CURDATE()";
 
-                MySqlCommand cmd = new MySqlCommand(query, con);
-                MySqlDataAdapter adapter = new MySqlDataAdapter(cmd);
+                NpgsqlCommand cmd = new NpgsqlCommand(query, con);
+                NpgsqlDataAdapter adapter = new NpgsqlDataAdapter(cmd);
                 DataTable dt = new DataTable();
                 adapter.Fill(dt);
 

@@ -1,4 +1,4 @@
-﻿using MySql.Data.MySqlClient;
+﻿using Npgsql;
 using SUSTENTACION;
 using SUSTENTACION.PanelTrabajador;
 using System;
@@ -556,7 +556,7 @@ namespace SUSTENTACION
             Conexion conexionDB = new Conexion();
             try
             {
-                MySqlConnection con = conexionDB.ObtenerConexion();
+                NpgsqlConnection con = conexionDB.ObtenerConexion();
 
                 string query = @"SELECT s.id_salida, s.fecha_salida, s.encargado, s.ubicacion, s.detalles,
                                  GROUP_CONCAT(e.nombre SEPARATOR ', ') AS equipos
@@ -567,11 +567,11 @@ namespace SUSTENTACION
                                  GROUP BY s.id_salida
                                  ORDER BY s.fecha_salida ASC";
 
-                MySqlCommand cmd = new MySqlCommand(query, con);
+                NpgsqlCommand cmd = new NpgsqlCommand(query, con);
                 cmd.Parameters.AddWithValue("@mes", mes.Month);
                 cmd.Parameters.AddWithValue("@anio", mes.Year);
 
-                MySqlDataReader reader = cmd.ExecuteReader();
+                NpgsqlDataReader reader = cmd.ExecuteReader();
 
                 bool hay = false;
                 while (reader.Read())

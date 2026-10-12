@@ -20,7 +20,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" />
-    <PackageReference Include="MySql.Data" Version="26.7.0" />
+    <PackageReference Include="Npgsql" Version="10.0.3" />
   </ItemGroup>
 
   <ItemGroup>
@@ -51,11 +51,9 @@
   </ItemGroup>
 
     <ItemGroup>
-	    <None Update="PanelTrabajador\Mapas\css\style.css"
-			    CopyToOutputDirectory="PreserveNewest" />
+	    <None Update="PanelTrabajador\Mapas\css\style.css" CopyToOutputDirectory="PreserveNewest" />
 
-	    <None Update="PanelTrabajador\Mapas\js\script.js"
-			    CopyToOutputDirectory="PreserveNewest" />
+	    <None Update="PanelTrabajador\Mapas\js\script.js" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 
 </Project>

@@ -1,37 +1,53 @@
 ﻿using System;
 using System.Data;
-using MySql.Data.MySqlClient;
+using Npgsql;
 
 namespace SUSTENTACION
 {
     public class Conexion
     {
-        // Parámetros de la base de datos
-        private readonly string servidor = "localhost";
-        private readonly string baseDatos = "artemusa_inventario";
-        private readonly string usuario = "root";
-        private readonly string password = "";
-        private readonly string puerto = "3306";
+        private readonly string servidor =
+            "aws-0-us-east-1.pooler.supabase.com";
 
-        private readonly MySqlConnection conexion;
+        private readonly string baseDatos = "postgres";
+
+        private readonly string usuario =
+            "postgres.hrhpyafbugxnqmchpwjq";
+        private readonly string password =
+            "c#artemusaInventario";
+
+        private readonly int puerto = 5432;
+
+        private readonly NpgsqlConnection conexion;
 
         public Conexion()
         {
-            string cadenaConexion = $"Server={servidor};Port={puerto};Database={baseDatos};Uid={usuario};Pwd={password};";
-            conexion = new MySqlConnection(cadenaConexion);
+            var builder = new NpgsqlConnectionStringBuilder
+            {
+                Host = servidor,
+                Port = puerto,
+                Database = baseDatos,
+                Username = usuario,
+                Password = password,
+                SslMode = SslMode.Require,
+                Timeout = 15
+            };
+
+            conexion = new NpgsqlConnection(
+                builder.ConnectionString
+            );
         }
 
-        // Obtiene la conexión lista y abierta
-        public MySqlConnection ObtenerConexion()
+        public NpgsqlConnection ObtenerConexion()
         {
-            if (conexion.State == ConnectionState.Closed)
+            if (conexion.State != ConnectionState.Open)
             {
                 conexion.Open();
             }
+
             return conexion;
         }
 
-        // Cierra la conexión de forma segura
         public void CerrarConexion()
         {
             if (conexion.State == ConnectionState.Open)
