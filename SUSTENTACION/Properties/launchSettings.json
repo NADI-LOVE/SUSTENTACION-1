@@ -2,7 +2,7 @@
   "profiles": {
     "SUSTENTACION": {
       "commandName": "Project",
-      "sqlDebugging": true
+      "sqlDebugging": false
     }
   }
 }

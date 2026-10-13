@@ -61,6 +61,9 @@ namespace SUSTENTACION
             this.Font = new Font("Segoe UI", 9f, FontStyle.Regular);
             this.DoubleBuffered = true;
             this.FormBorderStyle = FormBorderStyle.Sizable;
+
+            // 🆕 Abrir maximizado (pantalla completa con bordes)
+            this.WindowState = FormWindowState.Maximized;
         }
 
         private void InicializarTimerSidebar()
@@ -445,6 +448,34 @@ namespace SUSTENTACION
             }
             calendarArea.Controls.Add(gridDiasHeader);
 
+            // ==========================================
+            // CARGAR DÍAS CON EVENTOS
+            // ==========================================
+            HashSet<int> diasConEventos = new HashSet<int>();
+            Conexion conexionDias = new Conexion();
+            try
+            {
+                NpgsqlConnection conDias = conexionDias.ObtenerConexion();
+                string queryDias = @"
+                    SELECT DISTINCT EXTRACT(DAY FROM fecha_salida)::int AS dia
+                    FROM salidas
+                    WHERE EXTRACT(MONTH FROM fecha_salida) = @mes
+                      AND EXTRACT(YEAR FROM fecha_salida) = @anio
+                      AND (estado IS NULL OR estado <> 'Devuelto')";
+
+                NpgsqlCommand cmdDias = new NpgsqlCommand(queryDias, conDias);
+                cmdDias.Parameters.AddWithValue("@mes", fechaSeleccionada.Month);
+                cmdDias.Parameters.AddWithValue("@anio", fechaSeleccionada.Year);
+
+                NpgsqlDataReader readerDias = cmdDias.ExecuteReader();
+                while (readerDias.Read())
+                {
+                    diasConEventos.Add(Convert.ToInt32(readerDias["dia"]));
+                }
+            }
+            catch { /* silencioso */ }
+            finally { conexionDias.CerrarConexion(); }
+
             DateTime primerDiaDelMes = new DateTime(fechaSeleccionada.Year, fechaSeleccionada.Month, 1);
             int diasEnMes = DateTime.DaysInMonth(fechaSeleccionada.Year, fechaSeleccionada.Month);
 
@@ -484,13 +515,26 @@ namespace SUSTENTACION
                             pnlDia.BackColor = bgCardSelected;
                         }
 
+                        // Si este día tiene eventos, pintarlo con otro color
+                        bool tieneEventos = diasConEventos.Contains(contadorDia);
+                        if (tieneEventos && !esHoy)
+                        {
+                            // 🎨 Color claro para días con evento (turquesa suave)
+                            pnlDia.BackColor = Color.FromArgb(120, 200, 230);
+                        }
+                        else if (tieneEventos && esHoy)
+                        {
+                            // 🎨 Día de hoy Y con evento (más intenso)
+                            pnlDia.BackColor = Color.FromArgb(255, 150, 200);
+                        }
+
                         AplicarBordesRedondeados(pnlDia, 6);
 
                         Label lblNum = new Label
                         {
                             Text = contadorDia.ToString(),
                             Font = new Font("Segoe UI", 8f, FontStyle.Bold),
-                            ForeColor = esHoy ? Color.Black : textWhite,
+                            ForeColor = (esHoy || tieneEventos) ? Color.White : textWhite,
                             Location = new Point(4, 4),
                             AutoSize = true
                         };
@@ -506,23 +550,59 @@ namespace SUSTENTACION
                         if (fechaDelPanel >= DateTime.Today)
                         {
                             pnlDia.Cursor = Cursors.Hand;
+
+                            // Capturar valores en variables locales (evita bug de closures)
+                            int diaParaEvento = diaActual;
+                            bool tieneEventoEsteDia = tieneEventos;
+
                             pnlDia.Click += (s, ev) =>
                             {
-                                using (var formSalida = new FormSalidaEquipo(this.idTrabajador, this.nombreUsuario, fechaDelPanel))
+                                if (tieneEventoEsteDia)
                                 {
-                                    if (formSalida.ShowDialog() == DialogResult.OK)
+                                    // ==========================================
+                                    // YA HAY UN EVENTO → ABRIR FORMULARIO DE RETORNO
+                                    // ==========================================
+                                    using (var formRetorno = new FormRetornoEquipo(
+                                        this.idTrabajador,
+                                        this.nombreUsuario,
+                                        fechaDelPanel))
                                     {
-                                        ConstruirCalendarioEvents(); // Recargar el calendario
+                                        if (formRetorno.ShowDialog() == DialogResult.OK)
+                                        {
+                                            ConstruirCalendarioEvents();
+                                        }
+                                    }
+                                }
+                                else
+                                {
+                                    // ==========================================
+                                    // NO HAY EVENTO → ABRIR FORMULARIO DE SALIDA
+                                    // ==========================================
+                                    using (var formSalida = new FormSalidaEquipo(
+                                        this.idTrabajador,
+                                        this.nombreUsuario,
+                                        fechaDelPanel))
+                                    {
+                                        if (formSalida.ShowDialog() == DialogResult.OK)
+                                        {
+                                            ConstruirCalendarioEvents();
+                                        }
                                     }
                                 }
                             };
 
-                            // Efecto hover
+                            // Efecto hover (respeta el color según el estado del día)
                             pnlDia.MouseEnter += (s, ev) => pnlDia.BackColor = Color.FromArgb(60, 62, 90);
                             pnlDia.MouseLeave += (s, ev) =>
                             {
-                                if (!esHoy) pnlDia.BackColor = bgCard;
-                                else pnlDia.BackColor = bgCardSelected;
+                                if (esHoy && tieneEventoEsteDia)
+                                    pnlDia.BackColor = Color.FromArgb(255, 150, 200);  // Hoy + evento
+                                else if (esHoy)
+                                    pnlDia.BackColor = bgCardSelected;                 // Solo hoy
+                                else if (tieneEventoEsteDia)
+                                    pnlDia.BackColor = Color.FromArgb(120, 200, 230);  // Solo evento (turquesa claro)
+                                else
+                                    pnlDia.BackColor = bgCard;                         // Sin evento
                             };
                         }
                         else
@@ -559,12 +639,13 @@ namespace SUSTENTACION
                 NpgsqlConnection con = conexionDB.ObtenerConexion();
 
                 string query = @"SELECT s.id_salida, s.fecha_salida, s.encargado, s.ubicacion, s.detalles,
-                                 GROUP_CONCAT(e.nombre SEPARATOR ', ') AS equipos
+                                 STRING_AGG(e.nombre, ', ') AS equipos
                                  FROM salidas s
                                  LEFT JOIN salida_equipos se ON s.id_salida = se.id_salida
                                  LEFT JOIN equipos e ON se.id_equipo = e.id
-                                 WHERE MONTH(s.fecha_salida) = @mes AND YEAR(s.fecha_salida) = @anio
-                                 GROUP BY s.id_salida
+                                 WHERE EXTRACT(MONTH FROM s.fecha_salida) = @mes 
+                                   AND EXTRACT(YEAR FROM s.fecha_salida) = @anio
+                                 GROUP BY s.id_salida, s.fecha_salida, s.encargado, s.ubicacion, s.detalles
                                  ORDER BY s.fecha_salida ASC";
 
                 NpgsqlCommand cmd = new NpgsqlCommand(query, con);
@@ -605,7 +686,18 @@ namespace SUSTENTACION
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Error al cargar salidas: " + ex.Message, "Error MySQL", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                string mensajeCompleto = ex.Message;
+
+                if (ex.InnerException != null)
+                {
+                    mensajeCompleto += "\n\nDETALLE INTERNO:\n" + ex.InnerException.Message;
+                }
+
+                MessageBox.Show(
+                    "No se pudo registrar la salida:\n" + mensajeCompleto,
+                    "Error de MySQL",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
             }
             finally
             {
