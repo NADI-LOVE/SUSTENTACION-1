@@ -11,6 +11,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using MySql.Data.MySqlClient;
+using Npgsql;
 
 namespace SUSTENTACION.PanelAdministrador
 {
@@ -1541,9 +1542,9 @@ namespace SUSTENTACION.PanelAdministrador
         // LÓGICA ORIGINAL - CONEXIÓN Y DATOS
         // ============================================================
 
-        private MySqlConnection OpenConnection()
+        private NpgsqlConnection OpenConnection()
         {
-            MySqlConnection c =
+            NpgsqlConnection c =
                 new global::SUSTENTACION.Conexion()
                     .ObtenerConexion();
 
@@ -1558,11 +1559,11 @@ namespace SUSTENTACION.PanelAdministrador
             return c;
         }
 
-        private bool TableExists(MySqlConnection c)
+        private bool TableExists(NpgsqlConnection c)
         {
             using (
-                MySqlCommand q =
-                new MySqlCommand(
+                NpgsqlCommand q =
+                new NpgsqlCommand(
                     "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=@name",
                     c
                 )
@@ -1601,7 +1602,7 @@ namespace SUSTENTACION.PanelAdministrador
             try
             {
                 using (
-                    MySqlConnection c =
+                    NpgsqlConnection c =
                     OpenConnection())
                 {
                     if (!TableExists(c))
@@ -1646,8 +1647,8 @@ responsable AS Responsable,motivo AS Motivo,fecha AS Fecha FROM artemusa_movimie
                         " ORDER BY fecha DESC,id DESC LIMIT 1000";
 
                     using (
-                        MySqlCommand command =
-                        new MySqlCommand(
+                        NpgsqlCommand command =
+                        new NpgsqlCommand(
                             sql,
                             c
                         )
@@ -1700,8 +1701,8 @@ responsable AS Responsable,motivo AS Motivo,fecha AS Fecha FROM artemusa_movimie
                             new DataTable();
 
                         using (
-                            MySqlDataAdapter a =
-                            new MySqlDataAdapter(
+                            NpgsqlDataAdapter a =
+                            new NpgsqlDataAdapter(
                                 command
                             )
                         )
@@ -1713,8 +1714,8 @@ responsable AS Responsable,motivo AS Motivo,fecha AS Fecha FROM artemusa_movimie
                     }
 
                     using (
-                        MySqlCommand query =
-                        new MySqlCommand(
+                        NpgsqlCommand query =
+                        new NpgsqlCommand(
                             "SELECT DISTINCT responsable FROM artemusa_movimientos_v1 WHERE responsable<>'' ORDER BY responsable",
                             c
                         )
@@ -1735,7 +1736,7 @@ responsable AS Responsable,motivo AS Motivo,fecha AS Fecha FROM artemusa_movimie
                             .Add("Todos");
 
                         using (
-                            MySqlDataReader r =
+                            NpgsqlDataReader r =
                             query.ExecuteReader())
                         {
                             while (r.Read())
@@ -2004,12 +2005,12 @@ responsable AS Responsable,motivo AS Motivo,fecha AS Fecha FROM artemusa_movimie
             try
             {
                 using (
-                    MySqlConnection c =
+                    NpgsqlConnection c =
                     OpenConnection())
                 {
                     using (
-                        MySqlCommand q =
-                        new MySqlCommand(
+                        NpgsqlCommand q =
+                        new NpgsqlCommand(
                             "SELECT COUNT(*) FROM equipos WHERE stock<=5",
                             c
                         )
@@ -2022,8 +2023,8 @@ responsable AS Responsable,motivo AS Motivo,fecha AS Fecha FROM artemusa_movimie
                     }
 
                     using (
-                        MySqlCommand q =
-                        new MySqlCommand(
+                        NpgsqlCommand q =
+                        new NpgsqlCommand(
                             "SELECT COALESCE(SUM(stock*precio),0) FROM equipos",
                             c
                         )

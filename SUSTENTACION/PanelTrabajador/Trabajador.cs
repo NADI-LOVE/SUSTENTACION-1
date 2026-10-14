@@ -1,1354 +1,774 @@
-﻿    // Sustituye completamente el contenido de Trabajador.cs por este archivo.
-    // Usa las tablas del esquema Artemusa: responsable y area.
-    // Las cuentas y contraseñas de acceso permanecen en usuario; este módulo no las modifica.
-    #nullable disable
-    using System;
-    using System.Collections.Generic;
-    using System.Data;
-    using System.Drawing;
-    using System.Drawing.Drawing2D;
-    using System.Globalization;
-    using System.IO;
-    using System.Net.Mail;
-    using System.Text;
-    using System.Windows.Forms;
-    using MySql.Data.MySqlClient;
+﻿#nullable disable
+using System;
+using System.Data;
+using System.Diagnostics;
+using System.Drawing;
+using System.Globalization;
+using System.IO;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Windows.Forms;
+using Npgsql;
 
-    namespace SUSTENTACION.PanelTrabajador
+namespace SUSTENTACION.PanelTrabajador
+{
+    public class Trabajador : UserControl
     {
-        public class Trabajador : UserControl
+        private readonly Color fondo = Color.FromArgb(242, 246, 249);
+        private readonly Color oscuro = Color.FromArgb(24, 42, 55);
+        private readonly Color verde = Color.FromArgb(18, 124, 91);
+        private DataGridView tablaInternos, tablaExternos;
+        private TabControl pestanas;
+        private TextBox buscar;
+        private ComboBox filtroEstado;
+        private Label[] indicadores = new Label[4];
+        private Label estadoConexion, cantidad;
+        private Button nuevo, editar, cambiarEstado, ficha;
+        private Button editarInterno;
+        private DataTable internos, externos;
+        private DataTable departamentosDatos, rolesDatos;
+        private bool cargando;
+        private int? seleccionExterno;
+
+        public Trabajador()
         {
-            private readonly Color background = Color.FromArgb(242, 246, 249);
-            private readonly Color ink = Color.FromArgb(24, 42, 55);
-            private readonly Color muted = Color.FromArgb(105, 123, 137);
-            private readonly Color green = Color.FromArgb(18, 124, 91);
-            private readonly Dictionary<string, Font> fonts = new Dictionary<string, Font>();
+            Dock = DockStyle.Fill;
+            BackColor = fondo;
+            Font = new Font("Segoe UI", 9);
+            CrearInterfaz();
+            Load += (s, e) => ActualizarDatos();
+        }
 
-            private DataTable people;
-            private DataTable areaSummary;
-            private TextBox search;
-            private ComboBox areaFilter;
-            private ComboBox statusFilter;
-            private DataGridView grid;
-            private DataGridView summaryGrid;
-            private FlowLayoutPanel profile;
-            private Label message;
-            private Label count;
-            private Label empty;
-            private Label[] metrics = new Label[4];
-            private Button add;
-            private Button edit;
-            private Button toggle;
-            private TabControl views;
-            private bool loading;
-            private bool online;
-            private bool busy;
-
-            public Trabajador()
+        private Label Etiqueta(string texto, float tamano = 9, bool negrita = false)
+        {
+            return new Label
             {
-                Dock = DockStyle.Fill;
-                BackColor = background;
-                DoubleBuffered = true;
-                Font = UiFont(9);
-                BuildInterface();
-                Load += delegate { CargarTrabajadores(); };
+                Text = texto,
+                AutoSize = true,
+                ForeColor = oscuro,
+                Font = new Font("Segoe UI", tamano, negrita ? FontStyle.Bold : FontStyle.Regular)
+            };
+        }
+
+        private Button Boton(string texto, EventHandler evento, bool principal = false, int ancho = 130)
+        {
+            Button b = new Button
+            {
+                Text = texto,
+                Height = 38,
+                Width = ancho,
+                Margin = new Padding(0, 0, 9, 0),
+                FlatStyle = FlatStyle.Flat,
+                Cursor = Cursors.Hand,
+                BackColor = principal ? verde : Color.White,
+                ForeColor = principal ? Color.White : oscuro,
+                Font = new Font("Segoe UI", 9, FontStyle.Bold)
+            };
+            b.FlatAppearance.BorderColor = Color.FromArgb(213, 226, 232);
+            b.Click += evento;
+            return b;
+        }
+
+        private void CrearInterfaz()
+        {
+            AutoScroll = true;
+            Panel pagina = new Panel { BackColor = fondo, Padding = new Padding(20), Location = Point.Empty };
+            Controls.Add(pagina);
+            // Al crearse el control, ClientSize puede ser 0. Se reajusta al mostrarse.
+            Action ajustar = () =>
+            {
+                if (IsDisposed || pagina.IsDisposed) return;
+                pagina.Size = new Size(Math.Max(1080, ClientSize.Width - 20),
+                                       Math.Max(790, ClientSize.Height - 2));
+            };
+            Resize += (s, e) => ajustar();
+            HandleCreated += (s, e) => ajustar();
+            Load += (s, e) => ajustar();
+            ajustar();
+            TableLayoutPanel diseno = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6 };
+            diseno.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            diseno.RowStyles.Add(new RowStyle(SizeType.Absolute, 112));
+            diseno.RowStyles.Add(new RowStyle(SizeType.Absolute, 125));
+            diseno.RowStyles.Add(new RowStyle(SizeType.Absolute, 85));
+            diseno.RowStyles.Add(new RowStyle(SizeType.Absolute, 53));
+            diseno.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            diseno.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
+            pagina.Controls.Add(diseno);
+
+            Panel encabezado = new Panel { Dock = DockStyle.Fill, BackColor = oscuro, Margin = new Padding(0, 0, 0, 14) };
+            Label marca = Etiqueta("ARTEMUSA TV / GESTIÓN DE PERSONAL", 8, true);
+            marca.ForeColor = Color.FromArgb(157, 219, 196); marca.Location = new Point(22, 12);
+            Label titulo = Etiqueta("Gestión de trabajadores", 22, true);
+            titulo.ForeColor = Color.White; titulo.Location = new Point(20, 32);
+            Label subtitulo = Etiqueta("Personal interno y técnicos externos responsables de equipos audiovisuales", 9);
+            subtitulo.ForeColor = Color.FromArgb(187, 204, 211); subtitulo.Location = new Point(22, 76);
+            Button actualizar = Boton("Actualizar", (s, e) => ActualizarDatos(), false, 125);
+            nuevo = Boton("+ Nuevo técnico externo", (s, e) => AbrirEditor(false), true, 185);
+            encabezado.Controls.AddRange(new Control[] { marca, titulo, subtitulo, actualizar, nuevo });
+            encabezado.Resize += (s, e) => {
+                nuevo.Location = new Point(encabezado.Width - nuevo.Width - 20, 34);
+                actualizar.Location = new Point(nuevo.Left - actualizar.Width - 12, 34);
+            };
+            diseno.Controls.Add(encabezado, 0, 0);
+
+            TableLayoutPanel tarjetas = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 1 };
+            string[] nombres = { "TRABAJADORES INTERNOS", "TÉCNICOS EXTERNOS", "EXTERNOS ACTIVOS", "DEPARTAMENTOS" };
+            Color[] colores = { Color.FromArgb(231, 242, 251), Color.FromArgb(226, 243, 232), Color.FromArgb(255, 243, 222), Color.FromArgb(240, 234, 251) };
+            for (int i = 0; i < 4; i++)
+            {
+                tarjetas.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
+                Panel tarjeta = new Panel { Dock = DockStyle.Fill, BackColor = colores[i], Margin = new Padding(0, 0, 12, 13) };
+                Label nombre = Etiqueta(nombres[i], 8, true); nombre.Location = new Point(15, 14);
+                indicadores[i] = Etiqueta("—", 26, true); indicadores[i].Location = new Point(13, 38);
+                tarjeta.Controls.Add(nombre); tarjeta.Controls.Add(indicadores[i]); tarjetas.Controls.Add(tarjeta, i, 0);
             }
+            diseno.Controls.Add(tarjetas, 0, 1);
 
-            protected override void Dispose(bool disposing)
-            {
-                if (disposing)
+            Panel filtros = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Margin = new Padding(0, 0, 0, 12), Padding = new Padding(12) };
+            TableLayoutPanel f = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 2 };
+            f.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            f.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 195));
+            f.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
+            f.RowStyles.Add(new RowStyle(SizeType.Absolute, 23));
+            f.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            f.Controls.Add(Etiqueta("BUSCAR POR NOMBRE, DNI O CONTACTO", 8, true), 0, 0);
+            f.Controls.Add(Etiqueta("ESTADO", 8, true), 1, 0);
+            buscar = new TextBox { Dock = DockStyle.Top, Font = new Font("Segoe UI", 10), Margin = new Padding(0, 0, 12, 0) };
+            filtroEstado = new ComboBox { Dock = DockStyle.Top, DropDownStyle = ComboBoxStyle.DropDownList, Margin = new Padding(0, 0, 12, 0) };
+            filtroEstado.Items.AddRange(new object[] { "Todos los estados", "Activo", "Inactivo" });
+            filtroEstado.SelectedIndex = 0;
+            Button limpiar = Boton("Limpiar", (s, e) => { buscar.Clear(); filtroEstado.SelectedIndex = 0; }, false, 100);
+            limpiar.Height = 29;
+            f.Controls.Add(buscar, 0, 1); f.Controls.Add(filtroEstado, 1, 1); f.Controls.Add(limpiar, 2, 1);
+            filtros.Controls.Add(f); diseno.Controls.Add(filtros, 0, 2);
+            buscar.TextChanged += (s, e) => Filtrar();
+            filtroEstado.SelectedIndexChanged += (s, e) => Filtrar();
+
+            FlowLayoutPanel acciones = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
+            editar = Boton("Editar técnico", (s, e) => AbrirEditor(true), false, 125);
+            cambiarEstado = Boton("Desactivar", (s, e) => CambiarEstado(), false, 125);
+            ficha = Boton("Ver ficha", (s, e) => VerFicha(), false, 115);
+            editarInterno = Boton("Editar trabajador", (s, e) => EditarTrabajadorInterno(), false, 145);
+            Button exportar = Boton("Exportar CSV", (s, e) => ExportarCsv(), false, 125);
+            cantidad = Etiqueta("Sin registros", 9); cantidad.Margin = new Padding(10, 11, 0, 0);
+            acciones.Controls.AddRange(new Control[] { editar, cambiarEstado, ficha, editarInterno, exportar, cantidad });
+            diseno.Controls.Add(acciones, 0, 3);
+
+            pestanas = new TabControl { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 10, FontStyle.Bold) };
+            TabPage tabI = new TabPage("Trabajadores internos") { Padding = new Padding(10), BackColor = Color.White };
+            TabPage tabE = new TabPage("Personal externo") { Padding = new Padding(10), BackColor = Color.White };
+            tablaInternos = CrearTabla(); tablaExternos = CrearTabla();
+            tablaInternos.SelectionChanged += (s, e) => ActualizarBotones();
+            tabI.Controls.Add(tablaInternos); tabE.Controls.Add(tablaExternos);
+            pestanas.TabPages.Add(tabI); pestanas.TabPages.Add(tabE);
+            pestanas.SelectedIndex = 1;
+            pestanas.SelectedIndexChanged += (s, e) => { Filtrar(); ActualizarBotones(); };
+            tablaExternos.SelectionChanged += (s, e) => { DataRow r = Seleccionado(); if (r != null) seleccionExterno = Convert.ToInt32(r["id_personal"]); ActualizarBotones(); };
+            tablaExternos.CellDoubleClick += (s, e) => { if (e.RowIndex >= 0 && e.ColumnIndex >= 0 && tablaExternos.Columns[e.ColumnIndex].Name != "fecha_registro") VerFicha(); };
+            // WhatsApp integrado a la derecha de la fecha, sin agregar otra columna.
+            tablaExternos.CellPainting += PintarFechaConWhatsApp;
+            tablaExternos.CellMouseClick += (s, e) => {
+                if (e.RowIndex < 0 || e.ColumnIndex < 0 ||
+                    tablaExternos.Columns[e.ColumnIndex].Name != "fecha_registro") return;
+                Rectangle celda = tablaExternos.GetCellDisplayRectangle(e.ColumnIndex, e.RowIndex, false);
+                if (e.X >= celda.Width - 39)
                 {
-                    if (people != null) people.Dispose();
-                    if (areaSummary != null) areaSummary.Dispose();
-                    foreach (Font font in fonts.Values) font.Dispose();
-                    fonts.Clear();
+                    DataRowView vista = tablaExternos.Rows[e.RowIndex].DataBoundItem as DataRowView;
+                    if (vista != null) AbrirWhatsApp(vista.Row);
                 }
-                base.Dispose(disposing);
-            }
+            };
+            tablaExternos.CellMouseMove += (s, e) => {
+                if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+                if (tablaExternos.Columns[e.ColumnIndex].Name == "fecha_registro")
+                    tablaExternos.Rows[e.RowIndex].Cells[e.ColumnIndex].ToolTipText =
+                        "Haz clic en el icono verde para abrir WhatsApp";
+            };
+            diseno.Controls.Add(pestanas, 0, 4);
+            estadoConexion = Etiqueta("Conectando con Supabase...", 9);
+            estadoConexion.Dock = DockStyle.Fill;
+            diseno.Controls.Add(estadoConexion, 0, 5);
+            ActualizarBotones();
+        }
 
-            private Font UiFont(float size, bool bold = false)
+        private DataGridView CrearTabla()
+        {
+            DataGridView t = new DataGridView
             {
-                string key = size.ToString(CultureInfo.InvariantCulture) + (bold ? "B" : "R");
-                Font font;
-                if (!fonts.TryGetValue(key, out font))
+                Dock = DockStyle.Fill,
+                BackgroundColor = Color.White,
+                BorderStyle = BorderStyle.None,
+                ReadOnly = true,
+                AllowUserToAddRows = false,
+                AllowUserToDeleteRows = false,
+                RowHeadersVisible = false,
+                MultiSelect = false,
+                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+                EnableHeadersVisualStyles = false
+            };
+            t.RowTemplate.Height = 42;
+            t.ColumnHeadersHeight = 42;
+            t.ColumnHeadersDefaultCellStyle.BackColor = fondo;
+            t.ColumnHeadersDefaultCellStyle.ForeColor = oscuro;
+            t.DefaultCellStyle.SelectionBackColor = Color.FromArgb(222, 242, 232);
+            t.DefaultCellStyle.SelectionForeColor = oscuro;
+            t.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(250, 252, 253);
+            return t;
+        }
+
+        private NpgsqlConnection Conectar() { return new global::SUSTENTACION.Conexion().ObtenerConexion(); }
+        public void CargarTrabajadores() { ActualizarDatos(); }
+
+        private void ActualizarDatos()
+        {
+            if (cargando) return;
+            cargando = true;
+            try
+            {
+                DataTable nuevosI = new DataTable(), nuevosE = new DataTable();
+                int departamentos;
+                DataTable nuevosD = new DataTable(), nuevosR = new DataTable();
+                using (NpgsqlConnection c = Conectar())
                 {
-                    font = new Font("Segoe UI", size, bold ? FontStyle.Bold : FontStyle.Regular);
-                    fonts.Add(key, font);
+                    const string qI = @"SELECT t.id_trabajador AS id, t.nombre AS nombre,
+                        COALESCE(t.dni,'') AS dni, COALESCE(t.telefono,'') AS telefono,
+                        t.correo, t.id_rol, t.id_departamento, COALESCE(r.nombre_rol,'Sin rol') AS rol,
+                         COALESCE(d.nombre_departamento,'Sin departamento') AS departamento,
+                        CASE WHEN t.activo THEN 'Activo' ELSE 'Inactivo' END AS estado
+                        FROM public.trabajadores t
+                        LEFT JOIN public.departamentos d ON d.id_departamento=t.id_departamento
+                        LEFT JOIN public.roles r ON r.id_rol=t.id_rol
+                        ORDER BY t.nombre";
+                    using (NpgsqlDataAdapter a = new NpgsqlDataAdapter(qI, c)) a.Fill(nuevosI);
+                    const string qE = @"SELECT id_personal, nombre, apellido, dni, celular,
+                        direccion, activo, fecha_registro,
+                        CASE WHEN activo THEN 'Activo' ELSE 'Inactivo' END AS estado
+                        FROM public.personal_externo ORDER BY id_personal DESC";
+                    using (NpgsqlDataAdapter a = new NpgsqlDataAdapter(qE, c)) a.Fill(nuevosE);
+                    using (NpgsqlDataAdapter a = new NpgsqlDataAdapter(
+                        "SELECT id_departamento, nombre_departamento FROM public.departamentos ORDER BY nombre_departamento", c))
+                        a.Fill(nuevosD);
+                    using (NpgsqlDataAdapter a = new NpgsqlDataAdapter(
+                        "SELECT id_rol, nombre_rol FROM public.roles ORDER BY nombre_rol", c))
+                        a.Fill(nuevosR);
+                    departamentos = nuevosD.Rows.Count;
                 }
-                return font;
+                nuevosE.Columns.Add("nombre_completo", typeof(string), "nombre + ' ' + apellido");
+                DataTable oldI = internos, oldE = externos;
+                internos = nuevosI; externos = nuevosE;
+                if (departamentosDatos != null) departamentosDatos.Dispose();
+                if (rolesDatos != null) rolesDatos.Dispose();
+                departamentosDatos = nuevosD; rolesDatos = nuevosR;
+                tablaInternos.DataSource = internos;
+                tablaExternos.DataSource = externos;
+                if (oldI != null) oldI.Dispose(); if (oldE != null) oldE.Dispose();
+                ConfigurarColumnas();
+                indicadores[0].Text = internos.Rows.Count.ToString();
+                indicadores[1].Text = externos.Rows.Count.ToString();
+                int activos = 0;
+                foreach (DataRow r in externos.Rows) if (Convert.ToBoolean(r["activo"])) activos++;
+                indicadores[2].Text = activos.ToString();
+                indicadores[3].Text = departamentos.ToString();
+                estadoConexion.Text = "● Conectado a Supabase · " + DateTime.Now.ToString("HH:mm:ss");
+                estadoConexion.ForeColor = verde;
+                if (seleccionExterno.HasValue) RestaurarSeleccion(seleccionExterno.Value);
             }
-
-            private Label Caption(string text, float size, Color color, bool bold = false)
+            catch (Exception ex)
             {
-                return new Label
-                {
-                    Text = text,
-                    AutoSize = true,
-                    Font = UiFont(size, bold),
-                    ForeColor = color,
-                    BackColor = Color.Transparent
-                };
+                estadoConexion.Text = "Error al cargar datos: " + ex.Message;
+                estadoConexion.ForeColor = Color.Firebrick;
+                for (int i = 0; i < indicadores.Length; i++) indicadores[i].Text = "Error";
+                MessageBox.Show("Error al consultar Supabase:\n\n" + ex.Message, "Artemusa", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
+            finally { cargando = false; Filtrar(); ActualizarBotones(); }
+        }
 
-            private Button ActionButton(string text, EventHandler action, bool primary = false, int width = 130)
+        private void RestaurarSeleccion(int id)
+        {
+            foreach (DataGridViewRow row in tablaExternos.Rows)
             {
-                Button button = new Button
+                DataRowView d = row.DataBoundItem as DataRowView;
+                if (d != null && Convert.ToInt32(d["id_personal"]) == id)
                 {
-                    Text = text,
-                    Width = width,
-                    Height = 40,
-                    FlatStyle = FlatStyle.Flat,
-                    BackColor = primary ? green : Color.White,
-                    ForeColor = primary ? Color.White : ink,
-                    Font = UiFont(9, true),
-                    Cursor = Cursors.Hand,
-                    Margin = new Padding(0, 0, 10, 0),
-                    UseVisualStyleBackColor = false
-                };
-                button.FlatAppearance.BorderColor = primary ? green : Color.FromArgb(219, 229, 234);
-                button.FlatAppearance.MouseOverBackColor = primary ? Color.FromArgb(14, 103, 77) : background;
-                button.Click += action;
-                return button;
-            }
-
-            private ComboBox Choice(params string[] items)
-            {
-                ComboBox box = new ComboBox
-                {
-                    DropDownStyle = ComboBoxStyle.DropDownList,
-                    FlatStyle = FlatStyle.Flat,
-                    BackColor = Color.White,
-                    ForeColor = ink,
-                    Font = UiFont(9),
-                    Width = 180
-                };
-                box.Items.AddRange(items);
-                if (items.Length > 0) box.SelectedIndex = 0;
-                return box;
-            }
-
-            private void BuildInterface()
-            {
-                SuspendLayout();
-                AutoScroll = true;
-
-                Panel page = new Panel
-                {
-                    BackColor = background,
-                    Padding = new Padding(24),
-                    Location = Point.Empty
-                };
-                Controls.Add(page);
-
-                TableLayoutPanel layout = new TableLayoutPanel
-                {
-                    Dock = DockStyle.Fill,
-                    ColumnCount = 1,
-                    RowCount = 6,
-                    Margin = new Padding(0)
-                };
-                layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-                layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 120));
-                layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 126));
-                layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 98));
-                layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
-                layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-                layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
-
-                page.Controls.Add(layout);
-                layout.Controls.Add(BuildHeader(), 0, 0);
-                layout.Controls.Add(BuildMetrics(), 0, 1);
-                layout.Controls.Add(BuildFilters(), 0, 2);
-                layout.Controls.Add(BuildActions(), 0, 3);
-                layout.Controls.Add(BuildViews(), 0, 4);
-
-                message = Caption("Conectando con la base de datos…", 8.5f, muted);
-                message.AutoSize = false;
-                message.Dock = DockStyle.Fill;
-                message.TextAlign = ContentAlignment.MiddleLeft;
-                message.AutoEllipsis = true;
-                layout.Controls.Add(message, 0, 5);
-
-                Action resize = delegate
-                {
-                    page.Size = new Size(
-                        Math.Max(1030, ClientSize.Width - SystemInformation.VerticalScrollBarWidth - 2),
-                        Math.Max(850, ClientSize.Height - 2));
-                };
-                Resize += delegate { resize(); };
-                resize();
-
-                UpdateActions();
-                ShowProfile();
-                ResumeLayout(true);
-            }
-
-            private Control BuildHeader()
-            {
-                Panel panel = new Card
-                {
-                    Dock = DockStyle.Fill,
-                    BackColor = ink,
-                    Margin = new Padding(0, 0, 0, 16)
-                };
-
-                Label brand = Caption("ARTEMUSA TV  /  GESTIÓN DE TRABAJADORES", 8, Color.FromArgb(157, 219, 196), true);
-                brand.Location = new Point(24, 14);
-                Label title = Caption("Gestión de trabajadores", 23, Color.White, true);
-                title.Location = new Point(19, 37);
-                Label subtitle = Caption("Registro y control del personal relacionado con los equipos audiovisuales", 9, Color.FromArgb(187, 204, 211));
-                subtitle.Location = new Point(24, 80);
-
-                Button refresh = ActionButton("↻  Actualizar", delegate { CargarTrabajadores(); }, false, 125);
-                add = ActionButton("+ Nuevo trabajador", delegate { OpenEditor(false); }, true, 172);
-                panel.Controls.AddRange(new Control[] { brand, title, subtitle, refresh, add });
-                panel.Resize += delegate
-                {
-                    add.Location = new Point(panel.Width - add.Width - 22, 35);
-                    refresh.Location = new Point(add.Left - refresh.Width - 10, 35);
-                };
-                return panel;
-            }
-
-            private Control BuildMetrics()
-            {
-                TableLayoutPanel row = new TableLayoutPanel
-                {
-                    Dock = DockStyle.Fill,
-                    ColumnCount = 4,
-                    RowCount = 1,
-                    Margin = new Padding(0)
-                };
-
-                string[] titles = { "TRABAJADORES REGISTRADOS", "TRABAJADORES ACTIVOS", "TRABAJADORES INACTIVOS", "ÁREAS REGISTRADAS" };
-                string[] notes = { "Personal registrado", "Estado activo", "Historial conservado", "Áreas de Artemusa TV" };
-                Color[] fills =
-                {
-                    Color.FromArgb(231, 242, 251),
-                    Color.FromArgb(226, 243, 232),
-                    Color.FromArgb(255, 243, 222),
-                    Color.FromArgb(240, 234, 251)
-                };
-                Color[] accents =
-                {
-                    Color.FromArgb(43, 103, 163),
-                    green,
-                    Color.FromArgb(165, 99, 27),
-                    Color.FromArgb(119, 79, 178)
-                };
-
-                for (int i = 0; i < 4; i++)
-                {
-                    row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
-                    Panel card = new Card
-                    {
-                        Dock = DockStyle.Fill,
-                        BackColor = fills[i],
-                        Margin = new Padding(0, 0, i == 3 ? 0 : 12, 16)
-                    };
-                    Label title = Caption(titles[i], 7.5f, accents[i], true);
-                    title.Location = new Point(16, 13);
-                    metrics[i] = Caption("—", 26, ink, true);
-                    metrics[i].Location = new Point(12, 34);
-                    Label note = Caption(notes[i], 8, muted);
-                    note.Location = new Point(17, 86);
-                    card.Controls.AddRange(new Control[] { title, metrics[i], note });
-                    row.Controls.Add(card, i, 0);
-                }
-                return row;
-            }
-
-            private Control BuildFilters()
-            {
-                Panel panel = new Card
-                {
-                    Dock = DockStyle.Fill,
-                    BackColor = Color.White,
-                    Padding = new Padding(16, 10, 16, 10),
-                    Margin = new Padding(0, 0, 0, 14)
-                };
-                TableLayoutPanel row = new TableLayoutPanel
-                {
-                    Dock = DockStyle.Fill,
-                    ColumnCount = 4,
-                    RowCount = 2
-                };
-                row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-                row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 220));
-                row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180));
-                row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
-                row.RowStyles.Add(new RowStyle(SizeType.Absolute, 23));
-                row.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-
-                row.Controls.Add(Caption("BUSCAR POR NOMBRE, DNI O CONTACTO", 7.5f, muted, true), 0, 0);
-                row.Controls.Add(Caption("ÁREA", 7.5f, muted, true), 1, 0);
-                row.Controls.Add(Caption("ESTADO", 7.5f, muted, true), 2, 0);
-
-                search = new TextBox
-                {
-                    Dock = DockStyle.Top,
-                    Margin = new Padding(0, 0, 14, 0),
-                    Font = UiFont(10),
-                    ForeColor = ink
-                };
-                areaFilter = Choice("Todas las áreas");
-                areaFilter.Width = 205;
-                statusFilter = Choice("Todos los estados", "Activo", "Inactivo");
-                statusFilter.Width = 166;
-                Button clear = ActionButton("Limpiar", delegate
-                {
-                    search.Clear();
-                    areaFilter.SelectedIndex = 0;
-                    statusFilter.SelectedIndex = 0;
-                }, false, 84);
-                clear.Height = 29;
-
-                row.Controls.Add(search, 0, 1);
-                row.Controls.Add(areaFilter, 1, 1);
-                row.Controls.Add(statusFilter, 2, 1);
-                row.Controls.Add(clear, 3, 1);
-                panel.Controls.Add(row);
-
-                search.TextChanged += delegate { ApplyFilters(); };
-                areaFilter.SelectedIndexChanged += delegate { ApplyFilters(); };
-                statusFilter.SelectedIndexChanged += delegate { ApplyFilters(); };
-                return panel;
-            }
-
-            private Control BuildActions()
-            {
-                FlowLayoutPanel panel = new FlowLayoutPanel
-                {
-                    Dock = DockStyle.Fill,
-                    WrapContents = false,
-                    Margin = new Padding(0)
-                };
-                edit = ActionButton("Editar trabajador", delegate { OpenEditor(true); });
-                toggle = ActionButton("Desactivar", delegate { ChangeStatus(); }, false, 136);
-                Button export = ActionButton("Exportar CSV", delegate { ExportCsv(); });
-                count = Caption("Sin registros", 9, muted);
-                count.Margin = new Padding(14, 12, 0, 0);
-                panel.Controls.AddRange(new Control[] { edit, toggle, export, count });
-                return panel;
-            }
-
-            private Control BuildViews()
-            {
-                views = new TabControl
-                {
-                    Dock = DockStyle.Fill,
-                    Font = UiFont(10, true),
-                    Padding = new Point(20, 10),
-                    Margin = new Padding(0)
-                };
-                TabPage directory = new TabPage("Lista de trabajadores") { BackColor = Color.White, Padding = new Padding(10) };
-                TabPage summary = new TabPage("Resumen por área") { BackColor = Color.White, Padding = new Padding(14) };
-
-                TableLayoutPanel split = new TableLayoutPanel
-                {
-                    Dock = DockStyle.Fill,
-                    ColumnCount = 2,
-                    RowCount = 1,
-                    Margin = new Padding(0)
-                };
-                split.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-                split.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 276));
-                split.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-
-                Panel list = new Panel { Dock = DockStyle.Fill, Margin = new Padding(0, 0, 14, 0) };
-                grid = BuildGrid();
-                grid.SelectionChanged += delegate
-                {
-                    if (!loading)
-                    {
-                        ShowProfile();
-                        UpdateActions();
-                    }
-                };
-                grid.CellDoubleClick += delegate (object sender, DataGridViewCellEventArgs e)
-                {
-                    if (e.RowIndex >= 0) OpenEditor(true);
-                };
-                grid.CellFormatting += FormatState;
-                empty = Caption("", 9, muted);
-                empty.AutoSize = false;
-                empty.Height = 42;
-                empty.Dock = DockStyle.Bottom;
-                empty.TextAlign = ContentAlignment.MiddleLeft;
-                list.Controls.Add(grid);
-                list.Controls.Add(empty);
-
-                profile = new FlowLayoutPanel
-                {
-                    Dock = DockStyle.Fill,
-                    FlowDirection = FlowDirection.TopDown,
-                    WrapContents = false,
-                    AutoScroll = true,
-                    BackColor = Color.FromArgb(246, 249, 251),
-                    Padding = new Padding(16)
-                };
-                split.Controls.Add(list, 0, 0);
-                split.Controls.Add(profile, 1, 0);
-                directory.Controls.Add(split);
-
-                summaryGrid = BuildGrid();
-                summary.Controls.Add(summaryGrid);
-                Label info = Caption("La distribución se calcula con los responsables que coinciden con los filtros.", 9, muted);
-                info.Dock = DockStyle.Top;
-                info.AutoSize = false;
-                info.Height = 36;
-                summary.Controls.Add(info);
-
-                views.TabPages.Add(directory);
-                views.TabPages.Add(summary);
-                views.SelectedIndexChanged += delegate { UpdateActions(); };
-                return views;
-            }
-
-            private DataGridView BuildGrid()
-            {
-                DataGridView result = new BufferedGrid
-                {
-                    Dock = DockStyle.Fill,
-                    BackgroundColor = Color.White,
-                    BorderStyle = BorderStyle.None,
-                    AllowUserToAddRows = false,
-                    AllowUserToDeleteRows = false,
-                    AllowUserToResizeRows = false,
-                    ReadOnly = true,
-                    RowHeadersVisible = false,
-                    MultiSelect = false,
-                    SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-                    AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-                    EnableHeadersVisualStyles = false,
-                    ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None,
-                    CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal,
-                    GridColor = Color.FromArgb(230, 237, 242),
-                    ColumnHeadersHeight = 42,
-                    ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing
-                };
-                result.RowTemplate.Height = 48;
-                result.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle
-                {
-                    BackColor = background,
-                    ForeColor = muted,
-                    Font = UiFont(8.5f, true),
-                    Padding = new Padding(10, 0, 0, 0),
-                    SelectionBackColor = background,
-                    SelectionForeColor = muted
-                };
-                result.DefaultCellStyle = new DataGridViewCellStyle
-                {
-                    BackColor = Color.White,
-                    ForeColor = ink,
-                    Font = UiFont(9),
-                    Padding = new Padding(10, 0, 4, 0),
-                    SelectionBackColor = Color.FromArgb(222, 242, 232),
-                    SelectionForeColor = ink
-                };
-                result.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(250, 252, 253);
-                return result;
-            }
-
-            private void FormatState(object sender, DataGridViewCellFormattingEventArgs e)
-            {
-                DataGridView source = sender as DataGridView;
-                if (source == null || e.RowIndex < 0 || e.ColumnIndex < 0) return;
-                if (source.Columns[e.ColumnIndex].Name == "estado")
-                {
-                    bool active = string.Equals(Convert.ToString(e.Value), "Activo", StringComparison.OrdinalIgnoreCase);
-                    e.CellStyle.ForeColor = active ? green : Color.FromArgb(160, 89, 32);
-                    e.CellStyle.Font = UiFont(9, true);
-                }
-            }
-
-            private MySqlConnection OpenConnection()
-            {
-                MySqlConnection connection = new global::SUSTENTACION.Conexion().ObtenerConexion();
-                if (connection == null) throw new InvalidOperationException("Conexion.ObtenerConexion() devolvió una conexión vacía.");
-                try
-                {
-                    if (connection.State != ConnectionState.Open) connection.Open();
-                    return connection;
-                }
-                catch
-                {
-                    connection.Dispose();
-                    throw;
-                }
-            }
-
-            public void CargarTrabajadores()
-            {
-                if (loading || busy) return;
-                loading = true;
-
-                DataRow selected = SelectedRow();
-                object selectedId = selected == null ? null : selected["id"];
-                try
-                {
-                    DataTable fresh = new DataTable();
-                    int totalAreas;
-
-                    using (MySqlConnection connection = OpenConnection())
-                    {
-                        const string sql = @"
-    SELECT r.id_responsable AS id,
-           r.nombre AS nombres,
-           r.apellido AS apellidos,
-           r.dni AS documento,
-           COALESCE(r.telefono, '') AS telefono,
-           COALESCE(r.correo, '') AS correo,
-           r.estado,
-           r.id_area,
-           a.nombre_area AS area,
-           a.estado AS estado_area
-    FROM responsable r
-    INNER JOIN area a ON a.id_area = r.id_area
-    ORDER BY r.apellido, r.nombre";
-                        using (MySqlDataAdapter adapter = new MySqlDataAdapter(sql, connection))
-                            adapter.Fill(fresh);
-
-                        using (MySqlCommand command = new MySqlCommand("SELECT COUNT(*) FROM area", connection))
-                            totalAreas = Convert.ToInt32(command.ExecuteScalar());
-                    }
-
-                    fresh.Columns.Add("nombre_completo", typeof(string), "nombres + ' ' + apellidos");
-                    DataTable old = people;
-                    people = fresh;
-                    grid.DataSource = fresh;
-                    if (old != null) old.Dispose();
-                    ConfigureColumns();
-                    PopulateAreaFilter(fresh);
-
-                    int active = 0;
-                    int inactive = 0;
-                    foreach (DataRow row in fresh.Rows)
-                    {
-                        if (string.Equals(Convert.ToString(row["estado"]), "Activo", StringComparison.OrdinalIgnoreCase)) active++;
-                        if (string.Equals(Convert.ToString(row["estado"]), "Inactivo", StringComparison.OrdinalIgnoreCase)) inactive++;
-                    }
-
-                    metrics[0].Text = fresh.Rows.Count.ToString("N0");
-                    metrics[1].Text = active.ToString("N0");
-                    metrics[2].Text = inactive.ToString("N0");
-                    metrics[3].Text = totalAreas.ToString("N0");
-
-                    online = true;
-                    message.Text = "●  Conectado a responsable y area · Actualizado " + DateTime.Now.ToString("HH:mm:ss")
-                        + " · Las cuentas de acceso se administran por separado.";
-                    message.ForeColor = green;
-                }
-                catch (Exception ex)
-                {
-                    online = false;
-                    grid.DataSource = null;
-                    if (people != null)
-                    {
-                        people.Dispose();
-                        people = null;
-                    }
-                    if (areaSummary != null)
-                    {
-                        areaSummary.Dispose();
-                        areaSummary = null;
-                    }
-                    summaryGrid.DataSource = null;
-                    foreach (Label metric in metrics) metric.Text = "—";
-                    message.Text = "No se pudo cargar el directorio. Revisa la conexión y las tablas responsable y area.";
-                    message.ForeColor = Color.Firebrick;
-                    Error("Directorio no disponible", ex);
-                }
-                finally
-                {
-                    loading = false;
-                    ApplyFilters();
-                    RestoreSelection(selectedId);
-                    ShowProfile();
-                    UpdateActions();
-                }
-            }
-
-            private void PopulateAreaFilter(DataTable source)
-            {
-                string current = Convert.ToString(areaFilter.SelectedItem);
-                SortedSet<string> names = new SortedSet<string>(StringComparer.CurrentCultureIgnoreCase);
-                foreach (DataRow row in source.Rows)
-                {
-                    if (!row.IsNull("area")) names.Add(Convert.ToString(row["area"]));
-                }
-
-                areaFilter.Items.Clear();
-                areaFilter.Items.Add("Todas las áreas");
-                foreach (string name in names) areaFilter.Items.Add(name);
-                int index = areaFilter.Items.IndexOf(current);
-                areaFilter.SelectedIndex = index >= 0 ? index : 0;
-            }
-
-            private void ConfigureColumns()
-            {
-                if (grid.Columns.Count == 0) return;
-                foreach (DataGridViewColumn column in grid.Columns) column.Visible = false;
-
-                string[] names = { "nombre_completo", "documento", "area", "telefono", "correo", "estado" };
-                string[] labels = { "Responsable", "Documento", "Área", "Teléfono", "Correo", "Estado" };
-                for (int i = 0; i < names.Length; i++)
-                {
-                    if (!grid.Columns.Contains(names[i])) continue;
-                    DataGridViewColumn column = grid.Columns[names[i]];
-                    column.Visible = true;
-                    column.HeaderText = labels[i];
-                    column.DisplayIndex = i;
-                    column.MinimumWidth = i == 0 ? 180 : 100;
-                    column.FillWeight = i == 0 ? 165 : 100;
-                }
-                if (grid.Columns.Contains("id")) grid.Columns["id"].Visible = false;
-            }
-
-            private DataRow SelectedRow()
-            {
-                if (grid == null || grid.CurrentRow == null) return null;
-                DataRowView row = grid.CurrentRow.DataBoundItem as DataRowView;
-                return row == null ? null : row.Row;
-            }
-
-            private void RestoreSelection(object id)
-            {
-                if (id == null || grid.DataSource == null) return;
-                foreach (DataGridViewRow row in grid.Rows)
-                {
-                    DataRowView item = row.DataBoundItem as DataRowView;
-                    if (item != null && object.Equals(item["id"], id))
-                    {
-                        if (grid.Columns.Contains("nombre_completo"))
-                        {
-                            int indiceColumna = grid.Columns["nombre_completo"].Index;
-                            if (indiceColumna >= 0 && indiceColumna < row.Cells.Count)
-                                grid.CurrentCell = row.Cells[indiceColumna];
-                        }
-                        return;
-                    }
-                }
-            }
-
-            private void UpdateActions()
-            {
-                if (add == null || edit == null || toggle == null) return;
-                add.Enabled = online && !busy;
-                DataRow row = SelectedRow();
-                bool selected = row != null && online && !busy && views != null && views.SelectedIndex == 0;
-                edit.Enabled = toggle.Enabled = selected;
-                toggle.Text = row != null && string.Equals(Convert.ToString(row["estado"]), "Inactivo", StringComparison.OrdinalIgnoreCase)
-                    ? "Reactivar"
-                    : "Desactivar";
-            }
-
-            private static string EscapeLike(string value)
-            {
-                StringBuilder text = new StringBuilder();
-                foreach (char c in value ?? "")
-                {
-                    if (c == '\'') text.Append("''");
-                    else if (c == '[') text.Append("[[]");
-                    else if (c == ']') text.Append("[]]");
-                    else if (c == '*') text.Append("[*]");
-                    else if (c == '%') text.Append("[%]");
-                    else text.Append(c);
-                }
-                return text.ToString();
-            }
-
-            private void ApplyFilters()
-            {
-                if (loading || grid == null || count == null) return;
-                if (people == null)
-                {
-                    count.Text = "Sin registros";
-                    if (empty != null) empty.Text = "No hay datos disponibles. Pulsa Actualizar para reintentar.";
-                    summaryGrid.DataSource = null;
-                    if (areaSummary != null)
-                    {
-                        areaSummary.Dispose();
-                        areaSummary = null;
-                    }
-                    ShowProfile();
-                    UpdateActions();
-                    return;
-                }
-
-                List<string> conditions = new List<string>();
-                string query = EscapeLike(search.Text.Trim());
-                if (query.Length > 0)
-                {
-                    List<string> terms = new List<string>();
-                    foreach (string column in new[] { "nombre_completo", "documento", "telefono", "correo", "area" })
-                        terms.Add("[" + column + "] LIKE '%" + query + "%'");
-                    conditions.Add("(" + string.Join(" OR ", terms) + ")");
-                }
-
-                if (areaFilter.SelectedIndex > 0)
-                {
-                    conditions.Add("[area] = '" + Convert.ToString(areaFilter.SelectedItem).Replace("'", "''") + "'");
-                }
-                if (statusFilter.SelectedIndex > 0)
-                {
-                    conditions.Add("[estado] = '" + Convert.ToString(statusFilter.SelectedItem).Replace("'", "''") + "'");
-                }
-
-                try
-                {
-                    people.DefaultView.RowFilter = string.Join(" AND ", conditions);
-                }
-                catch (EvaluateException ex)
-                {
-                    people.DefaultView.RowFilter = "";
-                    message.Text = "No se pudo aplicar el filtro: " + ex.Message;
-                }
-
-                count.Text = people.DefaultView.Count.ToString("N0") + " responsables visibles";
-                if (people.Rows.Count == 0)
-                    empty.Text = "El directorio está vacío. Empieza con + Nuevo responsable.";
-                else if (people.DefaultView.Count == 0)
-                    empty.Text = "No hay coincidencias. Cambia la búsqueda o limpia los filtros.";
-                else
-                    empty.Text = "Selecciona una fila para ver la ficha. Doble clic para editar.";
-
-                BuildSummary();
-                ShowProfile();
-                UpdateActions();
-            }
-
-            private void BuildSummary()
-            {
-                DataTable summary = new DataTable();
-                summary.Columns.Add("Área", typeof(string));
-                summary.Columns.Add("Total", typeof(int));
-                summary.Columns.Add("Activos", typeof(int));
-                summary.Columns.Add("Inactivos", typeof(int));
-
-                SortedDictionary<string, int[]> areas = new SortedDictionary<string, int[]>(StringComparer.CurrentCultureIgnoreCase);
-                foreach (DataRowView row in people.DefaultView)
-                {
-                    string name = Convert.ToString(row["area"]);
-                    if (!areas.ContainsKey(name)) areas.Add(name, new int[3]);
-                    areas[name][0]++;
-                    if (string.Equals(Convert.ToString(row["estado"]), "Activo", StringComparison.OrdinalIgnoreCase)) areas[name][1]++;
-                    if (string.Equals(Convert.ToString(row["estado"]), "Inactivo", StringComparison.OrdinalIgnoreCase)) areas[name][2]++;
-                }
-
-                foreach (KeyValuePair<string, int[]> pair in areas)
-                    summary.Rows.Add(pair.Key, pair.Value[0], pair.Value[1], pair.Value[2]);
-
-                DataTable old = areaSummary;
-                areaSummary = summary;
-                summaryGrid.DataSource = summary;
-                if (old != null) old.Dispose();
-                if (summaryGrid.Columns.Count > 0) summaryGrid.Columns[0].FillWeight = 200;
-            }
-
-            private void ProfileLine(string title, string value)
-            {
-                Label label = Caption(title.ToUpperInvariant(), 7.5f, muted, true);
-                label.Margin = new Padding(0, 10, 0, 4);
-                Label text = Caption(string.IsNullOrWhiteSpace(value) ? "No registrado" : value, 9, ink);
-                text.MaximumSize = new Size(222, 0);
-                text.Margin = new Padding(0, 0, 0, 4);
-                profile.Controls.Add(label);
-                profile.Controls.Add(text);
-            }
-
-            private void ShowProfile()
-            {
-                if (profile == null) return;
-                profile.SuspendLayout();
-                while (profile.Controls.Count > 0)
-                {
-                    Control control = profile.Controls[0];
-                    profile.Controls.RemoveAt(0);
-                    control.Dispose();
-                }
-
-                Label heading = Caption("FICHA DEL TRABAJADOR", 8, muted, true);
-                heading.Margin = new Padding(0, 0, 0, 18);
-                profile.Controls.Add(heading);
-
-                DataRow row = SelectedRow();
-                if (row == null)
-                {
-                    Label hint = Caption("Selecciona un trabajador para consultar sus datos y área asignada..", 11, ink);
-                    hint.MaximumSize = new Size(222, 0);
-                    profile.Controls.Add(hint);
-                    profile.ResumeLayout(true);
-                    return;
-                }
-
-                string names = Convert.ToString(row["nombres"]);
-                string surnames = Convert.ToString(row["apellidos"]);
-                string initials = (names.Length > 0 ? names.Substring(0, 1) : "")
-                    + (surnames.Length > 0 ? surnames.Substring(0, 1) : "");
-
-                Label avatar = Caption(initials.ToUpperInvariant(), 22, green, true);
-                avatar.AutoSize = false;
-                avatar.Size = new Size(68, 58);
-                avatar.TextAlign = ContentAlignment.MiddleCenter;
-                avatar.BackColor = Color.FromArgb(223, 239, 231);
-                profile.Controls.Add(avatar);
-
-                Label name = Caption(Convert.ToString(row["nombre_completo"]), 15, ink, true);
-                name.MaximumSize = new Size(222, 0);
-                name.Margin = new Padding(0, 12, 0, 6);
-                profile.Controls.Add(name);
-
-                bool active = string.Equals(Convert.ToString(row["estado"]), "Activo", StringComparison.OrdinalIgnoreCase);
-                Label badge = Caption(Convert.ToString(row["estado"]), 9, active ? green : Color.Sienna, true);
-                profile.Controls.Add(badge);
-
-                ProfileLine("Código interno", "RP-" + Convert.ToInt32(row["id"]).ToString("D5"));
-                ProfileLine("DNI", Convert.ToString(row["documento"]));
-                ProfileLine("Área de custodia", Convert.ToString(row["area"]));
-                ProfileLine("Teléfono", Convert.ToString(row["telefono"]));
-                ProfileLine("Correo", Convert.ToString(row["correo"]));
-                if (!string.Equals(Convert.ToString(row["estado_area"]), "Activo", StringComparison.OrdinalIgnoreCase))
-                    ProfileLine("Estado del área", Convert.ToString(row["estado_area"]));
-                profile.ResumeLayout(true);
-            }
-
-            private TextBox Field(Control parent, string label, int x, int y, int width, string value, int maxLength)
-            {
-                Label title = Caption(label, 9, muted, true);
-                title.Location = new Point(x, y);
-                parent.Controls.Add(title);
-                TextBox field = new TextBox
-                {
-                    Text = value ?? "",
-                    MaxLength = maxLength,
-                    Font = UiFont(10),
-                    Location = new Point(x, y + 25),
-                    Size = new Size(width, 28)
-                };
-                parent.Controls.Add(field);
-                return field;
-            }
-
-            private List<AreaOption> LoadAreaOptions(int? currentAreaId)
-            {
-                List<AreaOption> result = new List<AreaOption>();
-                const string activeSql = @"
-    SELECT id_area, nombre_area, estado
-    FROM area
-    WHERE estado='Activo'
-    ORDER BY nombre_area";
-                const string editingSql = @"
-    SELECT id_area, nombre_area, estado
-    FROM area
-    WHERE estado='Activo' OR id_area=@idArea
-    ORDER BY CASE WHEN estado='Activo' THEN 0 ELSE 1 END, nombre_area";
-
-                using (MySqlConnection connection = OpenConnection())
-                using (MySqlCommand command = new MySqlCommand(currentAreaId.HasValue ? editingSql : activeSql, connection))
-                {
-                    if (currentAreaId.HasValue) command.Parameters.AddWithValue("@idArea", currentAreaId.Value);
-                    using (MySqlDataReader reader = command.ExecuteReader())
-                    {
-                        while (reader.Read())
-                        {
-                            result.Add(new AreaOption(
-                                Convert.ToInt32(reader["id_area"]),
-                                Convert.ToString(reader["nombre_area"]),
-                                Convert.ToString(reader["estado"])));
-                        }
-                    }
-                }
-                return result;
-            }
-
-            private void OpenEditor(bool editing)
-            {
-                if (!online || busy) return;
-                DataRow selected = editing ? SelectedRow() : null;
-                if (editing && selected == null) return;
-
-                List<AreaOption> areaOptions;
-                try
-                {
-                    int? currentAreaId = editing ? (int?)Convert.ToInt32(selected["id_area"]) : null;
-                    areaOptions = LoadAreaOptions(currentAreaId);
-                }
-                catch (Exception ex)
-                {
-                    Error("No se pudieron consultar las áreas", ex);
-                    return;
-                }
-                if (areaOptions.Count == 0)
-                {
-                    Inform("No hay áreas activas. Registra o activa un área antes de crear responsables.");
-                    return;
-                }
-
-                using (Form dialog = new Form
-                {
-                    Text = editing ? "Editar responsable" : "Nuevo responsable",
-                    ClientSize = new Size(626, 500),
-                    FormBorderStyle = FormBorderStyle.FixedDialog,
-                    StartPosition = FormStartPosition.CenterParent,
-                    MaximizeBox = false,
-                    MinimizeBox = false,
-                    ShowInTaskbar = false,
-                    BackColor = Color.White,
-                    Font = UiFont(9),
-                    AutoScaleMode = AutoScaleMode.Font
-                })
-                {
-                    Label title = Caption(editing ? "Actualizar responsable" : "Registrar responsable", 21, ink, true);
-                    title.Location = new Point(20, 16);
-                    dialog.Controls.Add(title);
-                    Label subtitle = Caption("La ficha se vincula con un área de Artemusa TV. No crea ni cambia contraseñas de acceso.", 8.5f, muted);
-                    subtitle.Location = new Point(24, 59);
-                    dialog.Controls.Add(subtitle);
-
-                    TabControl formTabs = new TabControl
-                    {
-                        Location = new Point(20, 91),
-                        Size = new Size(586, 315),
-                        Font = UiFont(9, true)
-                    };
-                    TabPage work = new TabPage("Datos personales y área") { BackColor = Color.White };
-                    TabPage contact = new TabPage("Contacto") { BackColor = Color.White };
-                    formTabs.TabPages.Add(work);
-                    formTabs.TabPages.Add(contact);
-                    dialog.Controls.Add(formTabs);
-
-                    TextBox document = Field(work, "DNI *", 16, 15, 258,
-                        editing ? Convert.ToString(selected["documento"]) : "", 20);
-                    TextBox names = Field(work, "Nombres *", 296, 15, 258,
-                        editing ? Convert.ToString(selected["nombres"]) : "", 100);
-                    TextBox surnames = Field(work, "Apellidos *", 16, 87, 258,
-                        editing ? Convert.ToString(selected["apellidos"]) : "", 100);
-
-                    Label areaTitle = Caption("Área *", 9, muted, true);
-                    areaTitle.Location = new Point(296, 87);
-                    work.Controls.Add(areaTitle);
-                    ComboBox area = new ComboBox
-                    {
-                        DropDownStyle = ComboBoxStyle.DropDownList,
-                        FlatStyle = FlatStyle.Flat,
-                        BackColor = Color.White,
-                        ForeColor = ink,
-                        Font = UiFont(9),
-                        Location = new Point(296, 112),
-                        Size = new Size(258, 28),
-                        DisplayMember = "VisibleName",
-                        ValueMember = "Id"
-                    };
-                    area.DataSource = areaOptions;
-                    work.Controls.Add(area);
-
-                    Label stateTitle = Caption("Estado del responsable *", 9, muted, true);
-                    stateTitle.Location = new Point(16, 159);
-                    work.Controls.Add(stateTitle);
-                    ComboBox state = Choice("Activo", "Inactivo");
-                    state.Location = new Point(16, 184);
-                    state.Width = 258;
-                    if (editing) state.SelectedItem = Convert.ToString(selected["estado"]);
-                    work.Controls.Add(state);
-
-                    TextBox phone = Field(contact, "Teléfono (opcional)", 16, 15, 538,
-                        editing ? Convert.ToString(selected["telefono"]) : "", 30);
-                    TextBox email = Field(contact, "Correo (opcional)", 16, 87, 538,
-                        editing ? Convert.ToString(selected["correo"]) : "", 100);
-
-                    Label contactInfo = Caption("El responsable es un contacto de custodia; la cuenta de inicio de sesión se conserva en la tabla usuario.", 9, muted);
-                    contactInfo.Location = new Point(18, 151);
-                    contactInfo.MaximumSize = new Size(520, 0);
-                    contact.Controls.Add(contactInfo);
-
-                    if (editing) area.SelectedValue = Convert.ToInt32(selected["id_area"]);
-                    else if (area.Items.Count > 0) area.SelectedIndex = 0;
-
-                    Button cancel = ActionButton("Cancelar", delegate { dialog.Close(); }, false, 112);
-                    cancel.Location = new Point(334, 432);
-                    Button save = ActionButton("Guardar ficha", delegate { }, true, 150);
-                    save.Location = new Point(456, 432);
-                    dialog.Controls.Add(cancel);
-                    dialog.Controls.Add(save);
-                    dialog.CancelButton = cancel;
-
-                    save.Click += delegate
-                    {
-                        if (document.Text.Trim().Length == 0 || names.Text.Trim().Length == 0
-                            || surnames.Text.Trim().Length == 0 || area.SelectedValue == null || state.SelectedIndex < 0)
-                        {
-                            formTabs.SelectedTab = work;
-                            Inform("Completa DNI, nombres, apellidos, área y estado.");
-                            return;
-                        }
-
-                        if (!string.IsNullOrWhiteSpace(email.Text))
-                        {
-                            try
-                            {
-                                MailAddress address = new MailAddress(email.Text.Trim());
-                                if (address.Address != email.Text.Trim()) throw new FormatException();
-                            }
-                            catch (FormatException)
-                            {
-                                formTabs.SelectedTab = contact;
-                                email.Focus();
-                                Inform("Escribe un correo válido o deja el campo vacío.");
-                                return;
-                            }
-                        }
-
-                        Dictionary<string, object> values = new Dictionary<string, object>
-                        {
-                            { "documento", document.Text.Trim() },
-                            { "nombres", names.Text.Trim() },
-                            { "apellidos", surnames.Text.Trim() },
-                            { "id_area", Convert.ToInt32(area.SelectedValue) },
-                            { "telefono", phone.Text.Trim() },
-                            { "correo", email.Text.Trim() },
-                            { "estado", Convert.ToString(state.SelectedItem) }
-                        };
-
-                        busy = true;
-                        save.Enabled = cancel.Enabled = false;
-                        UpdateActions();
-                        bool success = false;
-                        try
-                        {
-                            SaveResponsible(values, selected, editing);
-                            success = true;
-                        }
-                        catch (MySqlException ex)
-                        {
-                            if (ex.Number == 1062)
-                                Inform("Ya existe un responsable con ese DNI. Verifica el documento e inténtalo de nuevo.");
-                            else
-                                Error("No se pudo guardar la ficha", ex);
-                        }
-                        catch (Exception ex)
-                        {
-                            Error("No se pudo guardar la ficha", ex);
-                        }
-                        finally
-                        {
-                            busy = false;
-                            save.Enabled = cancel.Enabled = true;
-                            UpdateActions();
-                        }
-
-                        if (success)
-                        {
-                            dialog.DialogResult = DialogResult.OK;
-                            dialog.Close();
-                        }
-                    };
-
-                    if (dialog.ShowDialog(FindForm()) == DialogResult.OK) CargarTrabajadores();
-                }
-            }
-
-            private void SaveResponsible(Dictionary<string, object> values, DataRow original, bool editing)
-            {
-                using (MySqlConnection connection = OpenConnection())
-                using (MySqlTransaction transaction = connection.BeginTransaction(IsolationLevel.ReadCommitted))
-                {
-                    try
-                    {
-                        if (editing)
-                        {
-                            if (original == null) throw new InvalidOperationException("Selecciona un responsable antes de editar.");
-                            const string lockSql = @"
-    SELECT nombre, apellido, dni, telefono, correo, estado, id_area
-    FROM responsable
-    WHERE id_responsable=@id
-    FOR UPDATE";
-                            using (MySqlCommand command = new MySqlCommand(lockSql, connection, transaction))
-                            {
-                                command.Parameters.AddWithValue("@id", original["id"]);
-                                using (MySqlDataReader reader = command.ExecuteReader())
-                                {
-                                    if (!reader.Read()) throw new InvalidOperationException("El responsable ya no existe. Actualiza el directorio.");
-                                    if (!SamePerson(reader, original))
-                                        throw new InvalidOperationException("La ficha cambió en otra sesión. Cierra el formulario, actualiza el directorio y vuelve a editar.");
-                                }
-                            }
-
-                            const string updateSql = @"
-    UPDATE responsable
-    SET nombre=@nombres,
-        apellido=@apellidos,
-        dni=@documento,
-        telefono=@telefono,
-        correo=@correo,
-        estado=@estado,
-        id_area=@idArea
-    WHERE id_responsable=@id";
-                            using (MySqlCommand command = new MySqlCommand(updateSql, connection, transaction))
-                            {
-                                AddResponsibleParameters(command, values);
-                                command.Parameters.AddWithValue("@id", original["id"]);
-                                // MySQL puede devolver 0 si los valores no cambiaron; verifica el registro en vez de tratarlo como error.
-                                command.ExecuteNonQuery();
-                            }
-                            using (MySqlCommand verify = new MySqlCommand(@"
-    SELECT nombre, apellido, dni, telefono, correo, estado, id_area
-    FROM responsable
-    WHERE id_responsable=@id", connection, transaction))
-                            {
-                                verify.Parameters.AddWithValue("@id", original["id"]);
-                                using (MySqlDataReader reader = verify.ExecuteReader())
-                                {
-                                    if (!reader.Read() || !ResponsibleMatches(reader, values))
-                                        throw new InvalidOperationException("Los datos actualizados no coinciden con el formulario.");
-                                }
-                            }
-                        }
-                        else
-                        {
-                            const string insertSql = @"
-    INSERT INTO responsable
-    (nombre, apellido, dni, telefono, correo, estado, id_area)
-    VALUES
-    (@nombres, @apellidos, @documento, @telefono, @correo, @estado, @idArea)";
-                            using (MySqlCommand command = new MySqlCommand(insertSql, connection, transaction))
-                            {
-                                AddResponsibleParameters(command, values);
-                                if (command.ExecuteNonQuery() != 1)
-                                    throw new InvalidOperationException("No se pudo registrar exactamente una ficha.");
-                            }
-                        }
-
-                        transaction.Commit();
-                    }
-                    catch
-                    {
-                        try { transaction.Rollback(); } catch { }
-                        throw;
-                    }
-                }
-            }
-
-            private static void AddResponsibleParameters(MySqlCommand command, Dictionary<string, object> values)
-            {
-                command.Parameters.AddWithValue("@nombres", values["nombres"]);
-                command.Parameters.AddWithValue("@apellidos", values["apellidos"]);
-                command.Parameters.AddWithValue("@documento", DbNullIfEmpty(Convert.ToString(values["documento"])));
-                command.Parameters.AddWithValue("@telefono", DbNullIfEmpty(Convert.ToString(values["telefono"])));
-                command.Parameters.AddWithValue("@correo", DbNullIfEmpty(Convert.ToString(values["correo"])));
-                command.Parameters.AddWithValue("@estado", values["estado"]);
-                command.Parameters.AddWithValue("@idArea", values["id_area"]);
-            }
-
-            private static bool SamePerson(MySqlDataReader reader, DataRow original)
-            {
-                return string.Equals(DbText(reader["nombre"]), DbText(original["nombres"]), StringComparison.Ordinal)
-                    && string.Equals(DbText(reader["apellido"]), DbText(original["apellidos"]), StringComparison.Ordinal)
-                    && string.Equals(DbText(reader["dni"]), DbText(original["documento"]), StringComparison.Ordinal)
-                    && string.Equals(DbText(reader["telefono"]), DbText(original["telefono"]), StringComparison.Ordinal)
-                    && string.Equals(DbText(reader["correo"]), DbText(original["correo"]), StringComparison.Ordinal)
-                    && string.Equals(DbText(reader["estado"]), DbText(original["estado"]), StringComparison.Ordinal)
-                    && Convert.ToInt32(reader["id_area"]) == Convert.ToInt32(original["id_area"]);
-            }
-
-            private static bool ResponsibleMatches(MySqlDataReader reader, Dictionary<string, object> values)
-            {
-                return string.Equals(DbText(reader["nombre"]), DbText(values["nombres"]), StringComparison.Ordinal)
-                    && string.Equals(DbText(reader["apellido"]), DbText(values["apellidos"]), StringComparison.Ordinal)
-                    && string.Equals(DbText(reader["dni"]), DbText(values["documento"]), StringComparison.Ordinal)
-                    && string.Equals(DbText(reader["telefono"]), DbText(values["telefono"]), StringComparison.Ordinal)
-                    && string.Equals(DbText(reader["correo"]), DbText(values["correo"]), StringComparison.Ordinal)
-                    && string.Equals(DbText(reader["estado"]), DbText(values["estado"]), StringComparison.Ordinal)
-                    && Convert.ToInt32(reader["id_area"]) == Convert.ToInt32(values["id_area"]);
-            }
-
-            private static string DbText(object value)
-            {
-                return value == null || value == DBNull.Value ? "" : Convert.ToString(value);
-            }
-
-            private static object DbNullIfEmpty(string value)
-            {
-                return string.IsNullOrWhiteSpace(value) ? (object)DBNull.Value : value.Trim();
-            }
-
-            private void ChangeStatus()
-            {
-                DataRow row = SelectedRow();
-                if (!online || busy || row == null) return;
-
-                string current = Convert.ToString(row["estado"]);
-                string next = string.Equals(current, "Activo", StringComparison.OrdinalIgnoreCase) ? "Inactivo" : "Activo";
-                if (MessageBox.Show(FindForm(),
-                    "¿Cambiar el estado de " + row["nombre_completo"] + " a " + next + "?\nLa ficha se conservará y el historial de asignaciones no se borrará.",
-                    "Estado del responsable", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
-                    return;
-
-                busy = true;
-                UpdateActions();
-                try
-                {
-                    using (MySqlConnection connection = OpenConnection())
-                    using (MySqlTransaction transaction = connection.BeginTransaction(IsolationLevel.ReadCommitted))
-                    {
-                        try
-                        {
-                            string currentDatabaseState;
-                            using (MySqlCommand find = new MySqlCommand(
-                                "SELECT estado FROM responsable WHERE id_responsable=@id FOR UPDATE", connection, transaction))
-                            {
-                                find.Parameters.AddWithValue("@id", row["id"]);
-                                object result = find.ExecuteScalar();
-                                if (result == null || result == DBNull.Value)
-                                    throw new InvalidOperationException("El responsable ya no existe.");
-                                currentDatabaseState = Convert.ToString(result);
-                            }
-                            if (!string.Equals(currentDatabaseState, current, StringComparison.Ordinal))
-                                throw new InvalidOperationException("La ficha cambió en otra sesión. Actualiza el directorio antes de reintentar.");
-
-                            using (MySqlCommand update = new MySqlCommand(
-                                "UPDATE responsable SET estado=@estado WHERE id_responsable=@id", connection, transaction))
-                            {
-                                update.Parameters.AddWithValue("@estado", next);
-                                update.Parameters.AddWithValue("@id", row["id"]);
-                                if (update.ExecuteNonQuery() != 1)
-                                    throw new InvalidOperationException("No se pudo actualizar el estado.");
-                            }
-                            transaction.Commit();
-                        }
-                        catch
-                        {
-                            try { transaction.Rollback(); } catch { }
-                            throw;
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Error("No se pudo cambiar el estado", ex);
-                }
-                finally
-                {
-                    busy = false;
-                    CargarTrabajadores();
-                }
-            }
-
-            private void ExportCsv()
-            {
-                DataTable table = views.SelectedIndex == 0 ? people : areaSummary;
-                if (table == null || table.DefaultView.Count == 0)
-                {
-                    Inform("No hay registros visibles para exportar.");
-                    return;
-                }
-
-                string[] columns = views.SelectedIndex == 0
-                    ? new[] { "id", "documento", "nombres", "apellidos", "area", "telefono", "correo", "estado" }
-                    : new[] { "Área", "Total", "Activos", "Inactivos" };
-
-                using (SaveFileDialog dialog = new SaveFileDialog
-                {
-                    Filter = "Archivo CSV (*.csv)|*.csv",
-                    FileName = "responsables_artemusa_" + DateTime.Now.ToString("yyyyMMdd_HHmm") + ".csv"
-                })
-                {
-                    if (dialog.ShowDialog(FindForm()) != DialogResult.OK) return;
-                    try
-                    {
-                        using (StreamWriter writer = new StreamWriter(dialog.FileName, false, new UTF8Encoding(true)))
-                        {
-                            List<string> header = new List<string>();
-                            foreach (string column in columns) header.Add(Csv(column));
-                            writer.WriteLine(string.Join(";", header));
-
-                            foreach (DataRowView row in table.DefaultView)
-                            {
-                                List<string> fields = new List<string>();
-                                foreach (string column in columns)
-                                    fields.Add(Csv(Convert.ToString(row[column], CultureInfo.CurrentCulture)));
-                                writer.WriteLine(string.Join(";", fields));
-                            }
-                        }
-                        Inform("Exportación completada con los registros visibles.");
-                    }
-                    catch (Exception ex)
-                    {
-                        Error("No se pudo exportar el CSV", ex);
-                    }
-                }
-            }
-
-            private static string Csv(string value)
-            {
-                value = value ?? "";
-                string trimmed = value.TrimStart();
-                if (trimmed.Length > 0 && "=+-@".IndexOf(trimmed[0]) >= 0)
-                    value = "'" + value;
-                return "\"" + value.Replace("\"", "\"\"") + "\"";
-            }
-
-            private void Inform(string text)
-            {
-                MessageBox.Show(FindForm(), text, "Artemusa · Responsables",
-                    MessageBoxButtons.OK, MessageBoxIcon.Information);
-            }
-
-            private void Error(string title, Exception exception)
-            {
-                MessageBox.Show(FindForm(), title + "\n\n" + exception.Message,
-                    "Artemusa · Responsables", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            }
-
-            private sealed class AreaOption
-            {
-                public int Id { get; private set; }
-                public string Name { get; private set; }
-                public string State { get; private set; }
-                public string VisibleName
-                {
-                    get { return string.Equals(State, "Activo", StringComparison.OrdinalIgnoreCase) ? Name : Name + " (Inactiva)"; }
-                }
-
-                public AreaOption(int id, string name, string state)
-                {
-                    Id = id;
-                    Name = name;
-                    State = state;
-                }
-            }
-
-            private sealed class BufferedGrid : DataGridView
-            {
-                public BufferedGrid() { DoubleBuffered = true; }
-            }
-
-            private sealed class Card : Panel
-            {
-                public Card()
-                {
-                    DoubleBuffered = true;
-                    ResizeRedraw = true;
-                }
-
-                protected override void OnPaint(PaintEventArgs e)
-                {
-                    base.OnPaint(e);
-                    if (Width < 20 || Height < 20) return;
-
-                    using (GraphicsPath path = new GraphicsPath())
-                    using (Pen pen = new Pen(Color.FromArgb(220, 229, 235)))
-                    {
-                        const int diameter = 18;
-                        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-                        path.AddArc(0, 0, diameter, diameter, 180, 90);
-                        path.AddArc(Width - diameter - 1, 0, diameter, diameter, 270, 90);
-                        path.AddArc(Width - diameter - 1, Height - diameter - 1, diameter, diameter, 0, 90);
-                        path.AddArc(0, Height - diameter - 1, diameter, diameter, 90, 90);
-                        path.CloseFigure();
-                        e.Graphics.DrawPath(pen, path);
-                    }
+                    if (tablaExternos.Columns.Contains("nombre_completo"))
+                        tablaExternos.CurrentCell = row.Cells["nombre_completo"];
+                    break;
                 }
             }
         }
+
+        private void ConfigurarColumnas()
+        {
+            foreach (DataGridViewColumn c in tablaInternos.Columns) c.Visible = false;
+            Mostrar(tablaInternos, "nombre", "Trabajador", 0);
+            Mostrar(tablaInternos, "dni", "DNI", 1);
+            Mostrar(tablaInternos, "telefono", "Teléfono", 2);
+            Mostrar(tablaInternos, "correo", "Correo", 3);
+            Mostrar(tablaInternos, "departamento", "Departamento", 4);
+            Mostrar(tablaInternos, "rol", "Rol", 5);
+            Mostrar(tablaInternos, "estado", "Estado", 6);
+            foreach (DataGridViewColumn c in tablaExternos.Columns) c.Visible = false;
+            Mostrar(tablaExternos, "nombre_completo", "Técnico externo", 0);
+            Mostrar(tablaExternos, "dni", "DNI", 1);
+            Mostrar(tablaExternos, "celular", "Celular", 2);
+            Mostrar(tablaExternos, "direccion", "Dirección", 3);
+            Mostrar(tablaExternos, "estado", "Estado", 4);
+            Mostrar(tablaExternos, "fecha_registro", "Fecha de registro", 5);
+            // La fecha y el icono comparten una sola celda.
+            if (tablaExternos.Columns.Contains("fecha_registro"))
+            {
+                tablaExternos.Columns["fecha_registro"].DefaultCellStyle.Format = "dd/MM/yyyy HH:mm";
+                tablaExternos.Columns["fecha_registro"].MinimumWidth = 205;
+                tablaExternos.Columns["fecha_registro"].FillWeight = 145;
+            }
+        }
+
+        private void PintarFechaConWhatsApp(object sender, DataGridViewCellPaintingEventArgs e)
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0 ||
+                tablaExternos.Columns[e.ColumnIndex].Name != "fecha_registro") return;
+
+            e.Handled = true;
+            e.Paint(e.CellBounds, DataGridViewPaintParts.Background | DataGridViewPaintParts.Border);
+            bool seleccionada = (e.State & DataGridViewElementStates.Selected) != 0;
+            Color colorTexto = seleccionada ? tablaExternos.DefaultCellStyle.SelectionForeColor : oscuro;
+            string fecha = "";
+            if (e.Value != null && e.Value != DBNull.Value)
+                fecha = Convert.ToDateTime(e.Value).ToString("dd/MM/yyyy HH:mm");
+
+            Rectangle areaFecha = new Rectangle(e.CellBounds.X + 8, e.CellBounds.Y + 2,
+                Math.Max(10, e.CellBounds.Width - 49), e.CellBounds.Height - 4);
+            TextRenderer.DrawText(e.Graphics, fecha, e.CellStyle.Font ?? tablaExternos.Font,
+                areaFecha, colorTexto, TextFormatFlags.Left | TextFormatFlags.VerticalCenter |
+                TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine);
+
+            int cx = e.CellBounds.Right - 23;
+            int cy = e.CellBounds.Top + e.CellBounds.Height / 2;
+            Rectangle circulo = new Rectangle(cx - 13, cy - 13, 26, 26);
+            using (SolidBrush pincel = new SolidBrush(Color.FromArgb(37, 174, 87)))
+                e.Graphics.FillEllipse(pincel, circulo);
+            TextRenderer.DrawText(e.Graphics, "☎", new Font("Segoe UI Symbol", 12, FontStyle.Bold),
+                circulo, Color.White, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter |
+                TextFormatFlags.NoPadding);
+        }
+
+        private static void Mostrar(DataGridView tabla, string columna, string titulo, int orden)
+        {
+            if (tabla.Columns.Contains(columna))
+            {
+                tabla.Columns[columna].Visible = true;
+                tabla.Columns[columna].HeaderText = titulo;
+                tabla.Columns[columna].DisplayIndex = orden;
+                tabla.Columns[columna].MinimumWidth = columna == "nombre_completo" || columna == "tecnico" ? 165 : 100;
+            }
+        }
+
+        private static string EscaparFiltro(string s)
+        {
+            return (s ?? "").Replace("'", "''").Replace("[", "[[]").Replace("]", "[]]")
+                .Replace("%", "[%]").Replace("*", "[*]");
+        }
+
+        private void Filtrar()
+        {
+            if (cargando || buscar == null || cantidad == null || pestanas == null) return;
+            DataTable datos = pestanas.SelectedIndex == 1 ? externos : internos;
+            if (datos == null) { cantidad.Text = "Sin registros"; return; }
+            string texto = EscaparFiltro(buscar.Text.Trim());
+            string[] campos = pestanas.SelectedIndex == 1
+                ? new[] { "nombre", "apellido", "dni", "celular", "direccion" }
+                : new[] { "nombre", "dni", "telefono", "correo", "departamento" };
+            string condicion = "";
+            if (texto.Length > 0)
+            {
+                string[] partes = new string[campos.Length];
+                for (int i = 0; i < campos.Length; i++) partes[i] = "Convert([" + campos[i] + "], 'System.String') LIKE '%" + texto + "%'";
+                condicion = "(" + string.Join(" OR ", partes) + ")";
+            }
+            if (filtroEstado.SelectedIndex > 0)
+            {
+                if (condicion.Length > 0) condicion += " AND ";
+                condicion += "[estado] = '" + filtroEstado.SelectedItem + "'";
+            }
+            try { datos.DefaultView.RowFilter = condicion; }
+            catch (EvaluateException) { datos.DefaultView.RowFilter = ""; }
+            cantidad.Text = datos.DefaultView.Count + (pestanas.SelectedIndex == 1 ? " técnicos visibles" : " trabajadores visibles");
+            ActualizarBotones();
+        }
+
+        private DataRow Seleccionado()
+        {
+            if (tablaExternos == null || tablaExternos.CurrentRow == null) return null;
+            DataRowView v = tablaExternos.CurrentRow.DataBoundItem as DataRowView;
+            return v == null ? null : v.Row;
+        }
+
+        private void ActualizarBotones()
+        {
+            if (nuevo == null || editar == null || cambiarEstado == null || pestanas == null) return;
+            bool externo = pestanas.SelectedIndex == 1;
+            DataRow r = externo ? Seleccionado() : null;
+            nuevo.Enabled = externo && !cargando;
+            editarInterno.Visible = !externo;
+            editarInterno.Enabled = !externo && tablaInternos.CurrentRow != null && !cargando;
+            editar.Visible = externo;
+            cambiarEstado.Visible = externo;
+            ficha.Visible = externo;
+            editar.Enabled = externo && r != null && !cargando;
+            cambiarEstado.Enabled = editar.Enabled;
+            ficha.Enabled = editar.Enabled;
+            cambiarEstado.Text = editar.Enabled && !Convert.ToBoolean(r["activo"]) ? "Reactivar" : "Desactivar";
+        }
+
+        private TextBox Campo(TableLayoutPanel panel, string etiqueta, string valor, int maximo)
+        {
+            Panel contenedor = new Panel { Dock = DockStyle.Fill, Padding = new Padding(5) };
+            Label titulo = Etiqueta(etiqueta, 9, true); titulo.Dock = DockStyle.Top;
+            TextBox caja = new TextBox { Text = valor ?? "", MaxLength = maximo, Dock = DockStyle.Bottom, Font = new Font("Segoe UI", 10) };
+            contenedor.Controls.Add(caja); contenedor.Controls.Add(titulo); panel.Controls.Add(contenedor);
+            return caja;
+        }
+
+        private void AbrirEditor(bool editarExistente)
+        {
+            if (pestanas.SelectedIndex != 1) return;
+            DataRow registro = editarExistente ? Seleccionado() : null;
+            if (editarExistente && registro == null) return;
+            using (Form ventana = new Form
+            {
+                Text = editarExistente ? "Editar técnico externo" : "Nuevo técnico externo",
+                StartPosition = FormStartPosition.CenterParent,
+                ClientSize = new Size(620, 490),
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                MaximizeBox = false,
+                MinimizeBox = false,
+                BackColor = Color.White,
+                Font = new Font("Segoe UI", 9)
+            })
+            {
+                Label titulo = Etiqueta(editarExistente ? "Editar técnico externo" : "Registrar técnico externo", 20, true);
+                titulo.Location = new Point(22, 18); ventana.Controls.Add(titulo);
+                Label nota = Etiqueta("Datos del técnico que podrá ser responsable de equipos audiovisuales.", 9);
+                nota.Location = new Point(25, 62); ventana.Controls.Add(nota);
+                TableLayoutPanel formulario = new TableLayoutPanel { Location = new Point(20, 100), Size = new Size(580, 310), ColumnCount = 2, RowCount = 3 };
+                formulario.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+                formulario.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+                for (int i = 0; i < 3; i++) formulario.RowStyles.Add(new RowStyle(SizeType.Percent, 33.333f));
+                ventana.Controls.Add(formulario);
+                Func<string, string> valor = clave => registro == null ? "" : Convert.ToString(registro[clave]);
+                TextBox nombre = Campo(formulario, "Nombres *", valor("nombre"), 100);
+                TextBox apellido = Campo(formulario, "Apellidos *", valor("apellido"), 100);
+                TextBox dni = Campo(formulario, "DNI (8 dígitos) *", valor("dni"), 8);
+                TextBox celular = Campo(formulario, "Celular (9 dígitos) *", valor("celular"), 9);
+                TextBox direccion = Campo(formulario, "Dirección", valor("direccion"), 150);
+                Panel estadoPanel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(5) };
+                Label et = Etiqueta("Estado", 9, true); et.Dock = DockStyle.Top;
+                CheckBox activo = new CheckBox { Text = "Técnico activo", Checked = registro == null || Convert.ToBoolean(registro["activo"]), Dock = DockStyle.Bottom };
+                estadoPanel.Controls.Add(activo); estadoPanel.Controls.Add(et); formulario.Controls.Add(estadoPanel);
+                Button cancelar = Boton("Cancelar", (s, e) => ventana.Close()); cancelar.Location = new Point(310, 430);
+                Button guardar = Boton("Guardar técnico", (s, e) => { }, true, 145); guardar.Location = new Point(455, 430);
+                ventana.Controls.Add(cancelar); ventana.Controls.Add(guardar); ventana.CancelButton = cancelar;
+                guardar.Click += (s, e) => {
+                    if (string.IsNullOrWhiteSpace(nombre.Text) || string.IsNullOrWhiteSpace(apellido.Text)
+                        || !Regex.IsMatch(dni.Text.Trim(), @"^\d{8}$") || !Regex.IsMatch(celular.Text.Trim(), @"^9\d{8}$"))
+                    {
+                        MessageBox.Show("Completa nombres, apellidos, DNI de 8 dígitos y celular peruano de 9 dígitos que empieza por 9.", "Validación", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        return;
+                    }
+                    guardar.Enabled = false;
+                    try
+                    {
+                        using (NpgsqlConnection c = Conectar())
+                        {
+                            string sql = editarExistente
+                                ? @"UPDATE public.personal_externo SET nombre=@nombre, apellido=@apellido,
+                                    dni=@dni, celular=@celular, direccion=@direccion, activo=@activo WHERE id_personal=@id"
+                                : @"INSERT INTO public.personal_externo (nombre, apellido, dni, celular, direccion, activo)
+                                    VALUES (@nombre, @apellido, @dni, @celular, @direccion, @activo)";
+                            using (NpgsqlCommand cmd = new NpgsqlCommand(sql, c))
+                            {
+                                cmd.Parameters.AddWithValue("@nombre", nombre.Text.Trim());
+                                cmd.Parameters.AddWithValue("@apellido", apellido.Text.Trim());
+                                cmd.Parameters.AddWithValue("@dni", dni.Text.Trim());
+                                cmd.Parameters.AddWithValue("@celular", celular.Text.Trim());
+                                cmd.Parameters.AddWithValue("@direccion", direccion.Text.Trim());
+                                cmd.Parameters.AddWithValue("@activo", activo.Checked);
+                                if (editarExistente) cmd.Parameters.AddWithValue("@id", Convert.ToInt32(registro["id_personal"]));
+                                if (cmd.ExecuteNonQuery() != 1) throw new InvalidOperationException("No se guardó el registro esperado.");
+                            }
+                        }
+                        ventana.DialogResult = DialogResult.OK; ventana.Close();
+                    }
+                    catch (PostgresException ex) when (ex.SqlState == "23505")
+                    {
+                        MessageBox.Show("Ya existe un registro con ese DNI.", "Registro duplicado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    }
+                    catch (Exception ex) { MessageBox.Show("No se pudo guardar:\n" + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+                    finally { guardar.Enabled = true; }
+                };
+                if (ventana.ShowDialog(FindForm()) == DialogResult.OK) ActualizarDatos();
+            }
+        }
+
+
+        // Administración de datos del personal interno. No cambia credenciales ni contraseñas.
+        private void EditarTrabajadorInterno()
+        {
+            if (pestanas.SelectedIndex != 0 || tablaInternos.CurrentRow == null) return;
+            DataRowView vista = tablaInternos.CurrentRow.DataBoundItem as DataRowView;
+            if (vista == null) return;
+            DataRow registro = vista.Row;
+            if (departamentosDatos == null || rolesDatos == null || rolesDatos.Rows.Count == 0)
+            {
+                MessageBox.Show("No hay roles disponibles en Supabase.", "Artemusa");
+                return;
+            }
+            using (Form ventana = new Form
+            {
+                Text = "Editar trabajador interno - Artemusa",
+                StartPosition = FormStartPosition.CenterParent,
+                ClientSize = new Size(610, 520),
+                BackColor = Color.White,
+                Font = new Font("Segoe UI", 9),
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                MaximizeBox = false,
+                MinimizeBox = false
+            })
+            {
+                Label titulo = Etiqueta("Editar trabajador interno", 19, true);
+                titulo.Location = new Point(22, 18);
+                ventana.Controls.Add(titulo);
+                Label nota = Etiqueta("Datos administrativos. La contraseña y el acceso no se modifican aquí.", 9);
+                nota.Location = new Point(24, 63);
+                ventana.Controls.Add(nota);
+                TableLayoutPanel formulario = new TableLayoutPanel
+                {
+                    Location = new Point(20, 98),
+                    Size = new Size(570, 330),
+                    ColumnCount = 2,
+                    RowCount = 4
+                };
+                formulario.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+                formulario.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+                for (int i = 0; i < 4; i++) formulario.RowStyles.Add(new RowStyle(SizeType.Percent, 25));
+                ventana.Controls.Add(formulario);
+                TextBox nombre = Campo(formulario, "Nombre completo *", Convert.ToString(registro["nombre"]), 150);
+                TextBox dni = Campo(formulario, "DNI (8 dígitos)", Convert.ToString(registro["dni"]), 8);
+                TextBox telefono = Campo(formulario, "Celular (9 dígitos)", Convert.ToString(registro["telefono"]), 9);
+                TextBox correo = Campo(formulario, "Correo electrónico *", Convert.ToString(registro["correo"]), 150);
+                ComboBox departamento = Selector(formulario, "Departamento (opcional)");
+                departamento.Items.Add(new Opcion(-1, "Sin departamento"));
+                foreach (DataRow d in departamentosDatos.Rows)
+                    departamento.Items.Add(new Opcion(Convert.ToInt32(d["id_departamento"]), Convert.ToString(d["nombre_departamento"])));
+                int idDepartamento = registro["id_departamento"] == DBNull.Value ? -1 : Convert.ToInt32(registro["id_departamento"]);
+                SeleccionarOpcion(departamento, idDepartamento);
+                ComboBox rol = Selector(formulario, "Rol *");
+                foreach (DataRow d in rolesDatos.Rows)
+                    rol.Items.Add(new Opcion(Convert.ToInt32(d["id_rol"]), Convert.ToString(d["nombre_rol"])));
+                SeleccionarOpcion(rol, Convert.ToInt32(registro["id_rol"]));
+                Panel estadoPanel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(5) };
+                Label etiqueta = Etiqueta("Estado", 9, true); etiqueta.Dock = DockStyle.Top;
+                CheckBox activo = new CheckBox { Text = "Trabajador activo", Checked = Convert.ToString(registro["estado"]) == "Activo", Dock = DockStyle.Bottom };
+                estadoPanel.Controls.Add(activo); estadoPanel.Controls.Add(etiqueta); formulario.Controls.Add(estadoPanel);
+                Button cancelar = Boton("Cancelar", (s, e) => ventana.Close()); cancelar.Location = new Point(305, 450);
+                Button guardar = Boton("Guardar cambios", (s, e) => { }, true, 155); guardar.Location = new Point(435, 450);
+                ventana.Controls.Add(cancelar); ventana.Controls.Add(guardar); ventana.CancelButton = cancelar;
+                guardar.Click += (s, e) =>
+                {
+                    string doc = dni.Text.Trim();
+                    string tel = telefono.Text.Trim();
+                    if (string.IsNullOrWhiteSpace(nombre.Text) ||
+                        !Regex.IsMatch(correo.Text.Trim(), @"^[^\s@]+@[^\s@]+\.[^\s@]+$") ||
+                        (doc.Length > 0 && !Regex.IsMatch(doc, @"^\d{8}$")) ||
+                        (tel.Length > 0 && !Regex.IsMatch(tel, @"^9\d{8}$")) || rol.SelectedItem == null)
+                    {
+                        MessageBox.Show("Verifica nombre, correo, DNI de 8 dígitos, celular peruano y rol.", "Validación");
+                        return;
+                    }
+                    guardar.Enabled = false;
+                    try
+                    {
+                        using (NpgsqlConnection c = Conectar())
+                        using (NpgsqlCommand cmd = new NpgsqlCommand(@"
+                            UPDATE public.trabajadores
+                            SET nombre=@nombre, dni=@dni, telefono=@telefono, correo=@correo,
+                                id_departamento=@departamento, id_rol=@rol, activo=@activo,
+                                fecha_actualizacion=NOW()
+                            WHERE id_trabajador=@id", c))
+                        {
+                            cmd.Parameters.AddWithValue("@nombre", nombre.Text.Trim());
+                            cmd.Parameters.Add("@dni", NpgsqlTypes.NpgsqlDbType.Varchar).Value = doc.Length == 0 ? (object)DBNull.Value : doc;
+                            cmd.Parameters.Add("@telefono", NpgsqlTypes.NpgsqlDbType.Varchar).Value = tel.Length == 0 ? (object)DBNull.Value : tel;
+                            cmd.Parameters.AddWithValue("@correo", correo.Text.Trim());
+                            Opcion dep = departamento.SelectedItem as Opcion;
+                            cmd.Parameters.Add("@departamento", NpgsqlTypes.NpgsqlDbType.Integer).Value = dep == null || dep.Id < 0 ? (object)DBNull.Value : dep.Id;
+                            cmd.Parameters.AddWithValue("@rol", ((Opcion)rol.SelectedItem).Id);
+                            cmd.Parameters.AddWithValue("@activo", activo.Checked);
+                            cmd.Parameters.AddWithValue("@id", Convert.ToInt32(registro["id"]));
+                            if (cmd.ExecuteNonQuery() != 1) throw new InvalidOperationException("No se actualizó el trabajador.");
+                        }
+                        ventana.DialogResult = DialogResult.OK;
+                        ventana.Close();
+                    }
+                    catch (PostgresException ex) when (ex.SqlState == "23505")
+                    {
+                        MessageBox.Show("El DNI o correo ya está registrado.", "Duplicado");
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show("No se pudieron guardar los cambios: " + ex.Message, "Error");
+                    }
+                    finally { guardar.Enabled = true; }
+                };
+                if (ventana.ShowDialog(FindForm()) == DialogResult.OK) ActualizarDatos();
+            }
+        }
+
+        private sealed class Opcion
+        {
+            public int Id { get; private set; }
+            public string Nombre { get; private set; }
+            public Opcion(int id, string nombre) { Id = id; Nombre = nombre; }
+            public override string ToString() { return Nombre; }
+        }
+
+        private ComboBox Selector(TableLayoutPanel panel, string etiqueta)
+        {
+            Panel contenedor = new Panel { Dock = DockStyle.Fill, Padding = new Padding(5) };
+            Label titulo = Etiqueta(etiqueta, 9, true); titulo.Dock = DockStyle.Top;
+            ComboBox lista = new ComboBox { Dock = DockStyle.Bottom, DropDownStyle = ComboBoxStyle.DropDownList };
+            contenedor.Controls.Add(lista); contenedor.Controls.Add(titulo); panel.Controls.Add(contenedor);
+            return lista;
+        }
+
+        private static void SeleccionarOpcion(ComboBox lista, int id)
+        {
+            for (int i = 0; i < lista.Items.Count; i++)
+            {
+                Opcion opcion = lista.Items[i] as Opcion;
+                if (opcion != null && opcion.Id == id) { lista.SelectedIndex = i; return; }
+            }
+            if (lista.Items.Count > 0 && id == -1) lista.SelectedIndex = 0;
+        }
+
+        private void CambiarEstado()
+        {
+            if (pestanas.SelectedIndex != 1) return;
+            DataRow r = Seleccionado(); if (r == null) return;
+            bool nuevoEstado = !Convert.ToBoolean(r["activo"]);
+            if (MessageBox.Show("¿" + (nuevoEstado ? "Reactivar" : "Desactivar") + " a " + r["nombre_completo"] + "?\nEl historial se conservará.",
+                "Confirmar estado", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            try
+            {
+                using (NpgsqlConnection c = Conectar())
+                using (NpgsqlCommand cmd = new NpgsqlCommand("UPDATE public.personal_externo SET activo=@activo WHERE id_personal=@id AND activo=@anterior", c))
+                {
+                    cmd.Parameters.AddWithValue("@activo", nuevoEstado);
+                    cmd.Parameters.AddWithValue("@anterior", !nuevoEstado);
+                    cmd.Parameters.AddWithValue("@id", Convert.ToInt32(r["id_personal"]));
+                    if (cmd.ExecuteNonQuery() != 1) throw new InvalidOperationException("El registro cambió en otra sesión. Actualiza la lista.");
+                }
+                ActualizarDatos();
+            }
+            catch (Exception ex) { MessageBox.Show(ex.Message, "No se pudo cambiar el estado", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+        }
+
+        private void VerFicha()
+        {
+            DataRow r = Seleccionado(); if (r == null || pestanas.SelectedIndex != 1) return;
+            string texto = "TÉCNICO EXTERNO\n\n" + r["nombre_completo"] + "\nDNI: " + r["dni"] +
+                "\nCelular: " + r["celular"] + "\nDirección: " + r["direccion"] +
+                "\nEstado: " + r["estado"] + "\nRegistrado: " + Convert.ToDateTime(r["fecha_registro"]).ToString("dd/MM/yyyy HH:mm") +
+                "\n\nEQUIPOS RETIRADOS Y DEVOLUCIONES\nSe consultarán desde el módulo Movimientos cuando esté integrado.";
+            using (Form ventana = new Form
+            {
+                Text = "Ficha del técnico - Artemusa",
+                StartPosition = FormStartPosition.CenterParent,
+                ClientSize = new Size(620, 530),
+                BackColor = Color.White,
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                MaximizeBox = false
+            })
+            {
+                TextBox info = new TextBox
+                {
+                    Multiline = true,
+                    ReadOnly = true,
+                    ScrollBars = ScrollBars.Vertical,
+                    Dock = DockStyle.Fill,
+                    Text = texto,
+                    Font = new Font("Segoe UI", 11),
+                    BackColor = Color.White,
+                    BorderStyle = BorderStyle.None
+                };
+                ventana.Padding = new Padding(22); ventana.Controls.Add(info);
+                ventana.ShowDialog(FindForm());
+            }
+        }
+
+        private void AbrirWhatsApp(DataRow tecnico)
+        {
+            string celular = Regex.Replace(Convert.ToString(tecnico["celular"]) ?? "", @"\D", "");
+            // Perú: 9 dígitos nacionales; wa.me requiere prefijo internacional 51.
+            if (Regex.IsMatch(celular, @"^9\d{8}$")) celular = "51" + celular;
+            if (!Regex.IsMatch(celular, @"^519[0-9]{8}$"))
+            {
+                MessageBox.Show("El técnico no tiene un celular peruano válido de 9 dígitos.",
+                    "WhatsApp", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            string nombre = Convert.ToString(tecnico["nombre_completo"]);
+            string mensaje = "Hola " + nombre + ", le escribimos de Artemusa TV para coordinar sobre los equipos audiovisuales. Saludos.";
+            string url = "https://wa.me/" + celular + "?text=" + Uri.EscapeDataString(mensaje);
+            try
+            {
+                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("No se pudo abrir WhatsApp: " + ex.Message,
+                    "Artemusa", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
+        private void ExportarCsv()
+        {
+            DataTable datos = pestanas.SelectedIndex == 1 ? externos : internos;
+            if (datos == null || datos.DefaultView.Count == 0) { MessageBox.Show("No hay datos visibles para exportar."); return; }
+            string[] campos = pestanas.SelectedIndex == 1
+                ? new[] { "id_personal", "nombre", "apellido", "dni", "celular", "direccion", "estado", "fecha_registro" }
+                : new[] { "id", "nombre", "dni", "telefono", "correo", "departamento", "estado" };
+            using (SaveFileDialog dlg = new SaveFileDialog
+            {
+                Filter = "CSV (*.csv)|*.csv",
+                FileName = "artemusa_personal_" + DateTime.Now.ToString("yyyyMMdd_HHmm") + ".csv"
+            })
+            {
+                if (dlg.ShowDialog(FindForm()) != DialogResult.OK) return;
+                try
+                {
+                    using (StreamWriter w = new StreamWriter(dlg.FileName, false, new UTF8Encoding(true)))
+                    {
+                        w.WriteLine(string.Join(";", campos));
+                        foreach (DataRowView r in datos.DefaultView)
+                        {
+                            string[] valores = new string[campos.Length];
+                            for (int i = 0; i < campos.Length; i++) valores[i] = EscaparCsv(Convert.ToString(r[campos[i]], CultureInfo.CurrentCulture));
+                            w.WriteLine(string.Join(";", valores));
+                        }
+                    }
+                    MessageBox.Show("CSV exportado correctamente.", "Artemusa");
+                }
+                catch (Exception ex) { MessageBox.Show(ex.Message, "Error al exportar", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+            }
+        }
+
+        private static string EscaparCsv(string valor)
+        {
+            valor = valor ?? "";
+            string v = valor.TrimStart();
+            if (v.Length > 0 && "=+-@".IndexOf(v[0]) >= 0) valor = "'" + valor;
+            return "\"" + valor.Replace("\"", "\"\"") + "\"";
+        }
     }
+}

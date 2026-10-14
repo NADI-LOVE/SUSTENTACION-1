@@ -5,6 +5,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Reflection;
 using System.Windows.Forms;
+using Npgsql;
 
 namespace SUSTENTACION.PanelTrabajador
 {
@@ -333,7 +334,7 @@ namespace SUSTENTACION.PanelTrabajador
             Conexion conexionDB = new Conexion();
             try
             {
-                MySqlConnection con = conexionDB.ObtenerConexion();
+                NpgsqlConnection con = conexionDB.ObtenerConexion();
 
                 string sqlEquipos = @"SELECT 
                                         IFNULL(SUM(stock), 0) AS total,
@@ -343,8 +344,8 @@ namespace SUSTENTACION.PanelTrabajador
                                         IFNULL(SUM(CASE WHEN estado IN ('Dañado', 'En Mantenimiento') THEN stock ELSE 0 END), 0) AS danados
                                      FROM equipos";
 
-                MySqlCommand cmdEq = new MySqlCommand(sqlEquipos, con);
-                using (MySqlDataReader rd = cmdEq.ExecuteReader())
+                NpgsqlCommand cmdEq = new NpgsqlCommand(sqlEquipos, con);
+                using (NpgsqlDataReader rd = cmdEq.ExecuteReader())
                 {
                     if (rd.Read())
                     {
@@ -357,7 +358,7 @@ namespace SUSTENTACION.PanelTrabajador
                 }
 
                 string sqlHoy = "SELECT COUNT(*) FROM eventos WHERE fecha = CURDATE()";
-                MySqlCommand cmdHoy = new MySqlCommand(sqlHoy, con);
+                NpgsqlCommand cmdHoy = new NpgsqlCommand(sqlHoy, con);
                 lblValDevuelvenHoy.Text = cmdHoy.ExecuteScalar().ToString();
             }
             catch (Exception ex)
@@ -375,9 +376,9 @@ namespace SUSTENTACION.PanelTrabajador
             Conexion conexionDB = new Conexion();
             try
             {
-                MySqlConnection con = conexionDB.ObtenerConexion();
-                MySqlCommand cmd = new MySqlCommand("SELECT nombre FROM trabajadores ORDER BY nombre ASC", con);
-                MySqlDataReader reader = cmd.ExecuteReader();
+                NpgsqlConnection con = conexionDB.ObtenerConexion();
+                NpgsqlCommand cmd = new NpgsqlCommand("SELECT nombre FROM trabajadores ORDER BY nombre ASC", con);
+                NpgsqlDataReader reader = cmd.ExecuteReader();
                 while (reader.Read())
                     cmbTecnico.Items.Add(reader["nombre"].ToString());
             }
@@ -390,9 +391,9 @@ namespace SUSTENTACION.PanelTrabajador
             Conexion conexionDB = new Conexion();
             try
             {
-                MySqlConnection con = conexionDB.ObtenerConexion();
-                MySqlCommand cmd = new MySqlCommand("SELECT DISTINCT categoria FROM equipos WHERE categoria IS NOT NULL AND categoria != ''", con);
-                MySqlDataReader reader = cmd.ExecuteReader();
+                NpgsqlConnection con = conexionDB.ObtenerConexion();
+                NpgsqlCommand cmd = new NpgsqlCommand("SELECT DISTINCT categoria FROM equipos WHERE categoria IS NOT NULL AND categoria != ''", con);
+                NpgsqlDataReader reader = cmd.ExecuteReader();
                 while (reader.Read())
                     cmbCategoria.Items.Add(reader["categoria"].ToString());
             }
@@ -405,7 +406,7 @@ namespace SUSTENTACION.PanelTrabajador
             Conexion conexionDB = new Conexion();
             try
             {
-                MySqlConnection con = conexionDB.ObtenerConexion();
+                NpgsqlConnection con = conexionDB.ObtenerConexion();
 
                 string query = @"SELECT 
                     id AS 'ID', 
@@ -431,7 +432,7 @@ namespace SUSTENTACION.PanelTrabajador
 
                 query += " ORDER BY id ASC";
 
-                MySqlCommand cmd = new MySqlCommand(query, con);
+                NpgsqlCommand cmd = new NpgsqlCommand(query, con);
 
                 if (cmbCategoria != null && cmbCategoria.SelectedIndex > 0)
                     cmd.Parameters.AddWithValue("@categoria", cmbCategoria.SelectedItem.ToString());
@@ -442,7 +443,7 @@ namespace SUSTENTACION.PanelTrabajador
                 if (txtBuscar != null && !string.IsNullOrWhiteSpace(txtBuscar.Text) && txtBuscar.Text != "Buscar en inventario..." && txtBuscar.Text != "Buscar equipo...")
                     cmd.Parameters.AddWithValue("@busqueda", "%" + txtBuscar.Text.Trim() + "%");
 
-                MySqlDataAdapter adapter = new MySqlDataAdapter(cmd);
+                NpgsqlDataAdapter adapter = new NpgsqlDataAdapter(cmd);
                 DataTable dt = new DataTable();
                 adapter.Fill(dt);
 
@@ -463,7 +464,7 @@ namespace SUSTENTACION.PanelTrabajador
             Conexion conexionDB = new Conexion();
             try
             {
-                MySqlConnection con = conexionDB.ObtenerConexion();
+                NpgsqlConnection con = conexionDB.ObtenerConexion();
 
                 string query = @"SELECT 
                             id AS 'ID Evento', 
@@ -474,8 +475,8 @@ namespace SUSTENTACION.PanelTrabajador
                          FROM eventos 
                          WHERE DATE(fecha) = CURDATE()";
 
-                MySqlCommand cmd = new MySqlCommand(query, con);
-                MySqlDataAdapter adapter = new MySqlDataAdapter(cmd);
+                NpgsqlCommand cmd = new NpgsqlCommand(query, con);
+                NpgsqlDataAdapter adapter = new NpgsqlDataAdapter(cmd);
                 DataTable dt = new DataTable();
                 adapter.Fill(dt);
 

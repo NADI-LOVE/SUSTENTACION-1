@@ -4,7 +4,8 @@ using System.Data;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
-using MySql.Data.MySqlClient;
+using Npgsql;
+using NpgsqlTypes;
 
 namespace SUSTENTACION.PanelTrabajador
 {
@@ -256,12 +257,12 @@ namespace SUSTENTACION.PanelTrabajador
 
             try
             {
-                MySqlConnection con = conexionDB.ObtenerConexion();
+                NpgsqlConnection con = conexionDB.ObtenerConexion();
                 string query = "SELECT id, fecha, titulo, horario, detalles FROM eventos WHERE fecha = @fecha ORDER BY id DESC";
-                MySqlCommand cmd = new MySqlCommand(query, con);
+                NpgsqlCommand cmd = new NpgsqlCommand(query, con);
                 cmd.Parameters.AddWithValue("@fecha", fecha.ToString("yyyy-MM-dd"));
 
-                MySqlDataReader reader = cmd.ExecuteReader();
+                NpgsqlDataReader reader = cmd.ExecuteReader();
 
                 bool tieneRegistros = false;
                 while (reader.Read())
@@ -308,7 +309,7 @@ namespace SUSTENTACION.PanelTrabajador
 
             try
             {
-                MySqlConnection con = conexionDB.ObtenerConexion();
+                NpgsqlConnection con = conexionDB.ObtenerConexion();
                 string query;
 
                 if (ev.Id == 0)
@@ -320,7 +321,7 @@ namespace SUSTENTACION.PanelTrabajador
                     query = "UPDATE eventos SET fecha=@fecha, titulo=@titulo, horario=@horario, detalles=@detalles WHERE id=@id";
                 }
 
-                MySqlCommand cmd = new MySqlCommand(query, con);
+                NpgsqlCommand cmd = new NpgsqlCommand(query, con);
                 cmd.Parameters.AddWithValue("@fecha", ev.Fecha.ToString("yyyy-MM-dd"));
                 cmd.Parameters.AddWithValue("@titulo", ev.Titulo);
                 cmd.Parameters.AddWithValue("@horario", ev.Horario);
@@ -351,9 +352,9 @@ namespace SUSTENTACION.PanelTrabajador
 
             try
             {
-                MySqlConnection con = conexionDB.ObtenerConexion();
+                NpgsqlConnection con = conexionDB.ObtenerConexion();
                 string query = "DELETE FROM eventos WHERE id=@id";
-                MySqlCommand cmd = new MySqlCommand(query, con);
+                NpgsqlCommand cmd = new NpgsqlCommand(query, con);
                 cmd.Parameters.AddWithValue("@id", id);
                 cmd.ExecuteNonQuery();
             }

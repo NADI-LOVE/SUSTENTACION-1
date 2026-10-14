@@ -6,6 +6,9 @@ using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 using MySql.Data.MySqlClient;
 using SUSTENTACION;
+using Npgsql;
+using NpgsqlTypes;
+
 
 namespace SUSTENTACION.PanelMovimiento
 {
@@ -514,7 +517,7 @@ namespace SUSTENTACION.PanelMovimiento
         {
             try
             {
-                using (MySqlConnection conexion = new Conexion().ObtenerConexion())
+                using (NpgsqlConnection conexion = new Conexion().ObtenerConexion())
                 {
                     if (conexion.State != ConnectionState.Open)
                         conexion.Open();
@@ -549,7 +552,7 @@ namespace SUSTENTACION.PanelMovimiento
             }
         }
 
-        private DataTable LeerMovimientos(MySqlConnection conexion)
+        private DataTable LeerMovimientos(NpgsqlConnection conexion)
         {
             string consulta = @"
 SELECT
@@ -589,12 +592,12 @@ LEFT JOIN trabajadores t
 ORDER BY m.fecha_movimiento DESC, m.hora_movimiento DESC, m.id_movimiento DESC;";
 
             DataTable tabla = new DataTable();
-            using (MySqlDataAdapter adaptador = new MySqlDataAdapter(consulta, conexion))
+            using (NpgsqlDataAdapter adaptador = new NpgsqlDataAdapter(consulta, conexion))
                 adaptador.Fill(tabla);
             return tabla;
         }
 
-        private void ActualizarIndicadores(MySqlConnection conexion)
+        private void ActualizarIndicadores(NpgsqlConnection conexion)
         {
             const string consulta = @"
 SELECT
@@ -608,8 +611,8 @@ SELECT
         AND MONTH(fecha_movimiento) = MONTH(CURDATE()) THEN 1 ELSE 0 END), 0) AS movimientos_mes
 FROM movimiento;";
 
-            using (MySqlCommand comando = new MySqlCommand(consulta, conexion))
-            using (MySqlDataReader lector = comando.ExecuteReader())
+            using (NpgsqlCommand comando = new NpgsqlCommand(consulta, conexion))
+            using (NpgsqlDataReader lector = comando.ExecuteReader())
             {
                 if (!lector.Read()) return;
                 valoresKpi["ingresos"].Text = Convert.ToInt32(lector["ingresos_hoy"]).ToString("N0");
@@ -670,7 +673,7 @@ FROM movimiento;";
                 List<OpcionEquipo> equipos;
                 List<OpcionTrabajador> trabajadores;
 
-                using (MySqlConnection conexion = new Conexion().ObtenerConexion())
+                using (NpgsqlConnection conexion = new Conexion().ObtenerConexion())
                 {
                     if (conexion.State != ConnectionState.Open)
                         conexion.Open();
@@ -713,15 +716,15 @@ FROM movimiento;";
             }
         }
 
-        private List<OpcionEquipo> LeerEquipos(MySqlConnection conexion)
+        private List<OpcionEquipo> LeerEquipos(NpgsqlConnection conexion)
         {
             const string consulta = @"
 SELECT id, codigo, nombre, categoria, ubicacion, stock
 FROM equipos
 ORDER BY nombre;";
             List<OpcionEquipo> resultado = new List<OpcionEquipo>();
-            using (MySqlCommand comando = new MySqlCommand(consulta, conexion))
-            using (MySqlDataReader lector = comando.ExecuteReader())
+            using (NpgsqlCommand comando = new NpgsqlCommand(consulta, conexion))
+            using (NpgsqlDataReader lector = comando.ExecuteReader())
             {
                 while (lector.Read())
                 {
@@ -739,7 +742,7 @@ ORDER BY nombre;";
             return resultado;
         }
 
-        private List<OpcionTrabajador> LeerTrabajadores(MySqlConnection conexion)
+        private List<OpcionTrabajador> LeerTrabajadores(NpgsqlConnection conexion)
         {
             const string consulta = @"
 SELECT r.id_responsable,
@@ -748,8 +751,8 @@ FROM responsable r
 WHERE r.estado = 'Activo'
 ORDER BY r.nombre, r.apellido;";
             List<OpcionTrabajador> resultado = new List<OpcionTrabajador>();
-            using (MySqlCommand comando = new MySqlCommand(consulta, conexion))
-            using (MySqlDataReader lector = comando.ExecuteReader())
+            using (NpgsqlCommand comando = new NpgsqlCommand(consulta, conexion))
+            using (NpgsqlDataReader lector = comando.ExecuteReader())
             {
                 while (lector.Read())
                 {
@@ -1044,20 +1047,20 @@ ORDER BY r.nombre, r.apellido;";
             if (cantidad < 1)
                 throw new InvalidOperationException("La cantidad debe ser mayor que cero.");
 
-            using (MySqlConnection conexion = new Conexion().ObtenerConexion())
+            using (NpgsqlConnection conexion = new Conexion().ObtenerConexion())
             {
                 if (conexion.State != ConnectionState.Open)
                     conexion.Open();
 
-                using (MySqlTransaction transaccion = conexion.BeginTransaction())
+                using (NpgsqlTransaction transaccion = conexion.BeginTransaction())
                 {
                     try
                     {
-                        using (MySqlCommand validarResponsable = new MySqlCommand(
+                        using (NpgsqlCommand validarResponsable = new NpgsqlCommand(
                             "SELECT COUNT(*) FROM responsable WHERE id_responsable=@id AND estado='Activo'",
                             conexion, transaccion))
                         {
-                            validarResponsable.Parameters.Add("@id", MySqlDbType.Int32).Value = idResponsable;
+                            validarResponsable.Parameters.Add("@id",NpgsqlDbType.Integer).Value = idResponsable;
                             if (Convert.ToInt32(validarResponsable.ExecuteScalar()) != 1)
                                 throw new InvalidOperationException(
                                     "El responsable seleccionado ya no está activo. Cierra y vuelve a abrir el formulario.");
@@ -1071,10 +1074,10 @@ FROM equipo
 WHERE id_equipo = @id_equipo
 FOR UPDATE;";
 
-                        using (MySqlCommand comando = new MySqlCommand(bloquearEquipo, conexion, transaccion))
+                        using (NpgsqlCommand comando = new NpgsqlCommand(bloquearEquipo, conexion, transaccion))
                         {
-                            comando.Parameters.Add("@id_equipo", MySqlDbType.Int32).Value = idEquipo;
-                            using (MySqlDataReader lector = comando.ExecuteReader())
+                            comando.Parameters.Add("@id_equipo",NpgsqlDbType.Integer).Value = idEquipo;
+                            using (NpgsqlDataReader lector = comando.ExecuteReader())
                             {
                                 if (!lector.Read())
                                     throw new InvalidOperationException("El equipo seleccionado ya no existe.");
@@ -1166,10 +1169,10 @@ SET stock = @stock,
     END
 WHERE id_equipo = @id_equipo;";
 
-                        using (MySqlCommand comando = new MySqlCommand(actualizarEquipo, conexion, transaccion))
+                        using (NpgsqlCommand comando = new NpgsqlCommand(actualizarEquipo, conexion, transaccion))
                         {
-                            comando.Parameters.Add("@stock", MySqlDbType.Int32).Value = stockNuevo;
-                            comando.Parameters.Add("@id_equipo", MySqlDbType.Int32).Value = idEquipo;
+                            comando.Parameters.Add("@stock",NpgsqlDbType.Integer).Value = stockNuevo;
+                            comando.Parameters.Add("@id_equipo",NpgsqlDbType.Integer).Value = idEquipo;
                             comando.ExecuteNonQuery();
                         }
 
@@ -1183,12 +1186,12 @@ UPDATE equipo
 SET id_ubicacion = @id_ubicacion,
     ubicacion = @ubicacion
 WHERE id_equipo = @id_equipo;";
-                            using (MySqlCommand comando = new MySqlCommand(
+                            using (NpgsqlCommand comando = new NpgsqlCommand(
                                 sqlActualizarUbicacion, conexion, transaccion))
                             {
-                                comando.Parameters.Add("@id_ubicacion", MySqlDbType.Int32).Value = idUbicacionDestino.Value;
-                                comando.Parameters.Add("@ubicacion", MySqlDbType.VarChar).Value = destinoRegistro;
-                                comando.Parameters.Add("@id_equipo", MySqlDbType.Int32).Value = idEquipo;
+                                comando.Parameters.Add("@id_ubicacion",NpgsqlDbType.Integer).Value = idUbicacionDestino.Value;
+                                comando.Parameters.Add("@ubicacion", NpgsqlDbType.Varchar).Value = destinoRegistro;
+                                comando.Parameters.Add("@id_equipo",NpgsqlDbType.Integer).Value = idEquipo;
                                 comando.ExecuteNonQuery();
                             }
                         }
@@ -1204,22 +1207,22 @@ VALUES
      @id_equipo, @id_responsable, NULL, NULL, @id_ubicacion_origen, @id_ubicacion_destino,
      @origen, @destino);";
 
-                        using (MySqlCommand comando = new MySqlCommand(insertarMovimiento, conexion, transaccion))
+                        using (NpgsqlCommand comando = new NpgsqlCommand(insertarMovimiento, conexion, transaccion))
                         {
-                            comando.Parameters.Add("@tipo", MySqlDbType.VarChar).Value = tipo;
-                            comando.Parameters.Add("@cantidad", MySqlDbType.Int32).Value = cantidad;
-                            comando.Parameters.Add("@motivo", MySqlDbType.VarChar).Value = motivo;
-                            comando.Parameters.Add("@observacion", MySqlDbType.Text).Value =
+                            comando.Parameters.Add("@tipo", NpgsqlDbType.Varchar).Value = tipo;
+                            comando.Parameters.Add("@cantidad",NpgsqlDbType.Integer).Value = cantidad;
+                            comando.Parameters.Add("@motivo", NpgsqlDbType.Varchar).Value = motivo;
+                            comando.Parameters.Add("@observacion", NpgsqlDbType.Text).Value =
                                 string.IsNullOrWhiteSpace(observacion) ? (object)DBNull.Value : observacion;
-                            comando.Parameters.Add("@id_equipo", MySqlDbType.Int32).Value = idEquipo;
-                            comando.Parameters.Add("@id_responsable", MySqlDbType.Int32).Value = idResponsable;
-                            comando.Parameters.Add("@id_ubicacion_origen", MySqlDbType.Int32).Value =
+                            comando.Parameters.Add("@id_equipo",NpgsqlDbType.Integer).Value = idEquipo;
+                            comando.Parameters.Add("@id_responsable",NpgsqlDbType.Integer).Value = idResponsable;
+                            comando.Parameters.Add("@id_ubicacion_origen",NpgsqlDbType.Integer).Value =
                                 idUbicacionOrigen.HasValue ? (object)idUbicacionOrigen.Value : DBNull.Value;
-                            comando.Parameters.Add("@id_ubicacion_destino", MySqlDbType.Int32).Value =
+                            comando.Parameters.Add("@id_ubicacion_destino",NpgsqlDbType.Integer).Value =
                                 idUbicacionDestino.HasValue ? (object)idUbicacionDestino.Value : DBNull.Value;
-                            comando.Parameters.Add("@origen", MySqlDbType.VarChar).Value =
+                            comando.Parameters.Add("@origen", NpgsqlDbType.Varchar).Value =
                                 string.IsNullOrWhiteSpace(origenRegistro) ? (object)DBNull.Value : origenRegistro;
-                            comando.Parameters.Add("@destino", MySqlDbType.VarChar).Value =
+                            comando.Parameters.Add("@destino", NpgsqlDbType.Varchar).Value =
                                 string.IsNullOrWhiteSpace(destinoRegistro) ? (object)DBNull.Value : destinoRegistro;
                             comando.ExecuteNonQuery();
                         }
@@ -1236,8 +1239,8 @@ VALUES
         }
 
         private int ObtenerOCrearUbicacion(
-            MySqlConnection conexion,
-            MySqlTransaction transaccion,
+            NpgsqlConnection conexion,
+            NpgsqlTransaction transaccion,
             string nombre)
         {
             string nombreNormalizado = nombre.Trim();
@@ -1250,9 +1253,9 @@ VALUES
 INSERT INTO ubicacion (nombre_ubicacion, estado)
 VALUES (@nombre, 'Activo')
 ON DUPLICATE KEY UPDATE nombre_ubicacion = VALUES(nombre_ubicacion);";
-            using (MySqlCommand comando = new MySqlCommand(insertar, conexion, transaccion))
+            using (NpgsqlCommand comando = new NpgsqlCommand(insertar, conexion, transaccion))
             {
-                comando.Parameters.Add("@nombre", MySqlDbType.VarChar).Value = nombreNormalizado;
+                comando.Parameters.Add("@nombre", NpgsqlDbType.Varchar).Value = nombreNormalizado;
                 comando.ExecuteNonQuery();
             }
 
@@ -1261,9 +1264,9 @@ SELECT id_ubicacion
 FROM ubicacion
 WHERE nombre_ubicacion = @nombre
 LIMIT 1;";
-            using (MySqlCommand comando = new MySqlCommand(consultarId, conexion, transaccion))
+            using (NpgsqlCommand comando = new NpgsqlCommand(consultarId, conexion, transaccion))
             {
-                comando.Parameters.Add("@nombre", MySqlDbType.VarChar).Value = nombreNormalizado;
+                comando.Parameters.Add("@nombre", NpgsqlDbType.Varchar).Value = nombreNormalizado;
                 object? resultado = comando.ExecuteScalar();
                 if (resultado == null || resultado == DBNull.Value)
                     throw new InvalidOperationException("No se pudo registrar la ubicación.");

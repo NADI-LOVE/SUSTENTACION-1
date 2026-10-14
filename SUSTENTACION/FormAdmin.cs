@@ -8,6 +8,7 @@ using System.Linq;
 using System.Windows.Forms;
 using MySql.Data.MySqlClient;
 using SUSTENTACION.PanelAdministrador;
+using Npgsql;
 
 namespace SUSTENTACION
 {
@@ -1838,7 +1839,7 @@ namespace SUSTENTACION
                 int movimientosHoy;
                 int responsablesActivosGlobal;
 
-                using (MySqlConnection conexion = new Conexion().ObtenerConexion())
+                using (NpgsqlConnection conexion = new Conexion().ObtenerConexion())
                 {
                     if (conexion == null)
                         throw new InvalidOperationException("La conexión configurada no devolvió una conexión válida.");
@@ -1861,7 +1862,7 @@ WHERE (@categoria IS NULL OR e.categoria = @categoria)
   AND (@estado IS NULL OR e.estado = @estado)
   AND (@ubicacion IS NULL OR e.ubicacion = @ubicacion)
   AND (@buscar = '' OR CONCAT_WS(' ', e.codigo, e.nombre, e.categoria, e.marca, e.modelo, e.ubicacion) LIKE @buscar)";
-                    using (MySqlCommand comando = new MySqlCommand(@"
+                    using (NpgsqlCommand comando = new NpgsqlCommand(@"
 SELECT COUNT(*) AS total,
        COALESCE(SUM(e.stock), 0) AS unidades,
        COALESCE(SUM(CASE WHEN e.stock <= @umbral THEN 1 ELSE 0 END), 0) AS bajo
@@ -1869,7 +1870,7 @@ FROM equipos e " + whereEquipos, conexion))
                     {
                         AgregarParametrosEquipoOverview(comando);
                         comando.Parameters.AddWithValue("@umbral", ObtenerUmbralOverview());
-                        using (MySqlDataReader lector = comando.ExecuteReader())
+                        using (NpgsqlDataReader lector = comando.ExecuteReader())
                         {
                             if (lector.Read())
                             {
@@ -1886,7 +1887,7 @@ FROM equipos e " + whereEquipos, conexion))
                         }
                     }
 
-                    using (MySqlCommand comando = new MySqlCommand(@"
+                    using (NpgsqlCommand comando = new NpgsqlCommand(@"
 SELECT COALESCE(NULLIF(TRIM(e.categoria), ''), 'Sin categoría') AS etiqueta,
        COALESCE(SUM(e.stock), 0) AS total
 FROM equipos e " + whereEquipos + @"
@@ -1895,11 +1896,11 @@ ORDER BY total DESC, etiqueta
 LIMIT 8", conexion))
                     {
                         AgregarParametrosEquipoOverview(comando);
-                        using (MySqlDataAdapter adaptador = new MySqlDataAdapter(comando))
+                        using (NpgsqlDataAdapter adaptador = new NpgsqlDataAdapter(comando))
                             adaptador.Fill(equiposCategoria);
                     }
 
-                    using (MySqlCommand comando = new MySqlCommand(@"
+                    using (NpgsqlCommand comando = new NpgsqlCommand(@"
 SELECT COALESCE(NULLIF(TRIM(e.estado), ''), 'Sin estado') AS etiqueta,
        COUNT(*) AS total
 FROM equipos e " + whereEquipos + @"
@@ -1907,7 +1908,7 @@ GROUP BY COALESCE(NULLIF(TRIM(e.estado), ''), 'Sin estado')
 ORDER BY total DESC, etiqueta", conexion))
                     {
                         AgregarParametrosEquipoOverview(comando);
-                        using (MySqlDataAdapter adaptador = new MySqlDataAdapter(comando))
+                        using (NpgsqlDataAdapter adaptador = new NpgsqlDataAdapter(comando))
                             adaptador.Fill(estadosEquipo);
                     }
 
@@ -1920,7 +1921,7 @@ WHERE m.fecha_movimiento >= @desde AND m.fecha_movimiento < @hasta
   AND (@responsable IS NULL OR m.id_responsable = @responsable)
   AND (@buscar = '' OR CONCAT_WS(' ', e.codigo, e.nombre, e.categoria, e.marca, e.modelo,
        e.ubicacion, r.nombre, r.apellido, u.nombre, u.apellido, m.motivo, m.observacion) LIKE @buscar)";
-                    using (MySqlCommand comando = new MySqlCommand(@"
+                    using (NpgsqlCommand comando = new NpgsqlCommand(@"
 SELECT COUNT(*)
 FROM movimiento m
 INNER JOIN equipos e ON e.id = m.id_equipo
@@ -1931,7 +1932,7 @@ LEFT JOIN usuario u ON u.id_usuario = COALESCE(m.id_usuario, m.id_trabajador) " 
                         totalMovimientos = Convert.ToInt32(comando.ExecuteScalar());
                     }
 
-                    using (MySqlCommand comando = new MySqlCommand(@"
+                    using (NpgsqlCommand comando = new NpgsqlCommand(@"
 SELECT DATE_FORMAT(m.fecha_movimiento, '%Y-%m') AS periodo,
        m.tipo_movimiento AS tipo,
        COUNT(*) AS total
@@ -1943,11 +1944,11 @@ GROUP BY YEAR(m.fecha_movimiento), MONTH(m.fecha_movimiento), m.tipo_movimiento
 ORDER BY YEAR(m.fecha_movimiento), MONTH(m.fecha_movimiento), m.tipo_movimiento", conexion))
                     {
                         AgregarParametrosMovimientoOverview(comando);
-                        using (MySqlDataAdapter adaptador = new MySqlDataAdapter(comando))
+                        using (NpgsqlDataAdapter adaptador = new NpgsqlDataAdapter(comando))
                             adaptador.Fill(movimientosMensuales);
                     }
 
-                    using (MySqlCommand comando = new MySqlCommand(@"
+                    using (NpgsqlCommand comando = new NpgsqlCommand(@"
 SELECT DATE_FORMAT(m.fecha_movimiento, '%d/%m/%Y') AS Fecha,
        TIME_FORMAT(m.hora_movimiento, '%H:%i') AS Hora,
        CASE m.tipo_movimiento
@@ -1973,21 +1974,21 @@ ORDER BY m.fecha_movimiento DESC, m.hora_movimiento DESC, m.id_movimiento DESC
 LIMIT 100", conexion))
                     {
                         AgregarParametrosMovimientoOverview(comando);
-                        using (MySqlDataAdapter adaptador = new MySqlDataAdapter(comando))
+                        using (NpgsqlDataAdapter adaptador = new NpgsqlDataAdapter(comando))
                             adaptador.Fill(movimientosRecientes);
                     }
 
-                    using (MySqlCommand comando = new MySqlCommand(
+                    using (NpgsqlCommand comando = new NpgsqlCommand(
                         "SELECT COUNT(*) FROM responsable WHERE estado = 'Activo'", conexion))
                         responsablesActivos = Convert.ToInt32(comando.ExecuteScalar());
 
-                    using (MySqlCommand comando = new MySqlCommand(
+                    using (NpgsqlCommand comando = new NpgsqlCommand(
                         "SELECT COUNT(*) FROM equipos WHERE stock <= @umbral", conexion))
                     {
                         comando.Parameters.AddWithValue("@umbral", ObtenerUmbralOverview());
                         bajoUmbralGlobal = Convert.ToInt32(comando.ExecuteScalar());
                     }
-                    using (MySqlCommand comando = new MySqlCommand(
+                    using (NpgsqlCommand comando = new NpgsqlCommand(
                         "SELECT COUNT(*) FROM movimiento WHERE fecha_movimiento = CURDATE()", conexion))
                         movimientosHoy = Convert.ToInt32(comando.ExecuteScalar());
                     responsablesActivosGlobal = responsablesActivos;
@@ -2069,7 +2070,7 @@ LIMIT 100", conexion))
             }
         }
 
-        private void PoblarComboOverview(MySqlConnection conexion, ComboBox? combo, string consulta, string opcionGeneral)
+        private void PoblarComboOverview(NpgsqlConnection conexion, ComboBox? combo, string consulta, string opcionGeneral)
         {
             if (combo == null || combo.IsDisposed) return;
             string seleccionado = combo.SelectedItem == null ? opcionGeneral : Convert.ToString(combo.SelectedItem, CultureInfo.CurrentCulture) ?? opcionGeneral;
@@ -2078,8 +2079,8 @@ LIMIT 100", conexion))
             {
                 combo.Items.Clear();
                 combo.Items.Add(opcionGeneral);
-                using (MySqlCommand comando = new MySqlCommand(consulta, conexion))
-                using (MySqlDataReader lector = comando.ExecuteReader())
+                using (NpgsqlCommand comando = new NpgsqlCommand(consulta, conexion))
+                using (NpgsqlDataReader lector = comando.ExecuteReader())
                 {
                     while (lector.Read())
                     {
@@ -2097,7 +2098,7 @@ LIMIT 100", conexion))
             }
         }
 
-        private void AgregarParametrosEquipoOverview(MySqlCommand comando)
+        private void AgregarParametrosEquipoOverview(NpgsqlCommand comando)
         {
             comando.Parameters.AddWithValue("@categoria", (object?)LeerFiltroComboOverview(cmbOverviewCategoria, 0) ?? DBNull.Value);
             comando.Parameters.AddWithValue("@estado", (object?)LeerFiltroComboOverview(cmbOverviewEstado, 0) ?? DBNull.Value);
@@ -2106,7 +2107,7 @@ LIMIT 100", conexion))
             comando.Parameters.AddWithValue("@buscar", busqueda.Length == 0 ? "" : "%" + busqueda + "%");
         }
 
-        private void AgregarParametrosMovimientoOverview(MySqlCommand comando)
+        private void AgregarParametrosMovimientoOverview(NpgsqlCommand comando)
         {
             comando.Parameters.AddWithValue("@desde", dtOverviewDesde == null ? DateTime.Today.AddMonths(-5) : dtOverviewDesde.Value.Date);
             comando.Parameters.AddWithValue("@hasta", (dtOverviewHasta == null ? DateTime.Today : dtOverviewHasta.Value.Date).AddDays(1));
@@ -2142,7 +2143,7 @@ LIMIT 100", conexion))
             }
         }
 
-        private void PoblarResponsablesOverview(MySqlConnection conexion)
+        private void PoblarResponsablesOverview(NpgsqlConnection conexion)
         {
             if (cmbOverviewResponsable == null || cmbOverviewResponsable.IsDisposed) return;
             int? idSeleccionado = ObtenerResponsableFiltroOverview();
@@ -2158,8 +2159,8 @@ SELECT id_responsable,
        estado
 FROM responsable
 ORDER BY CASE WHEN estado = 'Activo' THEN 0 ELSE 1 END, apellido, nombre";
-                using (MySqlCommand comando = new MySqlCommand(consulta, conexion))
-                using (MySqlDataReader lector = comando.ExecuteReader())
+                using (NpgsqlCommand comando = new NpgsqlCommand(consulta, conexion))
+                using (NpgsqlDataReader lector = comando.ExecuteReader())
                 {
                     while (lector.Read())
                     {

@@ -8,6 +8,8 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using MySql.Data.MySqlClient;
+using Npgsql;
+using NpgsqlTypes;
 
 namespace SUSTENTACION.ServicioWhatsApp
 {
@@ -38,7 +40,7 @@ namespace SUSTENTACION.ServicioWhatsApp
                 int devuelvenHoy = 0;
 
                 Conexion conexionDB = new Conexion();
-                using (MySqlConnection conn = conexionDB.ObtenerConexion())
+                using (NpgsqlConnection conn = conexionDB.ObtenerConexion())
                 {
                     if (conn.State != ConnectionState.Open)
                         conn.Open();
@@ -51,8 +53,8 @@ namespace SUSTENTACION.ServicioWhatsApp
                             SUM(CASE WHEN estado = 'Devuelto' THEN 1 ELSE 0 END) AS DevuelvenHoy
                         FROM equipos;";
 
-                    using (MySqlCommand cmd = new MySqlCommand(query, conn))
-                    using (MySqlDataReader reader = cmd.ExecuteReader())
+                    using (NpgsqlCommand cmd = new NpgsqlCommand(query, conn))
+                    using (NpgsqlDataReader reader = cmd.ExecuteReader())
                     {
                         if (reader.Read())
                         {
