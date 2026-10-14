@@ -29,17 +29,29 @@ namespace SUSTENTACION.PanelTrabajador
         public GestionEquipo()
         {
             InitializeComponentes();
-            CargarFiltroTecnicos();
-            CargarFiltroCategorias();
-            CargarInventarioEquipos();
-            CalcularMetricasKPI();
+
+            // 🔥 Cargar datos en segundo plano para no congelar la UI
+            this.Load += async (s, e) =>
+            {
+                await System.Threading.Tasks.Task.Run(() =>
+                {
+                    CargarFiltroTecnicos();
+                    CargarFiltroCategorias();
+                });
+
+                this.BeginInvoke(new Action(() =>
+                {
+                    CargarInventarioEquipos();
+                    CalcularMetricasKPI();
+                }));
+            };
         }
 
         private void InitializeComponentes()
         {
             this.Dock = DockStyle.Fill;
             this.BackColor = bgMain;
-            this.Padding = new Padding(20);
+            this.Padding = new Padding(24, 20, 24, 20);
 
             TableLayoutPanel mainLayout = new TableLayoutPanel
             {
@@ -48,46 +60,91 @@ namespace SUSTENTACION.PanelTrabajador
                 RowCount = 3,
                 BackColor = Color.Transparent
             };
-            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 65f));
-            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 175f));
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 80f));
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 200f));
             mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
 
+            // ═══════════════════════════════════════════
             // HEADER
-            Panel headerPanel = new Panel { Dock = DockStyle.Fill, Margin = new Padding(0, 0, 0, 10) };
+            // ═══════════════════════════════════════════
+            Panel headerPanel = new Panel { Dock = DockStyle.Fill, Margin = new Padding(0, 0, 0, 14) };
+
+            Label lblIconTitulo = new Label
+            {
+                Text = "📦",
+                Font = new Font("Segoe UI", 22f),
+                ForeColor = accentGreen,
+                Location = new Point(0, 3),
+                Size = new Size(40, 40),
+                TextAlign = ContentAlignment.MiddleCenter
+            };
+            headerPanel.Controls.Add(lblIconTitulo);
 
             Label lblTitulo = new Label
             {
-                Text = "Inventory",
-                Font = new Font("Segoe UI", 16f, FontStyle.Bold),
+                Text = "Inventario de Equipos",
+                Font = new Font("Segoe UI", 18f, FontStyle.Bold),
                 ForeColor = textWhite,
-                Location = new Point(0, 0),
+                Location = new Point(46, 5),
                 AutoSize = true
             };
 
+            Label lblSubtitulo = new Label
+            {
+                Text = "Gestión, control y seguimiento del inventario audiovisual",
+                Font = new Font("Segoe UI", 9.5f),
+                ForeColor = textMuted,
+                Location = new Point(49, 42),
+                AutoSize = true
+            };
+
+            // Buscador mejorado
+            Panel panelBuscar = new Panel
+            {
+                Size = new Size(280, 42),
+                Location = new Point(340, 12),
+                BackColor = bgCard,
+                Padding = new Padding(14, 0, 14, 0)
+            };
+            AplicarBordesRedondeados(panelBuscar, 10);
+
+            Label lblIconBuscar = new Label
+            {
+                Text = "🔍",
+                Font = new Font("Segoe UI", 12),
+                ForeColor = textMuted,
+                Location = new Point(12, 11),
+                AutoSize = true,
+                BackColor = bgCard
+            };
+            panelBuscar.Controls.Add(lblIconBuscar);
+
             txtBuscar = new TextBox
             {
-                Width = 200,
-                Location = new Point(140, 6),
+                Location = new Point(42, 11),
+                Width = 225,
                 BackColor = bgCard,
                 ForeColor = textWhite,
-                BorderStyle = BorderStyle.FixedSingle,
-                Font = new Font("Segoe UI", 9.5f)
+                BorderStyle = BorderStyle.None,
+                Font = new Font("Segoe UI", 10f),
+                Text = "Buscar equipo, código o categoría..."
             };
-            txtBuscar.Text = "Buscar equipo...";
-            txtBuscar.GotFocus += (s, e) => { if (txtBuscar.Text == "Buscar equipo...") txtBuscar.Text = ""; };
-            txtBuscar.LostFocus += (s, e) => { if (string.IsNullOrWhiteSpace(txtBuscar.Text)) txtBuscar.Text = "Buscar equipo..."; };
+            txtBuscar.GotFocus += (s, e) => { if (txtBuscar.Text.StartsWith("Buscar")) txtBuscar.Text = ""; };
+            txtBuscar.LostFocus += (s, e) => { if (string.IsNullOrWhiteSpace(txtBuscar.Text)) txtBuscar.Text = "Buscar equipo, código o categoría..."; };
             txtBuscar.TextChanged += (s, e) => CargarInventarioEquipos();
+            panelBuscar.Controls.Add(txtBuscar);
 
+            // Filtros mejorados
             FlowLayoutPanel pnlFiltros = new FlowLayoutPanel
             {
                 Dock = DockStyle.Right,
                 AutoSize = true,
                 WrapContents = false,
-                Padding = new Padding(0)
+                Padding = new Padding(0, 8, 0, 0)
             };
 
             cmbCategoria = CrearComboBoxFiltro(new string[] { "Categoría: Todas" });
-            cmbEstado = CrearComboBoxFiltro(new string[] { "Estado: Todos", "Disponible", "En Evento", "En Mantenimiento", "Dañado" });
+            cmbEstado = CrearComboBoxFiltro(new string[] { "Estado: Todos", "Disponible", "En Evento", "En Mantenimiento", "En Observación", "Con Observaciones", "Dañado" });
             cmbTecnico = CrearComboBoxFiltro(new string[] { "Técnico: Todos" });
 
             cmbCategoria.SelectedIndexChanged += (s, e) => CargarInventarioEquipos();
@@ -97,16 +154,19 @@ namespace SUSTENTACION.PanelTrabajador
             pnlFiltros.Controls.AddRange(new Control[] { cmbCategoria, cmbEstado, cmbTecnico });
 
             headerPanel.Controls.Add(lblTitulo);
-            headerPanel.Controls.Add(txtBuscar);
+            headerPanel.Controls.Add(lblSubtitulo);
+            headerPanel.Controls.Add(panelBuscar);
             headerPanel.Controls.Add(pnlFiltros);
 
+            // ═══════════════════════════════════════════
             // TARJETAS KPI
+            // ═══════════════════════════════════════════
             TableLayoutPanel kpiLayout = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 3,
                 RowCount = 2,
-                Margin = new Padding(0, 0, 0, 15)
+                Margin = new Padding(0, 0, 0, 16)
             };
             kpiLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33f));
             kpiLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33f));
@@ -115,7 +175,7 @@ namespace SUSTENTACION.PanelTrabajador
             kpiLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 50f));
 
             Panel cardTotal = CrearTarjetaKPI("TOTAL UNIDADES", "0", Color.FromArgb(0, 180, 216), "📦", out lblValTotal);
-            Panel cardEvento = CrearTarjetaKPI("EQUIPOS EN EVENTO", "0", Color.FromArgb(114, 9, 183), "🚚", out lblValEvento);
+            Panel cardEvento = CrearTarjetaKPI("EQUIPOS EN EVENTO", "0", Color.FromArgb(139, 92, 246), "🚚", out lblValEvento);
             Panel cardDisp = CrearTarjetaKPI("UNIDADES DISPONIBLES", "0", accentGreen, "✅", out lblValDisponibles);
             Panel cardRes = CrearTarjetaKPI("UNIDADES RESERVADAS", "0", Color.FromArgb(247, 127, 0), "⏳", out lblValReservadas);
             Panel cardDan = CrearTarjetaKPI("EQUIPOS DAÑADOS", "0", Color.FromArgb(214, 40, 40), "⚠️", out lblValDanados);
@@ -131,14 +191,27 @@ namespace SUSTENTACION.PanelTrabajador
             kpiLayout.Controls.Add(cardDan, 1, 1);
             kpiLayout.Controls.Add(cardDev, 2, 1);
 
+            // ═══════════════════════════════════════════
             // TABLA
+            // ═══════════════════════════════════════════
             Panel containerTabla = new Panel
             {
                 Dock = DockStyle.Fill,
                 BackColor = bgCard,
-                Padding = new Padding(12)
+                Padding = new Padding(18, 14, 18, 18)
             };
             AplicarBordesRedondeados(containerTabla, 12);
+
+            Label lblTablaTitulo = new Label
+            {
+                Text = "📋  Listado de equipos",
+                Font = new Font("Segoe UI", 11.5f, FontStyle.Bold),
+                ForeColor = textWhite,
+                Dock = DockStyle.Top,
+                Height = 36,
+                Padding = new Padding(4, 4, 0, 0)
+            };
+            containerTabla.Controls.Add(lblTablaTitulo);
 
             dgvInventario = new DataGridView
             {
@@ -153,9 +226,10 @@ namespace SUSTENTACION.PanelTrabajador
                 AllowUserToAddRows = false,
                 ReadOnly = true,
                 RowHeadersVisible = false,
-                ColumnHeadersHeight = 40,
-                RowTemplate = { Height = 45 },
-                EnableHeadersVisualStyles = false
+                ColumnHeadersHeight = 44,
+                RowTemplate = { Height = 48 },
+                EnableHeadersVisualStyles = false,
+                AllowUserToResizeRows = false
             };
 
             typeof(DataGridView).InvokeMember("DoubleBuffered",
@@ -164,19 +238,22 @@ namespace SUSTENTACION.PanelTrabajador
 
             dgvInventario.ColumnHeadersDefaultCellStyle.BackColor = bgHeaderTable;
             dgvInventario.ColumnHeadersDefaultCellStyle.ForeColor = textMuted;
-            dgvInventario.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
+            dgvInventario.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
+            dgvInventario.ColumnHeadersDefaultCellStyle.Padding = new Padding(10, 0, 10, 0);
+            dgvInventario.ColumnHeadersDefaultCellStyle.SelectionBackColor = bgHeaderTable;
 
             dgvInventario.DefaultCellStyle.BackColor = bgCard;
             dgvInventario.DefaultCellStyle.ForeColor = textWhite;
             dgvInventario.DefaultCellStyle.Font = new Font("Segoe UI", 9f);
             dgvInventario.DefaultCellStyle.SelectionBackColor = bgRowHover;
             dgvInventario.DefaultCellStyle.SelectionForeColor = accentGreen;
-            dgvInventario.DefaultCellStyle.Padding = new Padding(6, 0, 6, 0);
+            dgvInventario.DefaultCellStyle.Padding = new Padding(10, 0, 10, 0);
 
-            // SOLO CellPainting, sin CellFormatting
             dgvInventario.CellPainting += DgvInventario_CellPainting;
 
             containerTabla.Controls.Add(dgvInventario);
+            lblTablaTitulo.BringToFront();
+            dgvInventario.BringToFront();
 
             mainLayout.Controls.Add(headerPanel, 0, 0);
             mainLayout.Controls.Add(kpiLayout, 0, 1);
@@ -191,7 +268,43 @@ namespace SUSTENTACION.PanelTrabajador
             {
                 string headerText = dgvInventario.Columns[e.ColumnIndex].HeaderText;
 
-                // Verificamos si es la columna de Estado
+                // 🔥 Columna de observaciones: se ve en color amarillo si tiene contenido
+                if (headerText.IndexOf("observación", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    headerText.IndexOf("observacion", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    string valor = dgvInventario.Rows[e.RowIndex].Cells[e.ColumnIndex].Value?.ToString() ?? "";
+
+                    e.PaintBackground(e.CellBounds, true);
+
+                    if (!string.IsNullOrWhiteSpace(valor) && valor != "—")
+                    {
+                        TextRenderer.DrawText(
+                            e.Graphics,
+                            valor,
+                            new Font("Segoe UI", 8.5f, FontStyle.Italic),
+                            e.CellBounds,
+                            Color.FromArgb(245, 200, 100),
+                            TextFormatFlags.Left | TextFormatFlags.VerticalCenter |
+                            TextFormatFlags.EndEllipsis | TextFormatFlags.PathEllipsis
+                        );
+                    }
+                    else
+                    {
+                        TextRenderer.DrawText(
+                            e.Graphics,
+                            "—",
+                            new Font("Segoe UI", 9f),
+                            e.CellBounds,
+                            textMuted,
+                            TextFormatFlags.Left | TextFormatFlags.VerticalCenter
+                        );
+                    }
+
+                    e.Handled = true;
+                    return;
+                }
+
+                // Columna de Estado (badges)
                 if (headerText.IndexOf("Estado", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     // Obtenemos el valor directamente de la fila del DataGridView
@@ -218,6 +331,10 @@ namespace SUSTENTACION.PanelTrabajador
                         badgeBg = Color.FromArgb(239, 68, 68); // Rojo
                     else if (estadoLower == "reservado")
                         badgeBg = Color.FromArgb(247, 127, 0); // Naranja
+                    else if (estadoLower == "en observación" ||
+                             estadoLower == "en observacion" ||
+                             estadoLower == "con observaciones")
+                        badgeBg = Color.FromArgb(245, 158, 11); // Amarillo
 
                     // Dibujamos el badge redondeado
                     Rectangle badgeRect = new Rectangle(
@@ -270,17 +387,50 @@ namespace SUSTENTACION.PanelTrabajador
 
         private Panel CrearTarjetaKPI(string titulo, string valorInicial, Color colorIcono, string icono, out Label lblValOut)
         {
-            Panel card = new Panel { Dock = DockStyle.Fill, BackColor = bgCard, Margin = new Padding(4) };
-            AplicarBordesRedondeados(card, 8);
+            Panel card = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = bgCard,
+                Margin = new Padding(5)
+            };
+            AplicarBordesRedondeados(card, 12);
 
-            Panel iconBg = new Panel { Size = new Size(34, 34), Location = new Point(12, 12), BackColor = colorIcono };
-            AplicarBordesRedondeados(iconBg, 6);
+            // Ícono más grande
+            Panel iconBg = new Panel
+            {
+                Size = new Size(52, 52),
+                Location = new Point(22, 22),
+                BackColor = colorIcono
+            };
+            AplicarBordesRedondeados(iconBg, 12);
 
-            Label lblIcon = new Label { Text = icono, Font = new Font("Segoe UI", 9f), ForeColor = Color.White, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter };
+            Label lblIcon = new Label
+            {
+                Text = icono,
+                Font = new Font("Segoe UI", 16f),
+                ForeColor = Color.White,
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleCenter
+            };
             iconBg.Controls.Add(lblIcon);
 
-            Label lblTitle = new Label { Text = titulo, Font = new Font("Segoe UI", 7.5f, FontStyle.Bold), ForeColor = textMuted, Location = new Point(54, 12), AutoSize = true };
-            Label lblVal = new Label { Text = valorInicial, Font = new Font("Segoe UI", 12f, FontStyle.Bold), ForeColor = textWhite, Location = new Point(54, 26), AutoSize = true };
+            Label lblTitle = new Label
+            {
+                Text = titulo,
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                ForeColor = textMuted,
+                Location = new Point(88, 24),
+                AutoSize = true
+            };
+
+            Label lblVal = new Label
+            {
+                Text = valorInicial,
+                Font = new Font("Segoe UI", 22f, FontStyle.Bold),
+                ForeColor = textWhite,
+                Location = new Point(85, 44),
+                AutoSize = true
+            };
 
             lblValOut = lblVal;
             card.Controls.AddRange(new Control[] { iconBg, lblTitle, lblVal });
@@ -324,23 +474,19 @@ namespace SUSTENTACION.PanelTrabajador
             {
                 NpgsqlConnection con = conexionDB.ObtenerConexion();
 
-                // 1. Métricas de la tabla 'equipos'
-                // CAMBIO CLAVE: Usamos COUNT(*) para contar los EQUIPOS (modelos) registrados,
-                // en lugar de SUM(stock) que suma las unidades físicas.
                 string sqlEquipos = @"SELECT 
-                COUNT(*) AS total_equipos,
-                IFNULL(SUM(CASE WHEN LOWER(TRIM(estado)) = 'disponible' THEN stock ELSE 0 END), 0) AS disponibles,
-                IFNULL(SUM(CASE WHEN LOWER(TRIM(estado)) = 'en evento' THEN stock ELSE 0 END), 0) AS en_evento,
-                IFNULL(SUM(CASE WHEN LOWER(TRIM(estado)) = 'reservado' THEN stock ELSE 0 END), 0) AS reservados,
-                IFNULL(SUM(CASE WHEN LOWER(TRIM(estado)) IN ('dañado', 'en mantenimiento', 'mantenimiento') THEN stock ELSE 0 END), 0) AS danados
-             FROM equipos";
+                    COUNT(*) AS total_equipos,
+                    COALESCE(SUM(CASE WHEN LOWER(TRIM(estado)) = 'disponible' THEN stock ELSE 0 END), 0) AS disponibles,
+                    COALESCE(SUM(CASE WHEN LOWER(TRIM(estado)) = 'en evento' THEN stock ELSE 0 END), 0) AS en_evento,
+                    COALESCE(SUM(CASE WHEN LOWER(TRIM(estado)) = 'reservado' THEN stock ELSE 0 END), 0) AS reservados,
+                    COALESCE(SUM(CASE WHEN LOWER(TRIM(estado)) IN ('dañado', 'en mantenimiento', 'mantenimiento') THEN stock ELSE 0 END), 0) AS danados
+                 FROM equipos";
 
                 NpgsqlCommand cmdEq = new NpgsqlCommand(sqlEquipos, con);
                 using (NpgsqlDataReader rd = cmdEq.ExecuteReader())
                 {
                     if (rd.Read())
                     {
-                        // Asignamos el CONTEO de equipos al label de Total Unidades
                         lblValTotal.Text = rd["total_equipos"].ToString();
                         lblValDisponibles.Text = rd["disponibles"].ToString();
                         lblValEvento.Text = rd["en_evento"].ToString();
@@ -349,8 +495,7 @@ namespace SUSTENTACION.PanelTrabajador
                     }
                 }
 
-                // 2. Métricas de la tabla 'eventos'
-                string sqlHoy = "SELECT COUNT(*) FROM eventos WHERE DATE(fecha) = CURDATE()";
+                string sqlHoy = "SELECT COUNT(*) FROM eventos WHERE DATE(fecha) = CURRENT_DATE";
                 NpgsqlCommand cmdHoy = new NpgsqlCommand(sqlHoy, con);
                 object resHoy = cmdHoy.ExecuteScalar();
                 lblValDevuelvenHoy.Text = resHoy != null ? resHoy.ToString() : "0";
@@ -372,32 +517,50 @@ namespace SUSTENTACION.PanelTrabajador
             {
                 NpgsqlConnection con = conexionDB.ObtenerConexion();
 
-                string query = @"SELECT 
-                    id AS 'ID', 
-                    codigo AS 'Código / SKU', 
-                    nombre AS 'Equipo / Modelo', 
-                    categoria AS 'Categoría', 
-                    ubicacion AS 'Ubicación', 
-                    stock AS 'Stock', 
-                    estado AS 'Estado', 
-                    descripcion AS 'Descripción' 
-                 FROM equipos WHERE 1=1";
+                // Query simple con LEFT JOIN
+                string query = @"
+                    SELECT 
+                        e.id AS ""ID"",
+                        e.codigo AS ""Código"",
+                        e.nombre AS ""Equipo"",
+                        e.categoria AS ""Categoría"",
+                        e.ubicacion AS ""Ubicación"",
+                        e.stock AS ""Stock"",
+                        e.estado AS ""Estado"",
+                        COALESCE(r.observaciones, '') AS ""Últ. observación"",
+                        COALESCE(TO_CHAR(r.fecha_retorno, 'DD/MM/YYYY'), '') AS ""Últ. retorno""
+                    FROM equipos e
+                    LEFT JOIN retornos r ON r.id_equipo = e.id
+                        AND r.fecha_retorno = (
+                            SELECT MAX(r2.fecha_retorno) 
+                            FROM retornos r2 
+                            WHERE r2.id_equipo = e.id
+                        )
+                    WHERE 1=1";
 
-                if (txtBuscar != null && !string.IsNullOrWhiteSpace(txtBuscar.Text) && txtBuscar.Text != "Buscar equipo...")
-                    query += " AND (nombre LIKE @busqueda OR codigo LIKE @busqueda OR categoria LIKE @busqueda)";
+                if (txtBuscar != null &&
+                    !string.IsNullOrWhiteSpace(txtBuscar.Text) &&
+                    !txtBuscar.Text.StartsWith("Buscar"))
+                {
+                    query += " AND (e.nombre ILIKE @busqueda OR e.codigo ILIKE @busqueda OR e.categoria ILIKE @busqueda)";
+                }
 
                 if (cmbCategoria != null && cmbCategoria.SelectedIndex > 0)
-                    query += " AND categoria = @categoria";
+                    query += " AND e.categoria = @categoria";
 
                 if (cmbEstado != null && cmbEstado.SelectedIndex > 0)
-                    query += " AND estado = @estado";
+                    query += " AND e.estado = @estado";
 
-                query += " ORDER BY id ASC";
+                query += " ORDER BY e.id ASC";
 
                 NpgsqlCommand cmd = new NpgsqlCommand(query, con);
 
-                if (txtBuscar != null && !string.IsNullOrWhiteSpace(txtBuscar.Text) && txtBuscar.Text != "Buscar equipo...")
+                if (txtBuscar != null &&
+                    !string.IsNullOrWhiteSpace(txtBuscar.Text) &&
+                    !txtBuscar.Text.StartsWith("Buscar"))
+                {
                     cmd.Parameters.AddWithValue("@busqueda", "%" + txtBuscar.Text.Trim() + "%");
+                }
 
                 if (cmbCategoria != null && cmbCategoria.SelectedIndex > 0)
                     cmd.Parameters.AddWithValue("@categoria", cmbCategoria.SelectedItem.ToString());
@@ -409,11 +572,46 @@ namespace SUSTENTACION.PanelTrabajador
                 DataTable dt = new DataTable();
                 adapter.Fill(dt);
 
+                // 🔍 DEBUG: ver cuántas filas vienen
+                System.Diagnostics.Debug.WriteLine("FILAS: " + dt.Rows.Count);
+                if (dt.Rows.Count > 0)
+                {
+                    System.Diagnostics.Debug.WriteLine("COLUMNAS: " + string.Join(", ", dt.Columns.Cast<DataColumn>().Select(c => c.ColumnName)));
+                }
+
+                // 🔍 DEBUG: mostrar cuántas filas vienen
+                MessageBox.Show(
+                    $"Filas: {dt.Rows.Count}\n" +
+                    $"Columnas: {dt.Columns.Count}\n" +
+                    $"Nombres: {string.Join(", ", dt.Columns.Cast<System.Data.DataColumn>().Select(c => c.ColumnName))}",
+                    "Debug Query");
+
                 dgvInventario.DataSource = dt;
+
+                // Ajustar anchos
+                if (dgvInventario.Columns.Contains("ID"))
+                    dgvInventario.Columns["ID"].FillWeight = 30;
+                if (dgvInventario.Columns.Contains("Código"))
+                    dgvInventario.Columns["Código"].FillWeight = 70;
+                if (dgvInventario.Columns.Contains("Equipo"))
+                    dgvInventario.Columns["Equipo"].FillWeight = 100;
+                if (dgvInventario.Columns.Contains("Categoría"))
+                    dgvInventario.Columns["Categoría"].FillWeight = 60;
+                if (dgvInventario.Columns.Contains("Ubicación"))
+                    dgvInventario.Columns["Ubicación"].FillWeight = 55;
+                if (dgvInventario.Columns.Contains("Stock"))
+                    dgvInventario.Columns["Stock"].FillWeight = 35;
+                if (dgvInventario.Columns.Contains("Estado"))
+                    dgvInventario.Columns["Estado"].FillWeight = 60;
+                if (dgvInventario.Columns.Contains("Últ. retorno"))
+                    dgvInventario.Columns["Últ. retorno"].FillWeight = 55;
+                if (dgvInventario.Columns.Contains("Últ. observación"))
+                    dgvInventario.Columns["Últ. observación"].FillWeight = 120;
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Error al cargar inventario: " + ex.Message, "Error MySQL", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("Error al cargar inventario:\n" + ex.Message,
+                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally
             {
@@ -429,13 +627,13 @@ namespace SUSTENTACION.PanelTrabajador
                 NpgsqlConnection con = conexionDB.ObtenerConexion();
 
                 string query = @"SELECT 
-                            id AS 'ID Evento', 
-                            titulo AS 'Evento', 
-                            fecha AS 'Fecha', 
-                            horario AS 'Horario', 
-                            detalles AS 'Detalles'
+                            id AS ""ID Evento"", 
+                            titulo AS ""Evento"", 
+                            fecha AS ""Fecha"", 
+                            horario AS ""Horario"", 
+                            detalles AS ""Detalles""
                          FROM eventos 
-                         WHERE DATE(fecha) = CURDATE()";
+                         WHERE DATE(fecha) = CURRENT_DATE";
 
                 NpgsqlCommand cmd = new NpgsqlCommand(query, con);
                 NpgsqlDataAdapter adapter = new NpgsqlDataAdapter(cmd);

@@ -204,7 +204,15 @@ namespace SUSTENTACION.PanelTrabajador
             {
                 NpgsqlConnection con = conexionDB.ObtenerConexion();
 
+                // 🔥 Verificar que la conexión esté viva
+                if (con.State != System.Data.ConnectionState.Open)
+                {
+                    con.Open();
+                }
+
+                // ==========================================
                 // 1. Obtener la salida del día
+                // ==========================================
                 string querySalida = @"
                     SELECT id_salida, encargado, ubicacion
                     FROM salidas
@@ -212,20 +220,23 @@ namespace SUSTENTACION.PanelTrabajador
                       AND (estado IS NULL OR estado <> 'Devuelto')
                     LIMIT 1";
 
+                int idSalidaTmp = 0;
+                string encargado = "";
+                string ubicacion = "";
+
+                // 🔥 Usar un bloque separado para el reader
                 using (NpgsqlCommand cmd = new NpgsqlCommand(querySalida, con))
                 {
+                    cmd.CommandTimeout = 60;
                     cmd.Parameters.AddWithValue("@fecha", fechaSeleccionada.Date);
+
                     using (NpgsqlDataReader reader = cmd.ExecuteReader())
                     {
                         if (reader.Read())
                         {
-                            idSalida = Convert.ToInt32(reader["id_salida"]);
-                            string encargado = reader["encargado"].ToString();
-                            string ubicacion = reader["ubicacion"].ToString();
-
-                            lblSalidaInfo.Text =
-                                $"Salida del {fechaSeleccionada:dd/MM/yyyy}   |   " +
-                                $"Encargado: {encargado}   |   Ubicación: {ubicacion}";
+                            idSalidaTmp = Convert.ToInt32(reader["id_salida"]);
+                            encargado = reader["encargado"].ToString();
+                            ubicacion = reader["ubicacion"].ToString();
                         }
                         else
                         {
@@ -236,7 +247,15 @@ namespace SUSTENTACION.PanelTrabajador
                     }
                 }
 
+                // Guardar fuera del using
+                idSalida = idSalidaTmp;
+                lblSalidaInfo.Text =
+                    $"Salida del {fechaSeleccionada:dd/MM/yyyy}   |   " +
+                    $"Encargado: {encargado}   |   Ubicación: {ubicacion}";
+
+                // ==========================================
                 // 2. Obtener SOLO los equipos que aún NO han sido retornados
+                // ==========================================
                 string queryEquipos = @"
                     SELECT e.id, e.codigo, e.nombre
                     FROM equipos e
@@ -251,7 +270,9 @@ namespace SUSTENTACION.PanelTrabajador
 
                 using (NpgsqlCommand cmd = new NpgsqlCommand(queryEquipos, con))
                 {
+                    cmd.CommandTimeout = 60;
                     cmd.Parameters.AddWithValue("@salida", idSalida);
+
                     using (NpgsqlDataReader reader = cmd.ExecuteReader())
                     {
                         while (reader.Read())
@@ -266,20 +287,23 @@ namespace SUSTENTACION.PanelTrabajador
                     }
                 }
 
+                // ==========================================
                 // 3. Si no quedan equipos pendientes
+                // ==========================================
                 if (equipos.Count == 0)
                 {
                     lblSinEquipos.Visible = true;
                     lblContador.Visible = false;
 
-                    // Ocultar botón de retornar
                     var btnRet = this.Controls.Find("btnRetornar", true);
                     if (btnRet.Length > 0) btnRet[0].Enabled = false;
 
                     return;
                 }
 
+                // ==========================================
                 // 4. Crear tarjetas
+                // ==========================================
                 foreach (var eq in equipos)
                 {
                     CrearTarjetaEquipo(eq);
@@ -289,7 +313,11 @@ namespace SUSTENTACION.PanelTrabajador
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Error al cargar datos:\n" + ex.Message,
+                string msg = ex.Message;
+                if (ex.InnerException != null)
+                    msg += "\n\nDetalle: " + ex.InnerException.Message;
+
+                MessageBox.Show("Error al cargar datos:\n" + msg,
                     "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally
@@ -537,6 +565,7 @@ namespace SUSTENTACION.PanelTrabajador
                     }
 
                     // UPDATE estado del equipo
+                    // UPDATE estado del equipo + SUBIR STOCK
                     string nuevoEstado = eq.Estado == "Buen estado"
                         ? "Disponible"
                         : eq.Estado == "Presenta fallas"
@@ -545,7 +574,8 @@ namespace SUSTENTACION.PanelTrabajador
 
                     string updateEquipo = @"
                         UPDATE equipos
-                        SET estado = @estado
+                        SET estado = @estado,
+                            stock = stock + 1
                         WHERE id = @id";
 
                     using (NpgsqlCommand cmdEq = new NpgsqlCommand(updateEquipo, con, transaccion))

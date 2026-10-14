@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 
 namespace SUSTENTACION.PanelTrabajador
@@ -9,18 +10,24 @@ namespace SUSTENTACION.PanelTrabajador
     public class FormSalidaEquipo : Form
     {
         // ==========================================
-        // PALETA DE COLORES
+        // PALETA PREMIUM PÚRPURA
         // ==========================================
-        private readonly Color fondo = Color.FromArgb(17, 19, 32);
-        private readonly Color tarjeta = Color.FromArgb(26, 29, 46);
-        private readonly Color campo = Color.FromArgb(37, 41, 62);
-        private readonly Color morado = Color.FromArgb(100, 88, 245);
-        private readonly Color blanco = Color.FromArgb(245, 246, 255);
-        private readonly Color gris = Color.FromArgb(158, 164, 188);
-        private readonly Color verde = Color.FromArgb(22, 177, 127);
-        private readonly Color naranja = Color.FromArgb(255, 160, 60);
-        private readonly Color rojo = Color.FromArgb(230, 80, 80);
-        private readonly Color amarillo = Color.FromArgb(245, 200, 70);
+        private readonly Color fondo = Color.FromArgb(10, 9, 18);           // Más oscuro
+        private readonly Color tarjeta = Color.FromArgb(30, 28, 48);        // Más claro (contraste)
+        private readonly Color campo = Color.FromArgb(45, 42, 68);          // Más claro aún
+        private readonly Color tarjetaHover = Color.FromArgb(35, 34, 50);   // Hover
+        private readonly Color campoFocus = Color.FromArgb(45, 44, 70);
+        private readonly Color morado = Color.FromArgb(124, 92, 255);       // Acento
+        private readonly Color moradoHover = Color.FromArgb(145, 118, 255);
+        private readonly Color moradoSuave = Color.FromArgb(50, 40, 90);
+        private readonly Color blanco = Color.FromArgb(245, 243, 255);      // Texto
+        private readonly Color gris = Color.FromArgb(150, 148, 175);        // Texto secundario
+        private readonly Color grisOscuro = Color.FromArgb(80, 78, 100);    // Bordes
+        private readonly Color verde = Color.FromArgb(46, 204, 148);
+        private readonly Color verdeHover = Color.FromArgb(60, 220, 165);
+        private readonly Color naranja = Color.FromArgb(255, 145, 80);
+        private readonly Color rojo = Color.FromArgb(240, 90, 110);
+        private readonly Color amarillo = Color.FromArgb(255, 210, 100);
 
         // ==========================================
         // DATOS RECIBIDOS
@@ -62,7 +69,6 @@ namespace SUSTENTACION.PanelTrabajador
         private Label lblEstadoMapa;
         private bool mapaListo = false;
         private LugarEvento lugarSeleccionado = null;
-        private bool mapaInicializado = false;
         private string campoActivoParaMapa = "direccion";
 
         // ==========================================
@@ -135,7 +141,6 @@ namespace SUSTENTACION.PanelTrabajador
             datosEvento.FechaInicio = fecha;
             datosEvento.FechaFin = fecha;
 
-            // 🆕 Redimensionar el mapa cuando cambia el tamaño de la ventana
             this.Resize += (s, e) =>
             {
                 try
@@ -157,27 +162,37 @@ namespace SUSTENTACION.PanelTrabajador
         // ==========================================
         private void CrearInterfazBase()
         {
-            this.Text = "ARTEMUSA | Registrar salida audiovisual";
-            this.Size = new Size(1250, 830);
-            this.MinimumSize = new Size(1080, 730);
-            this.StartPosition = FormStartPosition.CenterParent;
+            this.Text = "ARTEMUSA | Registrar salida de equipos audiovisuales";
+            this.Size = new Size(1400, 900);
+            this.MinimumSize = new Size(1200, 800);
+            this.WindowState = FormWindowState.Maximized;
             this.BackColor = fondo;
             this.Font = new Font("Segoe UI", 9);
             this.FormBorderStyle = FormBorderStyle.Sizable;
             this.MaximizeBox = true;
+            this.WindowState = FormWindowState.Maximized;
 
             panelHeader = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = 135,
+                Height = 142,
                 BackColor = fondo
             };
             this.Controls.Add(panelHeader);
 
+            // Línea morada decorativa
+            Panel lineaMorada = new Panel
+            {
+                Dock = DockStyle.Bottom,
+                Height = 2,
+                BackColor = morado
+            };
+            panelHeader.Controls.Add(lineaMorada);
+
             Label titulo = new Label
             {
-                Text = "REGISTRAR SALIDA DE EQUIPOS AUDIOVISUALES",
-                Font = new Font("Segoe UI", 16, FontStyle.Bold),
+                Text = "Registrar salida de equipos audiovisuales",
+                Font = new Font("Segoe UI", 19, FontStyle.Bold),
                 ForeColor = blanco,
                 Location = new Point(24, 15),
                 AutoSize = true
@@ -185,9 +200,9 @@ namespace SUSTENTACION.PanelTrabajador
             panelHeader.Controls.Add(titulo);
 
             string[] nombresPasos = { "Evento", "Lugares", "Personal", "Equipos", "Resumen" };
-            int anchoPaso = 200;
+            int anchoPaso = 225;
             int xInicial = 24;
-            int yPaso = 70;
+            int yPaso = 79;
 
             for (int i = 0; i < TOTAL_PASOS; i++)
             {
@@ -199,11 +214,12 @@ namespace SUSTENTACION.PanelTrabajador
                     Text = numPaso.ToString(),
                     Font = new Font("Segoe UI", 11, FontStyle.Bold),
                     ForeColor = blanco,
-                    BackColor = Color.FromArgb(50, 55, 80),
-                    Size = new Size(38, 38),
+                    BackColor = Color.FromArgb(45, 55, 85),
+                    Size = new Size(40, 40),
                     Location = new Point(x, yPaso),
                     TextAlign = ContentAlignment.MiddleCenter
                 };
+                AplicarBordeRedondeado(lblNum, 20);
                 panelHeader.Controls.Add(lblNum);
 
                 Label lblNombre = new Label
@@ -211,7 +227,7 @@ namespace SUSTENTACION.PanelTrabajador
                     Text = nombresPasos[i],
                     Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
                     ForeColor = gris,
-                    Location = new Point(x + 46, yPaso + 10),
+                    Location = new Point(x + 50, yPaso + 11),
                     AutoSize = true
                 };
                 panelHeader.Controls.Add(lblNombre);
@@ -222,9 +238,9 @@ namespace SUSTENTACION.PanelTrabajador
                 {
                     Panel linea = new Panel
                     {
-                        BackColor = Color.FromArgb(50, 55, 80),
-                        Size = new Size(anchoPaso - 46, 2),
-                        Location = new Point(x + 42, yPaso + 18)
+                        BackColor = Color.FromArgb(45, 55, 85),
+                        Size = new Size(anchoPaso - 56, 2),
+                        Location = new Point(x + 45, yPaso + 19)
                     };
                     panelHeader.Controls.Add(linea);
                 }
@@ -243,49 +259,78 @@ namespace SUSTENTACION.PanelTrabajador
             panelFooter = new Panel
             {
                 Dock = DockStyle.Bottom,
-                Height = 75,
-                BackColor = fondo
+                Height = 80,
+                BackColor = Color.FromArgb(18, 29, 48)
             };
             this.Controls.Add(panelFooter);
+            panelFooter.BringToFront();
 
             btnAnterior = new Button
             {
                 Text = "←  ANTERIOR",
                 Width = 160,
-                Height = 45,
-                Location = new Point(24, 15),
+                Height = 48,
+                Location = new Point(24, 16),
                 FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(65, 68, 88),
+                BackColor = Color.FromArgb(45, 55, 85),
                 ForeColor = blanco,
                 Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
                 Cursor = Cursors.Hand,
                 Enabled = false
             };
             btnAnterior.FlatAppearance.BorderSize = 0;
+            btnAnterior.FlatAppearance.MouseOverBackColor = Color.FromArgb(60, 72, 105);
             btnAnterior.Click += (s, e) => AnteriorPaso();
+            AplicarBordeRedondeado(btnAnterior, 8);
             panelFooter.Controls.Add(btnAnterior);
 
             btnSiguiente = new Button
             {
                 Text = "SIGUIENTE  →",
-                Width = 220,
-                Height = 45,
-                Location = new Point(980, 15),
+                Width = 230,
+                Height = 48,
+                Location = new Point(1050, 16),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = morado,
                 ForeColor = blanco,
-                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+                Font = new Font("Segoe UI", 10f, FontStyle.Bold),
                 Cursor = Cursors.Hand,
                 Anchor = AnchorStyles.Top | AnchorStyles.Right
             };
             btnSiguiente.FlatAppearance.BorderSize = 0;
+            btnSiguiente.FlatAppearance.MouseOverBackColor = moradoHover;
             btnSiguiente.Click += (s, e) => SiguientePaso();
+            AplicarBordeRedondeado(btnSiguiente, 8);
             panelFooter.Controls.Add(btnSiguiente);
 
             panelFooter.Resize += (s, e) =>
             {
                 btnSiguiente.Left = panelFooter.Width - btnSiguiente.Width - 24;
             };
+        }
+
+        // ==========================================
+        // BORDE REDONDEADO
+        // ==========================================
+        private void AplicarBordeRedondeado(Control control, int radio)
+        {
+            Action recalcular = () =>
+            {
+                if (control.Width <= 0 || control.Height <= 0) return;
+
+                using (var path = new GraphicsPath())
+                {
+                    path.AddArc(0, 0, radio, radio, 180, 90);
+                    path.AddArc(control.Width - radio, 0, radio, radio, 270, 90);
+                    path.AddArc(control.Width - radio, control.Height - radio, radio, radio, 0, 90);
+                    path.AddArc(0, control.Height - radio, radio, radio, 90, 90);
+                    path.CloseAllFigures();
+                    control.Region = new Region(path);
+                }
+            };
+
+            control.Resize += (s, e) => recalcular();
+            recalcular();
         }
 
         // ==========================================
@@ -310,7 +355,7 @@ namespace SUSTENTACION.PanelTrabajador
                 }
                 else
                 {
-                    lblPasos[i].BackColor = Color.FromArgb(50, 55, 80);
+                    lblPasos[i].BackColor = Color.FromArgb(45, 55, 85);
                     lblPasos[i].Text = numPaso.ToString();
                 }
             }
@@ -321,11 +366,13 @@ namespace SUSTENTACION.PanelTrabajador
             {
                 btnSiguiente.Text = "✓  GUARDAR TODO";
                 btnSiguiente.BackColor = verde;
+                btnSiguiente.FlatAppearance.MouseOverBackColor = verdeHover;
             }
             else
             {
                 btnSiguiente.Text = "SIGUIENTE  →";
                 btnSiguiente.BackColor = morado;
+                btnSiguiente.FlatAppearance.MouseOverBackColor = moradoHover;
             }
 
             switch (pasoActual)
@@ -374,80 +421,137 @@ namespace SUSTENTACION.PanelTrabajador
         }
 
         // ==========================================
-        // PASO 1: DATOS DEL EVENTO
+        // PASO 1: DATOS DEL EVENTO — DISEÑO CARD GRID
         // ==========================================
         private void MostrarPaso1_Evento()
         {
+            int anchoDisponible = panelContenido.ClientSize.Width;
+
+            // ════════════════════════════════════════════
+            // TÍTULO
+            // ════════════════════════════════════════════
             Label titulo = new Label
             {
                 Text = "①  DATOS DEL EVENTO",
-                Font = new Font("Segoe UI", 14, FontStyle.Bold),
+                Font = new Font("Segoe UI", 22, FontStyle.Bold),
                 ForeColor = blanco,
-                Location = new Point(0, 0),
-                AutoSize = true
+                Location = new Point(0, 25),
+                Size = new Size(anchoDisponible, 45),
+                TextAlign = ContentAlignment.MiddleCenter
             };
+            titulo.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             panelContenido.Controls.Add(titulo);
 
             Label subtitulo = new Label
             {
-                Text = "Información básica del evento o servicio audiovisual",
-                Font = new Font("Segoe UI", 9),
+                Text = "Completa la información del evento audiovisual",
+                Font = new Font("Segoe UI", 10.5f),
                 ForeColor = gris,
-                Location = new Point(0, 35),
-                AutoSize = true
+                Location = new Point(0, 75),
+                Size = new Size(anchoDisponible, 24),
+                TextAlign = ContentAlignment.MiddleCenter
             };
+            subtitulo.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             panelContenido.Controls.Add(subtitulo);
 
-            Panel tarjeta1 = new Panel
+            Panel lineaDeco = new Panel
             {
-                Location = new Point(0, 75),
-                Size = new Size(720, 470),
-                BackColor = tarjeta,
-                Padding = new Padding(25)
+                Size = new Size(120, 3),
+                BackColor = morado,
+                Location = new Point((anchoDisponible - 120) / 2, 108)
             };
-            panelContenido.Controls.Add(tarjeta1);
+            lineaDeco.Anchor = AnchorStyles.Top;
+            AplicarBordeRedondeado(lineaDeco, 2);
+            panelContenido.Controls.Add(lineaDeco);
 
-            int y = 20;
+            // ════════════════════════════════════════════
+            // GRID DE 2 COLUMNAS
+            // ════════════════════════════════════════════
+            int anchoTotal = Math.Min(1300, anchoDisponible - 100);
+            int gap = 24;
+            int anchoCol = (anchoTotal - gap) / 2;
+            int altoTarjeta = 480;
+            int xInicio = (anchoDisponible - anchoTotal) / 2;
+            if (xInicio < 30) xInicio = 30;
+            int yInicio = 150;
 
-            tarjeta1.Controls.Add(new Label
+            // ════════════════════════════════════════════
+            // TARJETA IZQUIERDA: INFORMACIÓN BÁSICA
+            // ════════════════════════════════════════════
+            Panel cardIzq = CrearTarjetaPanel(xInicio, yInicio, anchoCol, altoTarjeta);
+
+            // Header con ícono
+            cardIzq.Controls.Add(new Label
             {
-                Text = "Nombre del evento *",
-                Font = new Font("Segoe UI", 9, FontStyle.Bold),
-                ForeColor = blanco,
-                Location = new Point(25, y),
+                Text = "📋",
+                Font = new Font("Segoe UI", 18),
+                ForeColor = morado,
+                Location = new Point(30, 26),
+                Size = new Size(38, 38),
+                TextAlign = ContentAlignment.MiddleCenter
+            });
+            cardIzq.Controls.Add(new Label
+            {
+                Text = "INFORMACIÓN BÁSICA",
+                Font = new Font("Segoe UI", 11, FontStyle.Bold),
+                ForeColor = morado,
+                Location = new Point(78, 34),
                 AutoSize = true
             });
+
+            // Línea separadora
+            Panel sepIzq = new Panel
+            {
+                Location = new Point(30, 70),
+                Size = new Size(anchoCol - 60, 1),
+                BackColor = Color.FromArgb(60, 55, 90)
+            };
+            cardIzq.Controls.Add(sepIzq);
+
+            int xIzq = 30;
+            int anchoCampoIzq = anchoCol - 60;
+            int yIzq = 90;
+
+            // ─── Nombre ───
+            AgregarLabelConAsterisco(cardIzq, "Nombre del evento", xIzq, yIzq);
+
+            Panel panelNombre = new Panel
+            {
+                Location = new Point(xIzq, yIzq + 28),
+                Size = new Size(anchoCampoIzq, 44),
+                BackColor = campo,
+                Padding = new Padding(14, 0, 14, 0)
+            };
+            AplicarBordeRedondeado(panelNombre, 10);
+
             TextBox txtNombreEvento = new TextBox
             {
-                Location = new Point(25, y + 25),
-                Size = new Size(650, 32),
+                Location = new Point(14, 11),
+                Size = new Size(anchoCampoIzq - 28, 22),
                 BackColor = campo,
                 ForeColor = blanco,
-                BorderStyle = BorderStyle.FixedSingle,
-                Font = new Font("Segoe UI", 10),
+                BorderStyle = BorderStyle.None,
+                Font = new Font("Segoe UI", 10.5f),
                 Text = datosEvento.Nombre
             };
             txtNombreEvento.TextChanged += (s, e) => datosEvento.Nombre = txtNombreEvento.Text;
-            tarjeta1.Controls.Add(txtNombreEvento);
-            y += 70;
+            panelNombre.Controls.Add(txtNombreEvento);
+            cardIzq.Controls.Add(panelNombre);
+            yIzq += 88;
 
-            tarjeta1.Controls.Add(new Label
-            {
-                Text = "Tipo de evento *",
-                Font = new Font("Segoe UI", 9, FontStyle.Bold),
-                ForeColor = blanco,
-                Location = new Point(25, y),
-                AutoSize = true
-            });
+            // ─── Tipo de evento ───
+            AgregarLabelConAsterisco(cardIzq, "Tipo de evento", xIzq, yIzq);
+
             ComboBox cboTipoEvento = new ComboBox
             {
-                Location = new Point(25, y + 25),
-                Size = new Size(650, 32),
+                Location = new Point(xIzq, yIzq + 28),
+                Size = new Size(anchoCampoIzq, 44),
                 DropDownStyle = ComboBoxStyle.DropDownList,
                 BackColor = campo,
                 ForeColor = blanco,
                 FlatStyle = FlatStyle.Flat,
-                Font = new Font("Segoe UI", 10)
+                Font = new Font("Segoe UI", 10.5f),
+                DropDownHeight = 260
             };
             cboTipoEvento.Items.AddRange(new object[]
             {
@@ -461,97 +565,325 @@ namespace SUSTENTACION.PanelTrabajador
             if (cboTipoEvento.SelectedIndex < 0) cboTipoEvento.SelectedIndex = 0;
             cboTipoEvento.SelectedIndexChanged += (s, e) =>
                 datosEvento.TipoEvento = cboTipoEvento.SelectedItem?.ToString() ?? "Conferencia";
-            tarjeta1.Controls.Add(cboTipoEvento);
-            y += 70;
+            cardIzq.Controls.Add(cboTipoEvento);
+            yIzq += 88;
 
-            tarjeta1.Controls.Add(new Label
+            // ─── Descripción ───
+            cardIzq.Controls.Add(new Label
             {
-                Text = "Fecha y hora de inicio *",
-                Font = new Font("Segoe UI", 9, FontStyle.Bold),
+                Text = "Descripción",
+                Font = new Font("Segoe UI", 10, FontStyle.Bold),
                 ForeColor = blanco,
-                Location = new Point(25, y),
+                Location = new Point(xIzq, yIzq),
                 AutoSize = true
             });
 
-            DateTimePicker dtpFechaInicio = new DateTimePicker
+            Panel panelDesc = new Panel
             {
-                Location = new Point(25, y + 25),
-                Size = new Size(320, 32),
-                Format = DateTimePickerFormat.Short,
-                Font = new Font("Segoe UI", 10),
-                Value = datosEvento.FechaInicio
+                Location = new Point(xIzq, yIzq + 28),
+                Size = new Size(anchoCampoIzq, 130),  // 🔥 más alto
+                BackColor = campo,
+                Padding = new Padding(14, 10, 14, 10)
             };
-            dtpFechaInicio.ValueChanged += (s, e) => datosEvento.FechaInicio = dtpFechaInicio.Value;
-            tarjeta1.Controls.Add(dtpFechaInicio);
+            AplicarBordeRedondeado(panelDesc, 10);
 
-            DateTimePicker dtpHoraInicio = new DateTimePicker
-            {
-                Location = new Point(355, y + 25),
-                Size = new Size(320, 32),
-                Format = DateTimePickerFormat.Time,
-                ShowUpDown = true,
-                Font = new Font("Segoe UI", 10),
-                Value = datosEvento.HoraInicio
-            };
-            dtpHoraInicio.ValueChanged += (s, e) => datosEvento.HoraInicio = dtpHoraInicio.Value;
-            tarjeta1.Controls.Add(dtpHoraInicio);
-            y += 70;
-
-            tarjeta1.Controls.Add(new Label
-            {
-                Text = "Fecha y hora de fin (opcional)",
-                Font = new Font("Segoe UI", 9, FontStyle.Bold),
-                ForeColor = blanco,
-                Location = new Point(25, y),
-                AutoSize = true
-            });
-
-            DateTimePicker dtpFechaFin = new DateTimePicker
-            {
-                Location = new Point(25, y + 25),
-                Size = new Size(320, 32),
-                Format = DateTimePickerFormat.Short,
-                Font = new Font("Segoe UI", 10),
-                Value = datosEvento.FechaFin
-            };
-            dtpFechaFin.ValueChanged += (s, e) => datosEvento.FechaFin = dtpFechaFin.Value;
-            tarjeta1.Controls.Add(dtpFechaFin);
-
-            DateTimePicker dtpHoraFin = new DateTimePicker
-            {
-                Location = new Point(355, y + 25),
-                Size = new Size(320, 32),
-                Format = DateTimePickerFormat.Time,
-                ShowUpDown = true,
-                Font = new Font("Segoe UI", 10),
-                Value = datosEvento.HoraFin
-            };
-            dtpHoraFin.ValueChanged += (s, e) => datosEvento.HoraFin = dtpHoraFin.Value;
-            tarjeta1.Controls.Add(dtpHoraFin);
-            y += 70;
-
-            tarjeta1.Controls.Add(new Label
-            {
-                Text = "Descripción (opcional)",
-                Font = new Font("Segoe UI", 9, FontStyle.Bold),
-                ForeColor = blanco,
-                Location = new Point(25, y),
-                AutoSize = true
-            });
             TextBox txtDescripcionEvento = new TextBox
             {
-                Location = new Point(25, y + 25),
-                Size = new Size(650, 65),
+                Location = new Point(14, 10),
+                Size = new Size(anchoCampoIzq - 28, 110),  // 🔥 más alto
                 Multiline = true,
                 BackColor = campo,
                 ForeColor = blanco,
-                BorderStyle = BorderStyle.FixedSingle,
+                BorderStyle = BorderStyle.None,
                 Font = new Font("Segoe UI", 10),
                 ScrollBars = ScrollBars.Vertical,
                 Text = datosEvento.Descripcion
             };
-            txtDescripcionEvento.TextChanged += (s, e) => datosEvento.Descripcion = txtDescripcionEvento.Text;
-            tarjeta1.Controls.Add(txtDescripcionEvento);
+            txtDescripcionEvento.TextChanged += (s, e) =>
+                datosEvento.Descripcion = txtDescripcionEvento.Text;
+            panelDesc.Controls.Add(txtDescripcionEvento);
+            cardIzq.Controls.Add(panelDesc);
+
+            panelContenido.Controls.Add(cardIzq);
+
+            // ════════════════════════════════════════════
+            // TARJETA DERECHA: FECHA Y HORA
+            // ════════════════════════════════════════════
+            Panel cardDer = CrearTarjetaPanel(xInicio + anchoCol + gap, yInicio, anchoCol, altoTarjeta);
+
+            cardDer.Controls.Add(new Label
+            {
+                Text = "📅",
+                Font = new Font("Segoe UI", 18),
+                ForeColor = morado,
+                Location = new Point(30, 26),
+                Size = new Size(38, 38),
+                TextAlign = ContentAlignment.MiddleCenter
+            });
+            cardDer.Controls.Add(new Label
+            {
+                Text = "FECHA Y HORA",
+                Font = new Font("Segoe UI", 11, FontStyle.Bold),
+                ForeColor = morado,
+                Location = new Point(78, 34),
+                AutoSize = true
+            });
+
+            Panel sepDer = new Panel
+            {
+                Location = new Point(30, 70),
+                Size = new Size(anchoCol - 60, 1),
+                BackColor = Color.FromArgb(60, 55, 90)
+            };
+            cardDer.Controls.Add(sepDer);
+
+            int xDer = 30;
+            int anchoCampoDer = anchoCol - 60;
+            int yDer = 90;
+
+            // ─── Fecha inicio ───
+            AgregarLabelConAsterisco(cardDer, "Fecha de inicio", xDer, yDer);
+
+            DateTimePicker dtpFechaInicio = CrearFechaPicker(xDer, yDer + 28, anchoCampoDer);
+            dtpFechaInicio.Value = datosEvento.FechaInicio;
+            dtpFechaInicio.ValueChanged += (s, e) => datosEvento.FechaInicio = dtpFechaInicio.Value;
+            cardDer.Controls.Add(dtpFechaInicio);
+            yDer += 88;
+
+            // ─── Hora inicio ───
+            AgregarLabelConAsterisco(cardDer, "Hora de inicio", xDer, yDer);
+            Panel panelHoraIni = CrearSelectorHora(xDer, yDer + 28, anchoCampoDer,
+                datosEvento.HoraInicio, out ComboBox cboHoraIni, out ComboBox cboMinIni);
+            cboHoraIni.SelectedIndexChanged += (s, e) =>
+            {
+                int h = int.Parse(cboHoraIni.SelectedItem.ToString());
+                int m = int.Parse(cboMinIni.SelectedItem.ToString());
+                datosEvento.HoraInicio = DateTime.Today.AddHours(h).AddMinutes(m);
+            };
+            cboMinIni.SelectedIndexChanged += (s, e) =>
+            {
+                int h = int.Parse(cboHoraIni.SelectedItem.ToString());
+                int m = int.Parse(cboMinIni.SelectedItem.ToString());
+                datosEvento.HoraInicio = DateTime.Today.AddHours(h).AddMinutes(m);
+            };
+            cardDer.Controls.Add(panelHoraIni);
+            yDer += 88;
+
+            // ─── Fecha fin ───
+            cardDer.Controls.Add(new Label
+            {
+                Text = "Fecha de fin  (opcional)",
+                Font = new Font("Segoe UI", 10, FontStyle.Bold),
+                ForeColor = blanco,
+                Location = new Point(xDer, yDer),
+                AutoSize = true
+            });
+
+            DateTimePicker dtpFechaFin = CrearFechaPicker(xDer, yDer + 28, anchoCampoDer);
+            dtpFechaFin.Value = datosEvento.FechaFin;
+            dtpFechaFin.ValueChanged += (s, e) => datosEvento.FechaFin = dtpFechaFin.Value;
+            cardDer.Controls.Add(dtpFechaFin);
+            yDer += 88;
+
+            // ─── Hora fin ───
+            cardDer.Controls.Add(new Label
+            {
+                Text = "Hora de fin  (opcional)",
+                Font = new Font("Segoe UI", 10, FontStyle.Bold),
+                ForeColor = blanco,
+                Location = new Point(xDer, yDer),
+                AutoSize = true
+            });
+
+            Panel panelHoraFin = CrearSelectorHora(xDer, yDer + 28, anchoCampoDer,
+                datosEvento.HoraFin, out ComboBox cboHoraFin, out ComboBox cboMinFin);
+            cboHoraFin.SelectedIndexChanged += (s, e) =>
+            {
+                int h = int.Parse(cboHoraFin.SelectedItem.ToString());
+                int m = int.Parse(cboMinFin.SelectedItem.ToString());
+                datosEvento.HoraFin = DateTime.Today.AddHours(h).AddMinutes(m);
+            };
+            cboMinFin.SelectedIndexChanged += (s, e) =>
+            {
+                int h = int.Parse(cboHoraFin.SelectedItem.ToString());
+                int m = int.Parse(cboMinFin.SelectedItem.ToString());
+                datosEvento.HoraFin = DateTime.Today.AddHours(h).AddMinutes(m);
+            };
+            cardDer.Controls.Add(panelHoraFin);
+
+            panelContenido.Controls.Add(cardDer);
+
+            // ════════════════════════════════════════════
+            // CAJA DE CONSEJO (opcional, decorativa)
+            // ════════════════════════════════════════════
+            Panel panelTip = new Panel
+            {
+                Location = new Point(xInicio, yInicio + altoTarjeta + 25),
+                Size = new Size(anchoTotal, 60),
+                BackColor = moradoSuave,
+                Padding = new Padding(0)
+            };
+            AplicarBordeRedondeado(panelTip, 12);
+
+            panelTip.Controls.Add(new Label
+            {
+                Text = "💡",
+                Font = new Font("Segoe UI", 14),
+                ForeColor = morado,
+                Location = new Point(20, 18),
+                Size = new Size(30, 24),
+                TextAlign = ContentAlignment.MiddleCenter
+            });
+
+            panelTip.Controls.Add(new Label
+            {
+                Text = "Consejo: Mientras más detallada sea la información, mejor será el control del evento.",
+                Font = new Font("Segoe UI", 10, FontStyle.Italic),
+                ForeColor = blanco,
+                Location = new Point(55, 20),
+                AutoSize = true
+            });
+
+            panelContenido.Controls.Add(panelTip);
+        }
+
+        // ==========================================
+        // HELPERS DEL PASO 1
+        // ==========================================
+        private Panel CrearTarjetaPanel(int x, int y, int ancho, int alto)
+        {
+            Panel card = new Panel
+            {
+                Location = new Point(x, y),
+                Size = new Size(ancho, alto),
+                BackColor = tarjeta,
+                Padding = new Padding(0),
+                Anchor = AnchorStyles.Top
+            };
+            AplicarBordeRedondeado(card, 16);
+
+            // Borde morado sutil
+            card.Paint += (s, e) =>
+            {
+                using (var pen = new Pen(Color.FromArgb(60, 55, 90), 1.5f))
+                {
+                    e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                    e.Graphics.DrawRectangle(pen, 0, 0, card.Width - 1, card.Height - 1);
+                }
+            };
+
+            return card;
+        }
+
+        private void AgregarLabelConAsterisco(Panel card, string texto, int x, int y)
+        {
+            card.Controls.Add(new Label
+            {
+                Text = texto,
+                Font = new Font("Segoe UI", 10, FontStyle.Bold),
+                ForeColor = blanco,
+                Location = new Point(x, y),
+                AutoSize = true
+            });
+
+            // Asterisco rojo justo después
+            Label lblAster = new Label
+            {
+                Text = " *",
+                Font = new Font("Segoe UI", 10, FontStyle.Bold),
+                ForeColor = rojo,
+                Location = new Point(x + 130, y),
+                AutoSize = true
+            };
+            card.Controls.Add(lblAster);
+        }
+
+        private DateTimePicker CrearFechaPicker(int x, int y, int ancho)
+        {
+            return new DateTimePicker
+            {
+                Location = new Point(x, y),
+                Size = new Size(ancho, 44),
+                Format = DateTimePickerFormat.Custom,
+                CustomFormat = "dddd, dd 'de' MMMM 'de' yyyy",
+                Font = new Font("Segoe UI", 10.5f),
+                CalendarForeColor = blanco,
+                CalendarMonthBackground = tarjeta,
+                CalendarTitleBackColor = morado,
+                CalendarTitleForeColor = blanco,
+                CalendarTrailingForeColor = gris
+            };
+        }
+
+        private Panel CrearSelectorHora(int x, int y, int ancho,
+            DateTime horaInicial,
+            out ComboBox cboHora,
+            out ComboBox cboMin)
+        {
+            Panel panelHora = new Panel
+            {
+                Location = new Point(x, y),
+                Size = new Size(ancho, 44),
+                BackColor = campo
+            };
+            AplicarBordeRedondeado(panelHora, 10);
+
+            // Ícono
+            panelHora.Controls.Add(new Label
+            {
+                Text = "🕐",
+                Font = new Font("Segoe UI", 12),
+                ForeColor = morado,
+                Location = new Point(12, 12),
+                AutoSize = true,
+                BackColor = campo
+            });
+
+            // Combo hora
+            cboHora = new ComboBox
+            {
+                Location = new Point(45, 10),
+                Size = new Size(65, 24),
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                BackColor = campo,
+                ForeColor = blanco,
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Segoe UI", 11)
+            };
+            for (int h = 0; h < 24; h++)
+                cboHora.Items.Add(h.ToString("D2"));
+            cboHora.SelectedIndex = horaInicial.Hour;
+
+            // Separador
+            panelHora.Controls.Add(new Label
+            {
+                Text = ":",
+                Font = new Font("Segoe UI", 12, FontStyle.Bold),
+                ForeColor = blanco,
+                Location = new Point(115, 11),
+                AutoSize = true,
+                BackColor = campo
+            });
+
+            // Combo minuto
+            cboMin = new ComboBox
+            {
+                Location = new Point(130, 10),
+                Size = new Size(65, 24),
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                BackColor = campo,
+                ForeColor = blanco,
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Segoe UI", 11)
+            };
+            for (int m = 0; m < 60; m += 5)
+                cboMin.Items.Add(m.ToString("D2"));
+            cboMin.SelectedIndex = horaInicial.Minute / 5;
+
+            panelHora.Controls.Add(cboHora);
+            panelHora.Controls.Add(cboMin);
+
+            return panelHora;
         }
 
         private bool ValidarPaso1()
@@ -587,30 +919,34 @@ namespace SUSTENTACION.PanelTrabajador
             Label subtitulo = new Label
             {
                 Text = "Haz clic en 'Buscar en mapa' para ubicar cada lugar.",
-                Font = new Font("Segoe UI", 9),
+                Font = new Font("Segoe UI", 9.5f),
                 ForeColor = gris,
                 Location = new Point(0, 35),
                 AutoSize = true
             };
             panelContenido.Controls.Add(subtitulo);
 
-            // Contenedor 2 columnas
+            Panel lineaDeco = new Panel
+            {
+                Location = new Point(0, 58),
+                Size = new Size(400, 2),
+                BackColor = morado
+            };
+            panelContenido.Controls.Add(lineaDeco);
+
             TableLayoutPanel layout = new TableLayoutPanel
             {
                 Location = new Point(0, 75),
-                Size = new Size(1180, 580),
+                Size = new Size(1255, 580),
                 ColumnCount = 2,
                 RowCount = 1,
                 BackColor = fondo,
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom
             };
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 41));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 59));
             panelContenido.Controls.Add(layout);
 
-            // ─────────────────────────
-            // COLUMNA IZQUIERDA (lugares)
-            // ─────────────────────────
             Panel panelIzq = new Panel
             {
                 Dock = DockStyle.Fill,
@@ -623,22 +959,24 @@ namespace SUSTENTACION.PanelTrabajador
             {
                 Text = "+  AGREGAR LUGAR",
                 Width = 220,
-                Height = 42,
+                Height = 45,
                 Location = new Point(0, 0),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = morado,
                 ForeColor = blanco,
-                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+                Font = new Font("Segoe UI", 10f, FontStyle.Bold),
                 Cursor = Cursors.Hand
             };
             btnAgregar.FlatAppearance.BorderSize = 0;
+            btnAgregar.FlatAppearance.MouseOverBackColor = moradoHover;
             btnAgregar.Click += (s, e) => AgregarLugarUI();
+            AplicarBordeRedondeado(btnAgregar, 8);
             panelIzq.Controls.Add(btnAgregar);
 
             FlowLayoutPanel flpLugares = new FlowLayoutPanel
             {
                 Location = new Point(0, 55),
-                Size = new Size(570, 520),
+                Size = new Size(480, 520),
                 AutoScroll = true,
                 FlowDirection = FlowDirection.TopDown,
                 WrapContents = false,
@@ -651,15 +989,13 @@ namespace SUSTENTACION.PanelTrabajador
             foreach (var l in lugares)
                 AgregarLugarUI(l);
 
-            // ─────────────────────────
-            // COLUMNA DERECHA (mapa)
-            // ─────────────────────────
             Panel panelDer = new Panel
             {
                 Dock = DockStyle.Fill,
                 BackColor = tarjeta,
                 Padding = new Padding(12)
             };
+            AplicarBordeRedondeado(panelDer, 12);
             layout.Controls.Add(panelDer, 1, 0);
 
             lblEstadoMapa = new Label
@@ -683,7 +1019,6 @@ namespace SUSTENTACION.PanelTrabajador
             webMapa.BringToFront();
             lblEstadoMapa.BringToFront();
 
-            // 🆕 Forzar el tamaño después de que se muestre el panel
             this.BeginInvoke(new Action(() =>
             {
                 try
@@ -696,12 +1031,8 @@ namespace SUSTENTACION.PanelTrabajador
                 catch { }
             }));
 
-            // Inicializar el mapa la primera vez
-            if (!mapaInicializado)
-            {
-                mapaInicializado = true;
-                this.BeginInvoke(new Action(async () => await InicializarMapaAsync()));
-            }
+            mapaListo = false;
+            this.BeginInvoke(new Action(async () => await InicializarMapaAsync()));
         }
 
         private void AgregarLugarUI(LugarEvento lugarExistente = null)
@@ -717,12 +1048,13 @@ namespace SUSTENTACION.PanelTrabajador
 
             Panel card = new Panel
             {
-                Width = 530,
+                Width = 470,
                 Height = 260,
                 BackColor = tarjeta,
                 Margin = new Padding(0, 0, 0, 10),
                 Padding = new Padding(15)
             };
+            AplicarBordeRedondeado(card, 12);
 
             int numLugar = flp.Controls.Count + 1;
 
@@ -737,9 +1069,7 @@ namespace SUSTENTACION.PanelTrabajador
             };
             card.Controls.Add(lblNum);
 
-            // ═══════════════════════════════════════
-            // NOMBRE + botón 📍
-            // ═══════════════════════════════════════
+            // NOMBRE
             card.Controls.Add(new Label
             {
                 Text = "Nombre del lugar *",
@@ -751,7 +1081,7 @@ namespace SUSTENTACION.PanelTrabajador
             TextBox txtNombre = new TextBox
             {
                 Location = new Point(15, 56),
-                Size = new Size(450, 26),
+                Size = new Size(390, 29),
                 BackColor = campo,
                 ForeColor = blanco,
                 BorderStyle = BorderStyle.FixedSingle,
@@ -765,9 +1095,9 @@ namespace SUSTENTACION.PanelTrabajador
             Button btnNombre = new Button
             {
                 Text = "📍",
-                Width = 40,
-                Height = 26,
-                Location = new Point(470, 56),
+                Width = 42,
+                Height = 30,
+                Location = new Point(410, 56),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = morado,
                 ForeColor = blanco,
@@ -775,12 +1105,12 @@ namespace SUSTENTACION.PanelTrabajador
                 Cursor = Cursors.Hand
             };
             btnNombre.FlatAppearance.BorderSize = 0;
+            btnNombre.FlatAppearance.MouseOverBackColor = moradoHover;
             btnNombre.Click += (s, e) => SeleccionarLugarParaMapa(lugar, card, "nombre");
+            AplicarBordeRedondeado(btnNombre, 6);
             card.Controls.Add(btnNombre);
 
-            // ═══════════════════════════════════════
-            // DIRECCIÓN + botón 📍
-            // ═══════════════════════════════════════
+            // DIRECCIÓN
             card.Controls.Add(new Label
             {
                 Text = "Dirección",
@@ -792,7 +1122,7 @@ namespace SUSTENTACION.PanelTrabajador
             TextBox txtDireccion = new TextBox
             {
                 Location = new Point(15, 110),
-                Size = new Size(450, 26),
+                Size = new Size(390, 29),
                 BackColor = campo,
                 ForeColor = blanco,
                 BorderStyle = BorderStyle.FixedSingle,
@@ -806,9 +1136,9 @@ namespace SUSTENTACION.PanelTrabajador
             Button btnDir = new Button
             {
                 Text = "📍",
-                Width = 40,
-                Height = 26,
-                Location = new Point(470, 110),
+                Width = 42,
+                Height = 30,
+                Location = new Point(410, 110),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = morado,
                 ForeColor = blanco,
@@ -816,12 +1146,12 @@ namespace SUSTENTACION.PanelTrabajador
                 Cursor = Cursors.Hand
             };
             btnDir.FlatAppearance.BorderSize = 0;
+            btnDir.FlatAppearance.MouseOverBackColor = moradoHover;
             btnDir.Click += (s, e) => SeleccionarLugarParaMapa(lugar, card, "direccion");
+            AplicarBordeRedondeado(btnDir, 6);
             card.Controls.Add(btnDir);
 
-            // ═══════════════════════════════════════
-            // REFERENCIA + botón 📍
-            // ═══════════════════════════════════════
+            // REFERENCIA
             card.Controls.Add(new Label
             {
                 Text = "Referencia",
@@ -833,7 +1163,7 @@ namespace SUSTENTACION.PanelTrabajador
             TextBox txtReferencia = new TextBox
             {
                 Location = new Point(15, 164),
-                Size = new Size(450, 26),
+                Size = new Size(390, 29),
                 BackColor = campo,
                 ForeColor = blanco,
                 BorderStyle = BorderStyle.FixedSingle,
@@ -847,9 +1177,9 @@ namespace SUSTENTACION.PanelTrabajador
             Button btnRef = new Button
             {
                 Text = "📍",
-                Width = 40,
-                Height = 26,
-                Location = new Point(470, 164),
+                Width = 42,
+                Height = 30,
+                Location = new Point(410, 164),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = morado,
                 ForeColor = blanco,
@@ -857,12 +1187,12 @@ namespace SUSTENTACION.PanelTrabajador
                 Cursor = Cursors.Hand
             };
             btnRef.FlatAppearance.BorderSize = 0;
+            btnRef.FlatAppearance.MouseOverBackColor = moradoHover;
             btnRef.Click += (s, e) => SeleccionarLugarParaMapa(lugar, card, "referencia");
+            AplicarBordeRedondeado(btnRef, 6);
             card.Controls.Add(btnRef);
 
-            // ═══════════════════════════════════════
-            // BOTÓN QUITAR
-            // ═══════════════════════════════════════
+            // QUITAR
             Button btnQuitar = new Button
             {
                 Text = "✗ QUITAR LUGAR",
@@ -883,6 +1213,7 @@ namespace SUSTENTACION.PanelTrabajador
                 RenumerarLugares();
                 if (lugarSeleccionado == lugar) lugarSeleccionado = null;
             };
+            AplicarBordeRedondeado(btnQuitar, 6);
             card.Controls.Add(btnQuitar);
 
             lugar.Panel = card;
@@ -930,9 +1261,6 @@ namespace SUSTENTACION.PanelTrabajador
             return true;
         }
 
-        // ==========================================
-        // SELECCIONAR LUGAR PARA MAPA
-        // ==========================================
         private void SeleccionarLugarParaMapa(LugarEvento lugar, Panel card, string campo)
         {
             var flp = panelContenido.Controls.Find("flpLugares", true).Length > 0
@@ -944,7 +1272,7 @@ namespace SUSTENTACION.PanelTrabajador
                     c.BackColor = tarjeta;
             }
 
-            card.BackColor = Color.FromArgb(45, 48, 70);
+            card.BackColor = Color.FromArgb(60, 75, 110);
             lugarSeleccionado = lugar;
             campoActivoParaMapa = campo;
 
@@ -971,9 +1299,6 @@ namespace SUSTENTACION.PanelTrabajador
             }
         }
 
-        // ==========================================
-        // INICIALIZAR MAPA
-        // ==========================================
         private async System.Threading.Tasks.Task InicializarMapaAsync()
         {
             try
@@ -983,9 +1308,7 @@ namespace SUSTENTACION.PanelTrabajador
                 lblEstadoMapa.Text = "Cargando motor del mapa...";
 
                 await webMapa.EnsureCoreWebView2Async();
-                // 🔧 TEMPORAL: Abrir DevTools para debug
-                webMapa.CoreWebView2.OpenDevToolsWindow();
-
+                webMapa.CoreWebView2.WebMessageReceived -= RecibirMensajeMapa;
                 webMapa.CoreWebView2.WebMessageReceived += RecibirMensajeMapa;
 
                 string rutaMapa = System.IO.Path.Combine(
@@ -1025,17 +1348,12 @@ namespace SUSTENTACION.PanelTrabajador
             }
         }
 
-        // ==========================================
-        // RECIBIR MENSAJES DEL MAPA
-        // ==========================================
         private void RecibirMensajeMapa(object sender,
-    Microsoft.Web.WebView2.Core.CoreWebView2WebMessageReceivedEventArgs e)
+            Microsoft.Web.WebView2.Core.CoreWebView2WebMessageReceivedEventArgs e)
         {
             string mensaje;
             try { mensaje = e.TryGetWebMessageAsString(); }
             catch { return; }
-
-            System.Diagnostics.Debug.WriteLine("MENSAJE MAPA: " + mensaje);
 
             if (mensaje == "mapa_listo")
             {
@@ -1140,12 +1458,20 @@ namespace SUSTENTACION.PanelTrabajador
             Label subtitulo = new Label
             {
                 Text = "Selecciona quién estará a cargo y quiénes participarán del evento.",
-                Font = new Font("Segoe UI", 9),
+                Font = new Font("Segoe UI", 9.5f),
                 ForeColor = gris,
                 Location = new Point(0, 35),
                 AutoSize = true
             };
             panelContenido.Controls.Add(subtitulo);
+
+            Panel lineaDeco = new Panel
+            {
+                Location = new Point(0, 58),
+                Size = new Size(400, 2),
+                BackColor = morado
+            };
+            panelContenido.Controls.Add(lineaDeco);
 
             var trabajadores = new List<TrabajadorItem>();
             var externos = new List<PersonalExternoItem>();
@@ -1207,26 +1533,26 @@ namespace SUSTENTACION.PanelTrabajador
             Panel panelScroll = new Panel
             {
                 Location = new Point(0, 75),
-                Size = new Size(1180, 580),
+                Size = new Size(1255, 580),
                 AutoScroll = true,
                 BackColor = fondo,
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom
             };
             panelContenido.Controls.Add(panelScroll);
 
-            // ENCARGADO
             Panel cardEnc = new Panel
             {
                 Location = new Point(0, 0),
-                Size = new Size(1150, 100),
+                Size = new Size(1230, 115),
                 BackColor = tarjeta,
                 Padding = new Padding(20)
             };
+            AplicarBordeRedondeado(cardEnc, 12);
             panelScroll.Controls.Add(cardEnc);
 
             cardEnc.Controls.Add(new Label
             {
-                Text = "ENCARGADO PRINCIPAL *",
+                Text = "👤  ENCARGADO PRINCIPAL *",
                 Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
                 ForeColor = morado,
                 Location = new Point(20, 15),
@@ -1270,20 +1596,20 @@ namespace SUSTENTACION.PanelTrabajador
             if (cboEncargado.SelectedIndex >= 0)
                 idEncargadoSeleccionado = trabajadores[cboEncargado.SelectedIndex].Id;
 
-            // SUBS
             Panel cardSub = new Panel
             {
-                Location = new Point(0, 115),
-                Size = new Size(1150, 220),
+                Location = new Point(0, 125),
+                Size = new Size(1230, 220),
                 BackColor = tarjeta,
                 Padding = new Padding(20),
                 Name = "cardSub"
             };
+            AplicarBordeRedondeado(cardSub, 12);
             panelScroll.Controls.Add(cardSub);
 
             cardSub.Controls.Add(new Label
             {
-                Text = "TRABAJADORES DEL SISTEMA (sub-trabajadores)",
+                Text = "👥  TRABAJADORES DEL SISTEMA (sub-trabajadores)",
                 Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
                 ForeColor = morado,
                 Location = new Point(20, 15),
@@ -1304,19 +1630,19 @@ namespace SUSTENTACION.PanelTrabajador
 
             RefrescarSubTrabajadores(panelScroll, trabajadores);
 
-            // EXTERNOS
             Panel cardExt = new Panel
             {
-                Location = new Point(0, 350),
-                Size = new Size(1150, 240),
+                Location = new Point(0, 360),
+                Size = new Size(1230, 240),
                 BackColor = tarjeta,
                 Padding = new Padding(20)
             };
+            AplicarBordeRedondeado(cardExt, 12);
             panelScroll.Controls.Add(cardExt);
 
             cardExt.Controls.Add(new Label
             {
-                Text = "PERSONAL EXTERNO",
+                Text = "🧑‍🔧  PERSONAL EXTERNO",
                 Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
                 ForeColor = morado,
                 Location = new Point(20, 15),
@@ -1336,6 +1662,7 @@ namespace SUSTENTACION.PanelTrabajador
                 Cursor = Cursors.Hand
             };
             btnAddExt.FlatAppearance.BorderSize = 0;
+            btnAddExt.FlatAppearance.MouseOverBackColor = moradoHover;
             btnAddExt.Click += (s, e) =>
             {
                 using (var f = new FormAgregarPersonalExterno())
@@ -1346,6 +1673,7 @@ namespace SUSTENTACION.PanelTrabajador
                     }
                 }
             };
+            AplicarBordeRedondeado(btnAddExt, 8);
             cardExt.Controls.Add(btnAddExt);
 
             FlowLayoutPanel flpExt = new FlowLayoutPanel
@@ -1463,20 +1791,29 @@ namespace SUSTENTACION.PanelTrabajador
             Label subtitulo = new Label
             {
                 Text = "Agrega equipos por código de barras y asígnalos a un lugar y responsable.",
-                Font = new Font("Segoe UI", 9),
+                Font = new Font("Segoe UI", 9.5f),
                 ForeColor = gris,
                 Location = new Point(0, 35),
                 AutoSize = true
             };
             panelContenido.Controls.Add(subtitulo);
 
+            Panel lineaDeco = new Panel
+            {
+                Location = new Point(0, 58),
+                Size = new Size(400, 2),
+                BackColor = morado
+            };
+            panelContenido.Controls.Add(lineaDeco);
+
             Panel panelAdd = new Panel
             {
                 Location = new Point(0, 75),
-                Size = new Size(1180, 70),
+                Size = new Size(1255, 84),
                 BackColor = tarjeta,
                 Padding = new Padding(15)
             };
+            AplicarBordeRedondeado(panelAdd, 12);
             panelContenido.Controls.Add(panelAdd);
 
             panelAdd.Controls.Add(new Label
@@ -1512,6 +1849,8 @@ namespace SUSTENTACION.PanelTrabajador
                 Cursor = Cursors.Hand
             };
             btnAdd.FlatAppearance.BorderSize = 0;
+            btnAdd.FlatAppearance.MouseOverBackColor = moradoHover;
+            AplicarBordeRedondeado(btnAdd, 8);
 
             Action agregarEquipo = () =>
             {
@@ -1539,8 +1878,8 @@ namespace SUSTENTACION.PanelTrabajador
 
             FlowLayoutPanel flpEquipos = new FlowLayoutPanel
             {
-                Location = new Point(0, 155),
-                Size = new Size(1180, 500),
+                Location = new Point(0, 175),
+                Size = new Size(1255, 500),
                 AutoScroll = true,
                 FlowDirection = FlowDirection.TopDown,
                 WrapContents = false,
@@ -1560,7 +1899,7 @@ namespace SUSTENTACION.PanelTrabajador
             try
             {
                 NpgsqlConnection con = conexionDB.ObtenerConexion();
-                string q = "SELECT id, codigo, nombre FROM equipos WHERE codigo = @codigo";
+                string q = "SELECT id, codigo, nombre, stock, estado FROM equipos WHERE codigo = @codigo";
 
                 using (NpgsqlCommand cmd = new NpgsqlCommand(q, con))
                 {
@@ -1576,6 +1915,20 @@ namespace SUSTENTACION.PanelTrabajador
                         int idEq = Convert.ToInt32(rd["id"]);
                         string cod = rd["codigo"].ToString();
                         string nom = rd["nombre"].ToString();
+                        int stock = Convert.ToInt32(rd["stock"]);
+                        string estado = rd["estado"]?.ToString() ?? "";
+
+                        // 🔥 Validar stock disponible
+                        if (stock <= 0)
+                        {
+                            MessageBox.Show(
+                                $"El equipo '{nom}' no tiene stock disponible.\n" +
+                                $"Estado actual: {estado}",
+                                "Sin stock",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Warning);
+                            return;
+                        }
 
                         foreach (var e in equiposAsignados)
                         {
@@ -1614,12 +1967,13 @@ namespace SUSTENTACION.PanelTrabajador
 
             Panel card = new Panel
             {
-                Width = 1150,
-                Height = 130,
+                Width = 1220,
+                Height = 142,
                 BackColor = tarjeta,
                 Margin = new Padding(0, 0, 0, 10),
                 Padding = new Padding(20)
             };
+            AplicarBordeRedondeado(card, 12);
 
             card.Controls.Add(new Label
             {
@@ -1714,6 +2068,7 @@ namespace SUSTENTACION.PanelTrabajador
                 equiposAsignados.Remove(eq);
                 flp.Controls.Remove(card);
             };
+            AplicarBordeRedondeado(btnQ, 6);
             card.Controls.Add(btnQ);
 
             eq.Panel = card;
@@ -1830,21 +2185,31 @@ namespace SUSTENTACION.PanelTrabajador
             Label subtitulo = new Label
             {
                 Text = "Revisa toda la información antes de guardar.",
-                Font = new Font("Segoe UI", 9),
+                Font = new Font("Segoe UI", 9.5f),
                 ForeColor = gris,
                 Location = new Point(0, 35),
                 AutoSize = true
             };
             panelContenido.Controls.Add(subtitulo);
 
+            Panel lineaDeco = new Panel
+            {
+                Location = new Point(0, 58),
+                Size = new Size(400, 2),
+                BackColor = morado
+            };
+            panelContenido.Controls.Add(lineaDeco);
+
             Panel panelResumen = new Panel
             {
                 Location = new Point(0, 75),
-                Size = new Size(1180, 600),
+                Size = new Size(1255, 600),
                 AutoScroll = true,
-                BackColor = fondo,
+                BackColor = tarjeta,
+                Padding = new Padding(24),
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom
             };
+            AplicarBordeRedondeado(panelResumen, 14);
             panelContenido.Controls.Add(panelResumen);
 
             int y = 0;
@@ -2029,7 +2394,9 @@ namespace SUSTENTACION.PanelTrabajador
 
                 using (NpgsqlCommand cmd = new NpgsqlCommand(sqlEvento, con, transaccion))
                 {
-                    cmd.Parameters.AddWithValue("@fecha", datosEvento.FechaInicio.Date);
+                    DateTime fechaEventoConHora = datosEvento.FechaInicio.Date + datosEvento.HoraInicio.TimeOfDay;
+
+                    cmd.Parameters.AddWithValue("@fecha", fechaEventoConHora);
                     cmd.Parameters.AddWithValue("@titulo", datosEvento.Nombre);
                     cmd.Parameters.AddWithValue("@horario",
                         datosEvento.HoraInicio.ToString("HH:mm") + " - " + datosEvento.HoraFin.ToString("HH:mm"));
@@ -2068,7 +2435,8 @@ namespace SUSTENTACION.PanelTrabajador
                 {
                     cmd.Parameters.AddWithValue("@trabajador", idTrabajador);
                     cmd.Parameters.AddWithValue("@encargado", encargadoNombre);
-                    cmd.Parameters.AddWithValue("@fecha", datosEvento.FechaInicio.Date);
+                    DateTime fechaSalidaConHora = datosEvento.FechaInicio.Date + datosEvento.HoraInicio.TimeOfDay;
+                    cmd.Parameters.AddWithValue("@fecha", fechaSalidaConHora);
                     cmd.Parameters.AddWithValue("@ubicacion", ubicacionResumen);
                     cmd.Parameters.AddWithValue("@detalles",
                         string.IsNullOrWhiteSpace(datosEvento.Descripcion)
@@ -2135,6 +2503,25 @@ namespace SUSTENTACION.PanelTrabajador
                             cmd.Parameters.AddWithValue("@ext", eq.ResponsableId);
                         }
                         cmd.ExecuteNonQuery();
+                    }
+                }
+
+                // 🔥 ACTUALIZAR STOCK Y ESTADO DE CADA EQUIPO
+                foreach (var eq in equiposAsignados)
+                {
+                    string sqlStock = @"
+                        UPDATE equipos
+                        SET stock = stock - 1,
+                            estado = CASE 
+                                WHEN (stock - 1) <= 0 THEN 'En evento'
+                                ELSE 'En evento'
+                            END
+                        WHERE id = @id";
+
+                    using (NpgsqlCommand cmdStock = new NpgsqlCommand(sqlStock, con, transaccion))
+                    {
+                        cmdStock.Parameters.AddWithValue("@id", eq.IdEquipo);
+                        cmdStock.ExecuteNonQuery();
                     }
                 }
 

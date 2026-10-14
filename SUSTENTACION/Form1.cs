@@ -2,33 +2,30 @@ using Npgsql;
 using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Net.Mail;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace SUSTENTACION
 {
     public partial class Form1 : Form
     {
-        // Contenedor principal personalizado con la división diagonal
-        private DiagonalPanel panelBackground;
+        private readonly Color azulOscuro = Color.FromArgb(17, 35, 70);
+        private readonly Color azulPrincipal = Color.FromArgb(38, 97, 211);
+        private readonly Color grisTexto = Color.FromArgb(74, 87, 106);
+        private readonly Color grisBorde = Color.FromArgb(217, 225, 235);
 
-        // Controles del lado izquierdo (Blanco)
-        private PictureBox picLogo;
-        private Label lblAppTitle;
-        private Label lblAppSubtitle;
-
-        // Controles del lado derecho (Azul - Formulario)
-        private Label lblHeaderTitle;
-        private Label lblHeaderSubtitle;
-        private Label lblEmail;
+        private DiagonalLoginPanel fondoDiagonal;
         private TextBox txtEmail;
-        private Panel pnlEmailBorder; // Borde interactivo para Email
-        private Label lblPassword;
         private TextBox txtPassword;
-        private Panel pnlPasswordBorder; // Borde interactivo para Password
-        private Button btnTogglePassword; // Botón para mostrar/ocultar contraseña
+        private RoundedPanel pnlEmail;
+        private RoundedPanel pnlPassword;
+        private Button btnTogglePassword;
+        private Button btnLogin;
         private CheckBox chkRememberMe;
         private LinkLabel lblRecoverPassword;
-        private Button btnLogin;
+        private Label lblError;
+        private bool mostrandoPassword = false;
 
         public Form1()
         {
@@ -39,377 +36,383 @@ namespace SUSTENTACION
 
         private void ConstruirInterfaz()
         {
-            // --- Configuración básica de la ventana ---
-            this.Size = new Size(900, 560);
-            this.StartPosition = FormStartPosition.CenterScreen;
-            this.FormBorderStyle = FormBorderStyle.FixedSingle;
-            this.MaximizeBox = false;
-            this.Text = "Iniciar Sesión - Artemusa Inventario";
+            SuspendLayout();
+            // Los controles visuales se crean en código; el diseñador queda intacto.
+            ClientSize = new Size(900, 560);
+            FormBorderStyle = FormBorderStyle.FixedSingle;
+            MaximizeBox = false;
+            StartPosition = FormStartPosition.CenterScreen;
+            Text = "ARTEMUSA | Iniciar sesión";
+            BackColor = Color.FromArgb(233, 238, 245);
+            Font = new Font("Segoe UI", 10f);
+            AutoScaleMode = AutoScaleMode.None; // Mantiene las proporciones del diseño fijo.
 
-            panelBackground = new DiagonalPanel
+            fondoDiagonal = new DiagonalLoginPanel { Dock = DockStyle.Fill };
+            Controls.Add(fondoDiagonal);
+            fondoDiagonal.BringToFront();
+
+            // Columna izquierda, sobre la tarjeta blanca del fondo.
+            var logo = new PictureBox
             {
-                Dock = DockStyle.Fill
-            };
-            this.Controls.Add(panelBackground);
-
-            // ==========================================
-            // LADO IZQUIERDO: Marca / Logotipo (Fondo Blanco)
-            // ==========================================
-
-            // ==========================================
-            // LADO IZQUIERDO: Marca / Logotipo (Fondo Blanco)
-            // ==========================================
-
-            picLogo = new PictureBox
-            {
-                Size = new Size(130, 130),
-                Location = new Point(125, 90), // Subido ligeramente para liberar espacio vertical
+                Location = new Point(119, 92),
+                Size = new Size(145, 145),
                 SizeMode = PictureBoxSizeMode.Zoom,
                 BackColor = Color.Transparent,
-                Image = SUSTENTACION.Properties.Resources.logo
+                Image = Properties.Resources.logo
             };
-            panelBackground.Controls.Add(picLogo);
+            fondoDiagonal.Controls.Add(logo);
+            AddLabel(fondoDiagonal, "ARTEMUSA", new Point(53, 238), new Size(315, 58),
+                24f, FontStyle.Bold, azulOscuro, ContentAlignment.MiddleCenter);
+            AddLabel(fondoDiagonal, "CONTROL DE EQUIPOS AUDIOVISUALES",
+                new Point(45, 299), new Size(325, 28), 9.2f, FontStyle.Bold,
+                Color.FromArgb(36, 93, 161), ContentAlignment.MiddleCenter);
+            AddLabel(fondoDiagonal, "Registro, inventario y control de los\nequipos audiovisuales de la empresa.",
+                new Point(65, 355), new Size(265, 64), 9.4f, FontStyle.Regular,
+                grisTexto, ContentAlignment.MiddleCenter);
+            AddLabel(fondoDiagonal, "ARTEMUSA PERÚ S.R.L.", new Point(78, 468),
+                new Size(230, 25), 8.7f, FontStyle.Regular,
+                grisTexto, ContentAlignment.MiddleCenter);
 
-            lblAppTitle = new Label
-            {
-                Text = "ARTEMUSA",
-                Font = new Font("Segoe UI", 22f, FontStyle.Bold),
-                ForeColor = Color.FromArgb(15, 35, 75),
-                AutoSize = true,
-                Location = new Point(90, 235), // Posición vertical ajustada
-                BackColor = Color.Transparent
-            };
-            panelBackground.Controls.Add(lblAppTitle);
+            // Formulario directamente sobre el fondo azul (sin tarjeta blanca adicional).
+            const int x = 510;
+            const int fieldWidth = 318;
+            AddLabel(fondoDiagonal, "Iniciar sesión", new Point(x, 77),
+                new Size(fieldWidth + 12, 48), 22f, FontStyle.Bold, Color.White);
+            AddLabel(fondoDiagonal, "Ingresa tus credenciales para acceder",
+                new Point(x, 120), new Size(fieldWidth + 18, 27), 9.5f,
+                FontStyle.Regular, Color.FromArgb(219, 232, 251));
 
-            lblAppSubtitle = new Label
-            {
-                Text = "Sistema de Gestión e Inventario",
-                Font = new Font("Segoe UI Semibold", 9.5f, FontStyle.Italic),
-                ForeColor = Color.FromArgb(110, 125, 150),
-                AutoSize = true,
-                Location = new Point(78, 280), // Bajado a Y = 280 para separarlo de ARTEMUSA
-                BackColor = Color.Transparent
-            };
-            panelBackground.Controls.Add(lblAppSubtitle);
-
-            // ==========================================
-            // LADO DERECHO: Formulario de Login (Fondo Azul)
-            // ==========================================
-
-            int startX = 495;
-
-            // --- Título del Formulario ---
-            lblHeaderTitle = new Label
-            {
-                Text = "Iniciar Sesión",
-                Font = new Font("Segoe UI", 20f, FontStyle.Bold),
-                ForeColor = Color.White,
-                Location = new Point(startX, 60),
-                AutoSize = true,
-                BackColor = Color.Transparent
-            };
-            panelBackground.Controls.Add(lblHeaderTitle);
-
-            // --- Subtítulo del Formulario ---
-            lblHeaderSubtitle = new Label
-            {
-                Text = "Ingresa tus credenciales para acceder",
-                Font = new Font("Segoe UI", 9.5f, FontStyle.Regular),
-                ForeColor = Color.FromArgb(195, 220, 255),
-                Location = new Point(startX, 102),
-                AutoSize = true,
-                BackColor = Color.Transparent
-            };
-            panelBackground.Controls.Add(lblHeaderSubtitle);
-
-            // --- Label y Campo: Correo Electrónico ---
-            lblEmail = new Label
-            {
-                Text = "Correo Electrónico",
-                Font = new Font("Segoe UI Semibold", 9.5f, FontStyle.Bold),
-                ForeColor = Color.FromArgb(230, 240, 255),
-                Location = new Point(startX, 145),
-                AutoSize = true,
-                BackColor = Color.Transparent
-            };
-            panelBackground.Controls.Add(lblEmail);
-
-            pnlEmailBorder = new Panel
-            {
-                Location = new Point(startX, 170),
-                Size = new Size(310, 36),
-                BackColor = Color.White,
-                Padding = new Padding(3)
-            };
-
+            AddLabel(fondoDiagonal, "Correo electrónico", new Point(x, 169),
+                new Size(fieldWidth, 24), 9.4f, FontStyle.Bold, Color.White);
+            pnlEmail = CrearCampo(new Point(x, 197), fieldWidth);
+            fondoDiagonal.Controls.Add(pnlEmail);
             txtEmail = new TextBox
             {
+                Location = new Point(14, 11),
+                Width = fieldWidth - 30,
                 Font = new Font("Segoe UI", 10.5f),
-                Size = new Size(300, 28),
-                Location = new Point(5, 5),
-                ForeColor = Color.Gray,
-                Text = "ejemplo@artemusa.com",
-                BorderStyle = BorderStyle.None
-            };
-
-            txtEmail.GotFocus += (s, e) =>
-            {
-                if (txtEmail.Text == "ejemplo@artemusa.com")
-                {
-                    txtEmail.Text = "";
-                    txtEmail.ForeColor = Color.FromArgb(30, 30, 30);
-                }
-                pnlEmailBorder.BackColor = Color.FromArgb(80, 160, 255);
-            };
-
-            txtEmail.LostFocus += (s, e) =>
-            {
-                if (string.IsNullOrWhiteSpace(txtEmail.Text))
-                {
-                    txtEmail.Text = "ejemplo@artemusa.com";
-                    txtEmail.ForeColor = Color.Gray;
-                }
-                pnlEmailBorder.BackColor = Color.White;
-            };
-
-            pnlEmailBorder.Controls.Add(txtEmail);
-            panelBackground.Controls.Add(pnlEmailBorder);
-
-            // --- Label y Campo: Contraseña ---
-            lblPassword = new Label
-            {
-                Text = "Contraseña",
-                Font = new Font("Segoe UI Semibold", 9.5f, FontStyle.Bold),
-                ForeColor = Color.FromArgb(230, 240, 255),
-                Location = new Point(startX, 220),
-                AutoSize = true,
-                BackColor = Color.Transparent
-            };
-            panelBackground.Controls.Add(lblPassword);
-
-            pnlPasswordBorder = new Panel
-            {
-                Location = new Point(startX, 245),
-                Size = new Size(310, 36),
+                BorderStyle = BorderStyle.None,
                 BackColor = Color.White,
-                Padding = new Padding(3)
+                ForeColor = azulOscuro,
+                MaxLength = 254
             };
+            pnlEmail.Controls.Add(txtEmail);
+            ConfigurarFoco(txtEmail, pnlEmail);
 
+            AddLabel(fondoDiagonal, "Contraseña", new Point(x, 263),
+                new Size(fieldWidth, 24), 9.4f, FontStyle.Bold, Color.White);
+            pnlPassword = CrearCampo(new Point(x, 291), fieldWidth);
+            fondoDiagonal.Controls.Add(pnlPassword);
             txtPassword = new TextBox
             {
+                Location = new Point(14, 11),
+                Width = fieldWidth - 111,
                 Font = new Font("Segoe UI", 10.5f),
-                Size = new Size(260, 28),
-                Location = new Point(5, 5),
-                ForeColor = Color.Gray,
-                Text = "••••••••",
-                UseSystemPasswordChar = false,
-                BorderStyle = BorderStyle.None
+                BorderStyle = BorderStyle.None,
+                BackColor = Color.White,
+                ForeColor = azulOscuro,
+                UseSystemPasswordChar = true,
+                MaxLength = 128
             };
+            pnlPassword.Controls.Add(txtPassword);
+            ConfigurarFoco(txtPassword, pnlPassword);
 
             btnTogglePassword = new Button
             {
-                Text = "👁",
-                Size = new Size(36, 28),
-                Location = new Point(268, 3),
+                Text = "Mostrar",
+                Location = new Point(fieldWidth - 88, 5),
+                Size = new Size(80, 34),
                 FlatStyle = FlatStyle.Flat,
+                BackColor = Color.White,
+                ForeColor = azulPrincipal,
+                Font = new Font("Segoe UI", 8.8f, FontStyle.Bold),
                 Cursor = Cursors.Hand,
-                ForeColor = Color.DimGray,
-                Font = new Font("Segoe UI", 10f)
+                TabStop = false,
+                AccessibleName = "Mostrar u ocultar contraseña"
             };
             btnTogglePassword.FlatAppearance.BorderSize = 0;
             btnTogglePassword.Click += (s, e) =>
             {
-                if (txtPassword.Text != "••••••••")
-                {
-                    txtPassword.UseSystemPasswordChar = !txtPassword.UseSystemPasswordChar;
-                    btnTogglePassword.Text = txtPassword.UseSystemPasswordChar ? "👁" : "🙈";
-                }
+                mostrandoPassword = !mostrandoPassword;
+                txtPassword.UseSystemPasswordChar = !mostrandoPassword;
+                btnTogglePassword.Text = mostrandoPassword ? "Ocultar" : "Mostrar";
+                txtPassword.Focus();
+                txtPassword.SelectionStart = txtPassword.TextLength;
             };
+            pnlPassword.Controls.Add(btnTogglePassword);
 
-            txtPassword.GotFocus += (s, e) =>
-            {
-                if (txtPassword.Text == "••••••••")
-                {
-                    txtPassword.Text = "";
-                    txtPassword.ForeColor = Color.FromArgb(30, 30, 30);
-                    txtPassword.UseSystemPasswordChar = true;
-                }
-                pnlPasswordBorder.BackColor = Color.FromArgb(80, 160, 255);
-            };
-
-            txtPassword.LostFocus += (s, e) =>
-            {
-                if (string.IsNullOrWhiteSpace(txtPassword.Text))
-                {
-                    txtPassword.UseSystemPasswordChar = false;
-                    txtPassword.Text = "••••••••";
-                    txtPassword.ForeColor = Color.Gray;
-                }
-                pnlPasswordBorder.BackColor = Color.White;
-            };
-
-            pnlPasswordBorder.Controls.Add(txtPassword);
-            pnlPasswordBorder.Controls.Add(btnTogglePassword);
-            panelBackground.Controls.Add(pnlPasswordBorder);
-
-            // --- Checkbox Recordarme ---
             chkRememberMe = new CheckBox
             {
-                Text = "Recordarme",
-                Font = new Font("Segoe UI", 9f),
-                ForeColor = Color.FromArgb(230, 240, 255),
-                Location = new Point(startX, 295),
-                AutoSize = true,
-                BackColor = Color.Transparent,
-                Cursor = Cursors.Hand
+                Text = "Recordar correo",
+                Location = new Point(x, 346),
+                Size = new Size(143, 26),
+                ForeColor = Color.FromArgb(231, 239, 253),
+                Font = new Font("Segoe UI", 8.5f),
+                Cursor = Cursors.Hand,
+                BackColor = Color.Transparent
             };
-            panelBackground.Controls.Add(chkRememberMe);
+            fondoDiagonal.Controls.Add(chkRememberMe);
 
-            // --- Enlace Recuperar Contraseña ---
             lblRecoverPassword = new LinkLabel
             {
                 Text = "¿Olvidaste tu contraseña?",
-                Font = new Font("Segoe UI", 9f),
-                LinkColor = Color.FromArgb(195, 220, 255),
+                Location = new Point(x + 142, 348),
+                Size = new Size(176, 24),
+                TextAlign = ContentAlignment.MiddleRight,
+                LinkColor = Color.FromArgb(225, 238, 255),
                 ActiveLinkColor = Color.White,
-                VisitedLinkColor = Color.FromArgb(195, 220, 255),
-                AutoSize = true,
-                Location = new Point(startX + 145),
+                VisitedLinkColor = Color.FromArgb(225, 238, 255),
+                Font = new Font("Segoe UI", 8.5f),
                 BackColor = Color.Transparent
             };
-            lblRecoverPassword.Location = new Point(startX + 145, 296);
             lblRecoverPassword.LinkClicked += LblRecoverPassword_LinkClicked;
-            panelBackground.Controls.Add(lblRecoverPassword);
+            fondoDiagonal.Controls.Add(lblRecoverPassword);
 
-            // --- Botón Iniciar Sesión ---
+            lblError = AddLabel(fondoDiagonal, "", new Point(x, 377),
+                new Size(fieldWidth, 24), 8.8f, FontStyle.Regular,
+                Color.FromArgb(255, 224, 225));
+
             btnLogin = new Button
             {
                 Text = "INICIAR SESIÓN",
-                Size = new Size(310, 44),
-                Location = new Point(startX, 342),
-                BackColor = Color.FromArgb(35, 115, 235),
+                Location = new Point(x, 410),
+                Size = new Size(fieldWidth, 45),
+                BackColor = Color.FromArgb(36, 123, 235),
                 ForeColor = Color.White,
                 FlatStyle = FlatStyle.Flat,
-                Font = new Font("Segoe UI Semibold", 10.5f, FontStyle.Bold),
-                Cursor = Cursors.Hand
+                Font = new Font("Segoe UI", 10.5f, FontStyle.Bold),
+                Cursor = Cursors.Hand,
+                UseVisualStyleBackColor = false
             };
             btnLogin.FlatAppearance.BorderSize = 0;
+            btnLogin.MouseEnter += (s, e) =>
+            {
+                if (btnLogin.Enabled) btnLogin.BackColor = Color.FromArgb(25, 105, 215);
+            };
+            btnLogin.MouseLeave += (s, e) =>
+            {
+                if (btnLogin.Enabled) btnLogin.BackColor = Color.FromArgb(36, 123, 235);
+            };
+            btnLogin.Click += async (s, e) => await IniciarSesionAsync();
+            fondoDiagonal.Controls.Add(btnLogin);
+            AddLabel(fondoDiagonal, "Acceso exclusivo para personal autorizado",
+                new Point(x, 466), new Size(fieldWidth, 25), 8.7f,
+                FontStyle.Regular, Color.FromArgb(195, 216, 245),
+                ContentAlignment.MiddleCenter);
 
-            btnLogin.MouseEnter += (s, e) => btnLogin.BackColor = Color.FromArgb(25, 98, 210);
-            btnLogin.MouseLeave += (s, e) => btnLogin.BackColor = Color.FromArgb(35, 115, 235);
+            AcceptButton = btnLogin;
+            ResumeLayout(false);
+        }
 
-            btnLogin.Click += BtnLogin_Click;
-            panelBackground.Controls.Add(btnLogin);
+        private RoundedPanel CrearCampo(Point posicion, int ancho)
+        {
+            return new RoundedPanel
+            {
+                Location = posicion,
+                Size = new Size(ancho, 45),
+                BackColor = Color.White,
+                BorderColor = grisBorde,
+                BorderRadius = 11
+            };
+        }
 
-            this.AcceptButton = btnLogin;
+        private void ConfigurarFoco(TextBox campo, RoundedPanel marco)
+        {
+            campo.Enter += (s, e) => { marco.BorderColor = Color.FromArgb(74, 177, 234); marco.Invalidate(); if (lblError != null) lblError.Text = ""; };
+            campo.Leave += (s, e) => { marco.BorderColor = grisBorde; marco.Invalidate(); };
+        }
+
+        private static Label AddLabel(Control parent, string texto, Point posicion, Size tamano,
+            float fuente, FontStyle estilo, Color color,
+            ContentAlignment alineacion = ContentAlignment.MiddleLeft)
+        {
+            var etiqueta = new Label
+            {
+                Text = texto,
+                Location = posicion,
+                Size = tamano,
+                Font = new Font("Segoe UI", fuente, estilo),
+                ForeColor = color,
+                BackColor = Color.Transparent,
+                TextAlign = alineacion
+            };
+            parent.Controls.Add(etiqueta);
+            return etiqueta;
         }
 
         private void CargarCredencialesGuardadas()
         {
-            string correoGuardado = SUSTENTACION.Properties.Settings.Default.SavedEmail;
-            bool recordar = SUSTENTACION.Properties.Settings.Default.RememberMe;
-
-            if (recordar && !string.IsNullOrEmpty(correoGuardado))
+            bool recordar = Properties.Settings.Default.RememberMe;
+            string correo = Properties.Settings.Default.SavedEmail;
+            if (recordar && !string.IsNullOrWhiteSpace(correo))
             {
-                txtEmail.Text = correoGuardado;
-                txtEmail.ForeColor = Color.FromArgb(30, 30, 30);
+                txtEmail.Text = correo;
                 chkRememberMe.Checked = true;
             }
         }
 
-        private void BtnLogin_Click(object sender, EventArgs e)
+        private void GuardarPreferencias()
+        {
+            // Solo recuerda el correo, nunca la contraseña.
+            Properties.Settings.Default.RememberMe = chkRememberMe.Checked;
+            Properties.Settings.Default.SavedEmail = chkRememberMe.Checked ? txtEmail.Text.Trim() : "";
+            Properties.Settings.Default.Save();
+        }
+
+        private async Task IniciarSesionAsync()
         {
             string email = txtEmail.Text.Trim();
-            string password = txtPassword.Text.Trim();
+            string password = txtPassword.Text; // No eliminar espacios de una contraseña válida.
+            lblError.Text = "";
 
-            if (string.IsNullOrEmpty(email) || email == "ejemplo@artemusa.com" ||
-                string.IsNullOrEmpty(password) || password == "••••••••")
+            if (string.IsNullOrWhiteSpace(email) || string.IsNullOrEmpty(password))
             {
-                MessageBox.Show("Por favor ingresa tu correo y contraseña.", "Campos requeridos", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                lblError.Text = "Completa tu correo y contraseña.";
                 return;
             }
+            try { var validacion = new MailAddress(email); if (!string.Equals(validacion.Address, email, StringComparison.OrdinalIgnoreCase)) throw new FormatException(); }
+            catch (FormatException) { lblError.Text = "Ingresa un correo electrónico válido."; return; }
 
             btnLogin.Enabled = false;
-            btnLogin.Text = "VERIFICANDO...";
-            btnLogin.BackColor = Color.FromArgb(100, 130, 170);
-
-            Conexion conexionBD = new Conexion();
+            btnLogin.Text = "VERIFICANDO ACCESO...";
+            btnLogin.BackColor = Color.FromArgb(117, 152, 211);
 
             try
             {
-                using (NpgsqlConnection conn = conexionBD.ObtenerConexion())
+                // Mantiene la consulta de la base actual. Se recomienda migrar contraseñas a hashes seguros.
+                using (NpgsqlConnection conn = new Conexion().ObtenerConexion())
+                using (var cmd = new NpgsqlCommand(@"
+                    SELECT t.id_trabajador, t.nombre, r.nombre_rol
+                    FROM trabajadores t
+                    INNER JOIN roles r ON t.id_rol = r.id_rol
+                    WHERE t.correo = @correo AND t.password = @password", conn))
                 {
-                    // Agregamos t.id a la consulta para obtener el ID del trabajador
-                    string query = @"SELECT t.id_trabajador, t.nombre, r.nombre_rol 
-                                     FROM trabajadores t 
-                                     INNER JOIN roles r ON t.id_rol = r.id_rol 
-                                     WHERE t.correo = @correo AND t.password = @password";
-
-                    using (NpgsqlCommand cmd = new NpgsqlCommand(query, conn))
+                    cmd.Parameters.AddWithValue("@correo", email);
+                    cmd.Parameters.AddWithValue("@password", password);
+                    using (var reader = await cmd.ExecuteReaderAsync())
                     {
-                        cmd.Parameters.AddWithValue("@correo", email);
-                        cmd.Parameters.AddWithValue("@password", password);
-
-                        using (NpgsqlDataReader reader = cmd.ExecuteReader())
+                        if (!await reader.ReadAsync())
                         {
-                            if (reader.Read())
-                            {
-                                int idTrabajador = Convert.ToInt32(reader["id_trabajador"]);
-                                string nombreTrabajador = reader["nombre"].ToString();
-                                string nombreRol = reader["nombre_rol"].ToString();
-
-                                // ... (el código de guardar credenciales queda igual)
-
-                                txtEmail.Clear();
-                                txtPassword.Clear();
-
-                                this.Hide();
-
-                                if (nombreRol.Equals("Administrador", StringComparison.OrdinalIgnoreCase))
-                                {
-                                    FormAdmin dashboardAdmin = new FormAdmin(nombreTrabajador, nombreRol);
-                                    dashboardAdmin.Show();
-                                }
-                                else
-                                {
-                                    // Pasamos el ID, nombre y rol al FormTrabajador
-                                    FormTrabajador dashboardTrabajador = new FormTrabajador(idTrabajador, nombreTrabajador, nombreRol);
-                                    dashboardTrabajador.Show();
-                                }
-                            }
-                            else
-                            {
-                                MessageBox.Show("El correo o la contraseña son incorrectos.", "Error de Autenticación", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                            }
+                            lblError.Text = "Correo o contraseña incorrectos.";
+                            return;
                         }
+
+                        int idTrabajador = Convert.ToInt32(reader["id_trabajador"]);
+                        string nombreTrabajador = reader["nombre"].ToString();
+                        string nombreRol = reader["nombre_rol"].ToString();
+                        GuardarPreferencias();
+
+                        Form dashboard;
+                        if (nombreRol.Equals("Administrador", StringComparison.OrdinalIgnoreCase))
+                            dashboard = new FormAdmin(nombreTrabajador, nombreRol);
+                        else
+                            dashboard = new FormTrabajador(idTrabajador, nombreTrabajador, nombreRol);
+
+                        // Evita que la aplicación quede oculta después de cerrar el panel.
+                        dashboard.FormClosed += (s, e) => this.Close();
+                        txtPassword.Clear();
+                        this.Hide();
+                        dashboard.Show();
                     }
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Ocurrió un error al intentar conectar: " + ex.Message, "Error de Conexión", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                // No mostrar detalles de la BD al usuario final.
+                System.Diagnostics.Debug.WriteLine(ex);
+                lblError.Text = "No se pudo iniciar sesión. Verifica la conexión.";
             }
             finally
             {
-                conexionBD.CerrarConexion();
                 btnLogin.Enabled = true;
                 btnLogin.Text = "INICIAR SESIÓN";
-                btnLogin.BackColor = Color.FromArgb(35, 115, 235);
+                btnLogin.BackColor = Color.FromArgb(36, 123, 235);
             }
         }
 
         private void LblRecoverPassword_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
         {
-            MessageBox.Show("Módulo en desarrollo.\nPor favor, contacta al administrador del sistema para restablecer tu acceso.",
-                            "Recuperar Contraseña", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show("Comunícate con el administrador para recuperar tu acceso.",
+                "Recuperación de acceso", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
     }
 
-    public class DiagonalPanel : Panel
+    // Contorno redondeado REAL: recorta también la superficie del Panel.
+    // Esto evita que aparezca un rectángulo blanco detrás de las esquinas.
+    internal class RoundedPanel : Panel
     {
-        public DiagonalPanel()
+        private Color _borderColor = Color.FromArgb(217, 225, 235);
+        private int _borderRadius = 11;
+
+        [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+        public Color BorderColor
         {
-            this.DoubleBuffered = true;
+            get { return _borderColor; }
+            set { _borderColor = value; Invalidate(); }
+        }
+
+        [System.ComponentModel.DefaultValue(11)]
+        public int BorderRadius
+        {
+            get { return _borderRadius; }
+            set { _borderRadius = Math.Max(1, value); ActualizarRegion(); Invalidate(); }
+        }
+
+        public RoundedPanel()
+        {
+            DoubleBuffered = true;
+            BackColor = Color.White;
+            SetStyle(ControlStyles.ResizeRedraw, true);
+        }
+
+        protected override void OnSizeChanged(EventArgs e)
+        {
+            base.OnSizeChanged(e);
+            ActualizarRegion();
+        }
+
+        private void ActualizarRegion()
+        {
+            if (Width < 4 || Height < 4) return;
+            using (var ruta = CrearRedondeado(new Rectangle(0, 0, Width, Height), _borderRadius))
+            {
+                Region vieja = Region;
+                Region = new Region(ruta);
+                if (vieja != null) vieja.Dispose();
+            }
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            using (var ruta = CrearRedondeado(new Rectangle(1, 1, Width - 3, Height - 3), _borderRadius))
+            using (var borde = new Pen(_borderColor, 1.5f))
+            {
+                e.Graphics.DrawPath(borde, ruta);
+            }
+        }
+
+        private static GraphicsPath CrearRedondeado(Rectangle r, int radius)
+        {
+            int d = Math.Min(radius * 2, Math.Min(r.Width, r.Height));
+            var p = new GraphicsPath();
+            p.AddArc(r.Left, r.Top, d, d, 180, 90);
+            p.AddArc(r.Right - d, r.Top, d, d, 270, 90);
+            p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+            p.AddArc(r.Left, r.Bottom - d, d, d, 90, 90);
+            p.CloseFigure();
+            return p;
+        }
+    }
+
+    // Panel decorativo: tarjeta blanca con sombra, franja gris y corte diagonal azul.
+    internal class DiagonalLoginPanel : Panel
+    {
+        public DiagonalLoginPanel()
+        {
+            DoubleBuffered = true;
+            BackColor = Color.FromArgb(233, 238, 245);
         }
 
         protected override void OnPaint(PaintEventArgs e)
@@ -417,81 +420,29 @@ namespace SUSTENTACION
             base.OnPaint(e);
             Graphics g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.Clear(Color.FromArgb(232, 238, 246));
 
-            // 1. Fondo general claro
-            Color fondoGeneral = Color.FromArgb(232, 238, 245);
-            g.Clear(fondoGeneral);
+            // Tarjeta blanca del diseño original, ligeramente levantada del fondo.
+            Rectangle tarjeta = new Rectangle(25, 30, Width - 50, Height - 60);
+            using (var sombra = new SolidBrush(Color.FromArgb(28, 30, 48, 73)))
+                g.FillRectangle(sombra, tarjeta.X + 5, tarjeta.Y + 6, tarjeta.Width, tarjeta.Height);
+            using (var blanco = new SolidBrush(Color.White))
+                g.FillRectangle(blanco, tarjeta);
 
-            // 2. Dimensiones de la tarjeta blanca central
-            int marginHorizontal = 25;
-            int marginVertical = 30;
-            Rectangle cardRect = new Rectangle(
-                marginHorizontal,
-                marginVertical,
-                this.Width - (marginHorizontal * 2),
-                this.Height - (marginVertical * 2)
-            );
-
-            // 3. Sombra de la tarjeta
-            for (int i = 1; i <= 8; i++)
-            {
-                int alpha = (int)(18 * (1.0 - (i / 8.0)));
-                using (SolidBrush shadowBrush = new SolidBrush(Color.FromArgb(alpha, 0, 0, 0)))
-                {
-                    Rectangle shadowRect = new Rectangle(
-                        cardRect.X - i / 2,
-                        cardRect.Y + i / 2,
-                        cardRect.Width + i,
-                        cardRect.Height + i
-                    );
-                    g.FillRectangle(shadowBrush, shadowRect);
-                }
-            }
-
-            // 4. Base blanca de la tarjeta central
-            using (SolidBrush whiteBrush = new SolidBrush(Color.White))
-            {
-                g.FillRectangle(whiteBrush, cardRect);
-            }
-
-            // 5. Polígono azul que abarca HASTA LOS BORDES de la ventana (0 y Height)
-            Point[] diagonalPoints = new Point[]
-            {
-            new Point((int)(this.Width * 0.52), 0),
-            new Point(this.Width, 0),
-            new Point(this.Width, this.Height),
-            new Point((int)(this.Width * 0.36), this.Height)
+            // Corte inclinado como en la referencia: azul alcanza los bordes,
+            // con una estrecha línea gris luminosa en la unión.
+            Point arriba = new Point((int)(Width * 0.525), 0);
+            Point abajo = new Point((int)(Width * 0.365), Height);
+            Point[] poligonoAzul = {
+                arriba, new Point(Width, 0), new Point(Width, Height), abajo
             };
-
-            Color azulMuestra = Color.FromArgb(22, 70, 145);
-            using (SolidBrush blueBrush = new SolidBrush(azulMuestra))
-            {
-                g.FillPolygon(blueBrush, diagonalPoints);
-            }
-
-            // 6. Línea de relieve y sombra en el corte diagonal
-            using (GraphicsPath path = new GraphicsPath())
-            {
-                path.AddLine(
-                    (int)(this.Width * 0.52), 0,
-                    (int)(this.Width * 0.36), this.Height
-                );
-
-                using (Pen penSombra = new Pen(Color.FromArgb(60, 0, 0, 0), 5f))
-                {
-                    g.DrawPath(penSombra, path);
-                }
-                using (Pen penLuz = new Pen(Color.FromArgb(30, 255, 255, 255), 2f))
-                {
-                    g.DrawPath(penLuz, path);
-                }
-            }
-        }
-
-        protected override void OnResize(EventArgs eventargs)
-        {
-            base.OnResize(eventargs);
-            this.Invalidate();
+            using (var azul = new SolidBrush(Color.FromArgb(28, 75, 148)))
+                g.FillPolygon(azul, poligonoAzul);
+            using (var bordeOscuro = new Pen(Color.FromArgb(80, 16, 42, 84), 5f))
+                g.DrawLine(bordeOscuro, arriba, abajo);
+            using (var bordeClaro = new Pen(Color.FromArgb(205, 229, 237, 248), 2f))
+                g.DrawLine(bordeClaro, new Point(arriba.X - 3, arriba.Y),
+                    new Point(abajo.X - 3, abajo.Y));
         }
     }
 }

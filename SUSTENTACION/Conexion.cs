@@ -30,7 +30,14 @@ namespace SUSTENTACION
                 Username = usuario,
                 Password = password,
                 SslMode = SslMode.Require,
-                Timeout = 60
+                Timeout = 60,
+                CommandTimeout = 60,
+                KeepAlive = 30,
+                Pooling = true,
+                MinPoolSize = 1,
+                MaxPoolSize = 10,
+                NoResetOnClose = true,
+                TcpKeepAlive = true
             };
 
             conexion = new NpgsqlConnection(

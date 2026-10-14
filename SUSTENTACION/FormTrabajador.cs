@@ -355,7 +355,7 @@ namespace SUSTENTACION
 
             Label lblEventListTitle = new Label
             {
-                Text = "Lista de Eventos\nActividades programadas",
+                Text = "Lista de Eventos\nProgramados y retornados",
                 Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
                 ForeColor = textWhite,
                 Dock = DockStyle.Top,
@@ -374,7 +374,11 @@ namespace SUSTENTACION
             // ==========================================
             // CARGAR EVENTOS REALES DESDE LA BASE DE DATOS
             // ==========================================
-            CargarEventosEnLista(flowEvents, fechaSeleccionada);
+            // 🔥 Cargar en hilo separado para no bloquear la UI
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                CargarEventosEnLista(flowEvents, fechaSeleccionada);
+            });
 
             panelEventList.Controls.Add(flowEvents);
             lblEventListTitle.SendToBack();
@@ -578,16 +582,17 @@ namespace SUSTENTACION
                                     // ==========================================
                                     // NO HAY EVENTO → ABRIR FORMULARIO DE SALIDA
                                     // ==========================================
-                                    using (var formSalida = new FormSalidaEquipo(
-                                        this.idTrabajador,
-                                        this.nombreUsuario,
-                                        fechaDelPanel))
+                                    this.Hide();  // 🔥 Ocultar el FormTrabajador
+                                    using (var formSalida = new FormSalidaEquipo(this.idTrabajador, this.nombreUsuario, fechaDelPanel))
                                     {
-                                        if (formSalida.ShowDialog() == DialogResult.OK)
+                                        formSalida.ShowDialog();
+                                        if (formSalida.DialogResult == DialogResult.OK)
                                         {
                                             ConstruirCalendarioEvents();
                                         }
                                     }
+                                    this.Show();  // 🔥 Volver a mostrar el FormTrabajador
+                                    this.BringToFront();
                                 }
                             };
 
@@ -638,15 +643,35 @@ namespace SUSTENTACION
             {
                 NpgsqlConnection con = conexionDB.ObtenerConexion();
 
-                string query = @"SELECT s.id_salida, s.fecha_salida, s.encargado, s.ubicacion, s.detalles,
-                                 STRING_AGG(e.nombre, ', ') AS equipos
-                                 FROM salidas s
-                                 LEFT JOIN salida_equipos se ON s.id_salida = se.id_salida
-                                 LEFT JOIN equipos e ON se.id_equipo = e.id
-                                 WHERE EXTRACT(MONTH FROM s.fecha_salida) = @mes 
-                                   AND EXTRACT(YEAR FROM s.fecha_salida) = @anio
-                                 GROUP BY s.id_salida, s.fecha_salida, s.encargado, s.ubicacion, s.detalles
-                                 ORDER BY s.fecha_salida ASC";
+                string query = @"
+                    SELECT 
+                        s.id_salida,
+                        s.fecha_salida,
+                        s.encargado,
+                        s.ubicacion,
+                        s.detalles,
+                        s.estado,
+                        e.hora_inicio,
+                        e.hora_fin,
+                        e.titulo AS titulo_evento,
+                        STRING_AGG(eq.nombre, ', ') AS equipos,
+                        CASE 
+                            WHEN EXISTS (
+                                SELECT 1 FROM retornos r 
+                                WHERE r.id_salida = s.id_salida
+                            ) THEN 'Retornado'
+                            ELSE 'Activo'
+                        END AS estado_retorno
+                    FROM salidas s
+                    LEFT JOIN eventos e ON e.id = s.id_evento
+                    LEFT JOIN salida_equipos se ON s.id_salida = se.id_salida
+                    LEFT JOIN equipos eq ON se.id_equipo = eq.id
+                    WHERE EXTRACT(MONTH FROM s.fecha_salida) = @mes 
+                      AND EXTRACT(YEAR FROM s.fecha_salida) = @anio
+                    GROUP BY s.id_salida, s.fecha_salida, s.encargado, 
+                             s.ubicacion, s.detalles, s.estado,
+                             e.hora_inicio, e.hora_fin, e.titulo
+                    ORDER BY s.fecha_salida ASC";
 
                 NpgsqlCommand cmd = new NpgsqlCommand(query, con);
                 cmd.Parameters.AddWithValue("@mes", mes.Month);
@@ -661,14 +686,57 @@ namespace SUSTENTACION
                     DateTime fecha = Convert.ToDateTime(reader["fecha_salida"]);
                     string encargado = reader["encargado"].ToString();
                     string ubicacion = reader["ubicacion"].ToString();
-                    string equipos = reader["equipos"].ToString();
+                    string equipos = reader["equipos"]?.ToString() ?? "";
+                    string estadoRetorno = reader["estado_retorno"].ToString();
+                    string tituloEvento = reader["titulo_evento"]?.ToString() ?? "";
+
+                    // 🔥 Leer la hora desde la tabla eventos (soporta TimeOnly, TimeSpan y string)
+                    string horaTexto = "00:00";
+                    if (reader["hora_inicio"] != DBNull.Value)
+                    {
+                        object valorHora = reader["hora_inicio"];
+
+                        if (valorHora is TimeOnly timeOnly)
+                        {
+                            horaTexto = timeOnly.ToString("HH:mm");
+                        }
+                        else if (valorHora is TimeSpan timeSpan)
+                        {
+                            horaTexto = timeSpan.ToString(@"hh\:mm");
+                        }
+                        else
+                        {
+                            string str = valorHora.ToString();
+                            if (TimeSpan.TryParse(str, out TimeSpan ts))
+                                horaTexto = ts.ToString(@"hh\:mm");
+                        }
+                    }
 
                     string fechaTexto = fecha.ToString("dd MMM yyyy", new CultureInfo("es-ES"));
-                    string titulo = $"Salida - {encargado}";
+
+                    // 🔥 Mostrar si es SALIDA o RETORNO
+                    string titulo = estadoRetorno == "Retornado"
+                        ? $"✅ Retorno - {encargado}"
+                        : $"📤 Salida - {encargado}";
+
                     string detalles = $"{equipos} | {ubicacion}";
 
-                    Panel tarjeta = CrearTarjetaEvento(fechaTexto, titulo, detalles, fecha.ToString("HH:mm"));
-                    contenedor.Controls.Add(tarjeta);
+                    // Color del título según estado
+                    Color colorTitulo = estadoRetorno == "Retornado"
+                        ? Color.FromArgb(100, 220, 160)
+                        : textWhite;
+
+                    Panel tarjeta = CrearTarjetaEvento(
+                        fechaTexto,
+                        titulo,
+                        detalles,
+                        horaTexto,
+                        colorTitulo);
+
+                    if (contenedor.InvokeRequired)
+                        contenedor.Invoke(new Action(() => contenedor.Controls.Add(tarjeta)));
+                    else
+                        contenedor.Controls.Add(tarjeta);
                 }
 
                 if (!hay)
@@ -686,18 +754,8 @@ namespace SUSTENTACION
             }
             catch (Exception ex)
             {
-                string mensajeCompleto = ex.Message;
-
-                if (ex.InnerException != null)
-                {
-                    mensajeCompleto += "\n\nDETALLE INTERNO:\n" + ex.InnerException.Message;
-                }
-
-                MessageBox.Show(
-                    "No se pudo registrar la salida:\n" + mensajeCompleto,
-                    "Error de MySQL",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
+                MessageBox.Show("Error al cargar eventos:\n" + ex.Message,
+                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally
             {
@@ -705,7 +763,7 @@ namespace SUSTENTACION
             }
         }
 
-        private Panel CrearTarjetaEvento(string fecha, string titulo, string precio, string hora)
+        private Panel CrearTarjetaEvento(string fecha, string titulo, string detalles, string hora, Color colorTitulo)
         {
             Panel card = new Panel
             {
@@ -715,15 +773,47 @@ namespace SUSTENTACION
             };
             AplicarBordesRedondeados(card, 8);
 
-            Label lblFecha = new Label { Text = fecha, Font = new Font("Segoe UI", 7f), ForeColor = purpleAccent, Location = new Point(6, 6), AutoSize = true };
-            Label lblTitulo = new Label { Text = titulo, Font = new Font("Segoe UI", 8.5f, FontStyle.Bold), ForeColor = textWhite, Location = new Point(6, 20), AutoSize = true };
-            Label lblHora = new Label { Text = $"🕒 {hora}", Font = new Font("Segoe UI", 7f), ForeColor = textMuted, Location = new Point(6, 44), AutoSize = true };
-            Label lblPrecio = new Label { Text = precio, Font = new Font("Segoe UI", 8.5f, FontStyle.Bold), ForeColor = textWhite, Location = new Point(170, 20), AutoSize = true };
+            Label lblFecha = new Label
+            {
+                Text = fecha,
+                Font = new Font("Segoe UI", 7f),
+                ForeColor = purpleAccent,
+                Location = new Point(6, 6),
+                AutoSize = true
+            };
+
+            Label lblTitulo = new Label
+            {
+                Text = titulo,
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                ForeColor = colorTitulo,
+                Location = new Point(6, 20),
+                AutoSize = true
+            };
+
+            Label lblHora = new Label
+            {
+                Text = $"🕒 {hora}",
+                Font = new Font("Segoe UI", 7f),
+                ForeColor = textMuted,
+                Location = new Point(6, 44),
+                AutoSize = true
+            };
+
+            Label lblDetalles = new Label
+            {
+                Text = detalles,
+                Font = new Font("Segoe UI", 6.5f),
+                ForeColor = textMuted,
+                Location = new Point(6, 57),
+                Size = new Size(200, 15),
+                AutoEllipsis = true
+            };
 
             card.Controls.Add(lblFecha);
             card.Controls.Add(lblTitulo);
             card.Controls.Add(lblHora);
-            card.Controls.Add(lblPrecio);
+            card.Controls.Add(lblDetalles);
 
             return card;
         }
