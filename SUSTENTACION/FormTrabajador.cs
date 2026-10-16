@@ -181,12 +181,10 @@ namespace SUSTENTACION
             AgregarBotonMenu(menuPanel, "░", "Panel de Control", "Dashboard", true);
             AgregarBotonMenu(menuPanel, "💬", "Gestión de Equipos", "Chat", false);
             AgregarBotonMenu(menuPanel, "ℹ️", "Información", "Info", false);
-            AgregarBotonMenu(menuPanel, "👥", "Docentes", "Teacher", false);
+            AgregarBotonMenu(menuPanel, "🔔", "Notificaciones y solicitudes", "Notificaciones", false);
             AgregarBotonMenu(menuPanel, "📅", "Eventos", "Event", false);
 
             AgregarEtiquetaSeccion(menuPanel, "Otros");
-            AgregarBotonMenu(menuPanel, "📊", "Finanzas", "Finance", false);
-            AgregarBotonMenu(menuPanel, "🍴", "Servicios", "Food", false);
             AgregarBotonMenu(menuPanel, "⚙️", "Ajustes", "Settings", false);
 
             panelSidebar.Controls.Add(menuPanel);
@@ -255,6 +253,16 @@ namespace SUSTENTACION
                         vistaInfo.Dock = DockStyle.Fill;
                         panelMainContent.Controls.Add(vistaInfo);
                         break;
+                    case "Notificaciones":
+                        NotificacionesPanel vistaNotif = new NotificacionesPanel(this.idTrabajador, this.nombreUsuario);
+                        vistaNotif.Dock = DockStyle.Fill;
+                        panelMainContent.Controls.Add(vistaNotif);
+                        break;
+                    case "Event":
+                        EventosPanel vistaEventos = new EventosPanel(this.idTrabajador, this.nombreUsuario);
+                        vistaEventos.Dock = DockStyle.Fill;
+                        panelMainContent.Controls.Add(vistaEventos);
+                        break;
                     default:
                         break;
                 }
@@ -316,7 +324,7 @@ namespace SUSTENTACION
 
             btnCerrarSesion.Click += (s, e) =>
             {
-                if (MessageBox.Show("¿Está seguro de que desea cerrar sesión?", "ARTEMISA", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+                if (MessageBox.Show("¿Está seguro de que desea cerrar sesión?", "ARTEMUSA", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
                 {
                     this.Close();
                 }

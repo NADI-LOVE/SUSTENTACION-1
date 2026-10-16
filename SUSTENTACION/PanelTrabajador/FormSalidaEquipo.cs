@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
+using System.Linq;
+using System.Windows.Forms;
 
 namespace SUSTENTACION.PanelTrabajador
 {
@@ -28,6 +30,7 @@ namespace SUSTENTACION.PanelTrabajador
         private readonly Color naranja = Color.FromArgb(255, 145, 80);
         private readonly Color rojo = Color.FromArgb(240, 90, 110);
         private readonly Color amarillo = Color.FromArgb(255, 210, 100);
+        private readonly Color azul = Color.FromArgb(90, 160, 255);
 
         // ==========================================
         // DATOS RECIBIDOS
@@ -70,6 +73,14 @@ namespace SUSTENTACION.PanelTrabajador
         private bool mapaListo = false;
         private LugarEvento lugarSeleccionado = null;
         private string campoActivoParaMapa = "direccion";
+        // ==========================================
+        // AUTOCOMPLETADO EQUIPOS
+        // ==========================================
+        private ListBox lstSugerencias;
+        private Panel panelSugerenciasContenedor;
+        private TextBox txtCodigoActivo;
+        private System.Windows.Forms.Timer timerBusqueda;
+        private List<EquipoSugerencia> sugerenciasActuales = new List<EquipoSugerencia>();
 
         // ==========================================
         // CLASES INTERNAS
@@ -100,6 +111,9 @@ namespace SUSTENTACION.PanelTrabajador
             public int IdEquipo { get; set; }
             public string Codigo { get; set; } = "";
             public string Nombre { get; set; } = "";
+            public string Categoria { get; set; } = "";
+            public string Estado { get; set; } = "";
+            public int Stock { get; set; }
             public int? IdLugar { get; set; }
             public string ResponsableTipo { get; set; } = "";
             public int ResponsableId { get; set; }
@@ -127,6 +141,18 @@ namespace SUSTENTACION.PanelTrabajador
             public string Nombre { get; set; } = "";
             public string Tipo { get; set; } = "";
             public override string ToString() => Nombre;
+        }
+
+        private class EquipoSugerencia
+        {
+            public int Id { get; set; }
+            public string Codigo { get; set; } = "";
+            public string Nombre { get; set; } = "";
+            public string Categoria { get; set; } = "";
+            public string Estado { get; set; } = "";
+            public int Stock { get; set; }
+            public override string ToString() =>
+                $"{(string.IsNullOrEmpty(Codigo) ? "(sin código)" : Codigo)}  —  {Nombre}   [{Stock} disp.]";
         }
 
         // ==========================================
@@ -331,6 +357,22 @@ namespace SUSTENTACION.PanelTrabajador
 
             control.Resize += (s, e) => recalcular();
             recalcular();
+        }
+
+        // ==========================================
+        // RECTÁNGULO REDONDEADO (helper gráfico)
+        // ==========================================
+        private GraphicsPath RoundedRect(Rectangle bounds, int radius)
+        {
+            var path = new GraphicsPath();
+            int d = radius * 2;
+            if (d <= 0) { path.AddRectangle(bounds); return path; }
+            path.AddArc(bounds.X, bounds.Y, d, d, 180, 90);
+            path.AddArc(bounds.Right - d, bounds.Y, d, d, 270, 90);
+            path.AddArc(bounds.Right - d, bounds.Bottom - d, d, d, 0, 90);
+            path.AddArc(bounds.X, bounds.Bottom - d, d, d, 90, 90);
+            path.CloseAllFigures();
+            return path;
         }
 
         // ==========================================
@@ -1774,7 +1816,7 @@ namespace SUSTENTACION.PanelTrabajador
         }
 
         // ==========================================
-        // PASO 4: EQUIPOS
+        // PASO 4: EQUIPOS (con autocompletado en vivo)
         // ==========================================
         private void MostrarPaso4_Equipos()
         {
@@ -1790,7 +1832,7 @@ namespace SUSTENTACION.PanelTrabajador
 
             Label subtitulo = new Label
             {
-                Text = "Agrega equipos por código de barras y asígnalos a un lugar y responsable.",
+                Text = "Escribe el código o nombre del equipo y selecciónalo de la lista de sugerencias.",
                 Font = new Font("Segoe UI", 9.5f),
                 ForeColor = gris,
                 Location = new Point(0, 35),
@@ -1806,80 +1848,258 @@ namespace SUSTENTACION.PanelTrabajador
             };
             panelContenido.Controls.Add(lineaDeco);
 
+            // ════════════════════════════════════════════
+            // PANEL DE BÚSQUEDA CON AUTOCOMPLETADO
+            // ════════════════════════════════════════════
             Panel panelAdd = new Panel
             {
                 Location = new Point(0, 75),
-                Size = new Size(1255, 84),
+                Size = new Size(1255, 110),
                 BackColor = tarjeta,
-                Padding = new Padding(15)
+                Padding = new Padding(15),
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
             };
             AplicarBordeRedondeado(panelAdd, 12);
             panelContenido.Controls.Add(panelAdd);
 
+            // Ícono decorativo
             panelAdd.Controls.Add(new Label
             {
-                Text = "Código:",
-                Font = new Font("Segoe UI", 9, FontStyle.Bold),
+                Text = "🔍",
+                Font = new Font("Segoe UI", 12),
+                ForeColor = morado,
+                Location = new Point(18, 22),
+                Size = new Size(24, 24),
+                TextAlign = ContentAlignment.MiddleCenter,
+                BackColor = Color.Transparent
+            });
+
+            panelAdd.Controls.Add(new Label
+            {
+                Text = "Buscar equipo por código o nombre:",
+                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
                 ForeColor = blanco,
-                Location = new Point(15, 22),
+                Location = new Point(50, 22),
                 AutoSize = true
             });
 
+            // Contenedor del campo de búsqueda (para borde redondeado)
+            Panel panelBuscar = new Panel
+            {
+                Location = new Point(48, 48),
+                Size = new Size(600, 42),
+                BackColor = campo
+            };
+            AplicarBordeRedondeado(panelBuscar, 10);
+            panelBuscar.Paint += (s, e) =>
+            {
+                using (var pen = new Pen(Color.FromArgb(70, 65, 110), 1.2f))
+                {
+                    e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                    using (var p = RoundedRect(new Rectangle(0, 0, panelBuscar.Width - 1, panelBuscar.Height - 1), 10))
+                        e.Graphics.DrawPath(pen, p);
+                }
+            };
+            panelAdd.Controls.Add(panelBuscar);
+
             TextBox txtCodigo = new TextBox
             {
-                Location = new Point(90, 18),
-                Size = new Size(450, 30),
+                Location = new Point(14, 10),
+                Size = new Size(572, 22),
                 BackColor = campo,
                 ForeColor = blanco,
-                BorderStyle = BorderStyle.FixedSingle,
-                Font = new Font("Segoe UI", 10)
+                BorderStyle = BorderStyle.None,
+                Font = new Font("Segoe UI", 11),
+                PlaceholderText = "Ej: CAM01, Micrófono, Cámara..."
             };
-            panelAdd.Controls.Add(txtCodigo);
+            panelBuscar.Controls.Add(txtCodigo);
+            txtCodigoActivo = txtCodigo;
 
-            Button btnAdd = new Button
+            // ── ListBox de sugerencias (flotante) ──
+            panelSugerenciasContenedor = new Panel
             {
-                Text = "+  AGREGAR EQUIPO",
-                Width = 200,
-                Height = 32,
-                Location = new Point(555, 17),
-                FlatStyle = FlatStyle.Flat,
-                BackColor = morado,
-                ForeColor = blanco,
-                Font = new Font("Segoe UI", 9, FontStyle.Bold),
-                Cursor = Cursors.Hand
+                Visible = false,
+                BackColor = Color.FromArgb(22, 20, 36),
+                BorderStyle = BorderStyle.FixedSingle
             };
-            btnAdd.FlatAppearance.BorderSize = 0;
-            btnAdd.FlatAppearance.MouseOverBackColor = moradoHover;
-            AplicarBordeRedondeado(btnAdd, 8);
-
-            Action agregarEquipo = () =>
+            AplicarBordeRedondeado(panelSugerenciasContenedor, 8);
+            panelSugerenciasContenedor.Paint += (s, e) =>
             {
-                string cod = txtCodigo.Text.Trim();
-                if (string.IsNullOrWhiteSpace(cod))
+                using (var pen = new Pen(morado, 1.4f))
                 {
-                    MessageBox.Show("Ingresa un código.");
-                    return;
+                    e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                    using (var p = RoundedRect(
+                        new Rectangle(0, 0, panelSugerenciasContenedor.Width - 1, panelSugerenciasContenedor.Height - 1), 8))
+                        e.Graphics.DrawPath(pen, p);
                 }
-                AgregarEquipoPorCodigo(cod);
-                txtCodigo.Clear();
-                txtCodigo.Focus();
             };
+            panelContenido.Controls.Add(panelSugerenciasContenedor);
+            panelSugerenciasContenedor.BringToFront();
 
-            btnAdd.Click += (s, e) => agregarEquipo();
-            txtCodigo.KeyDown += (s, e) =>
+            lstSugerencias = new ListBox
+            {
+                Dock = DockStyle.Fill,
+                BackColor = Color.FromArgb(22, 20, 36),
+                ForeColor = blanco,
+                BorderStyle = BorderStyle.None,
+                Font = new Font("Segoe UI", 10),
+                IntegralHeight = false,
+                DrawMode = DrawMode.OwnerDrawFixed,
+                ItemHeight = 44
+            };
+            lstSugerencias.DrawItem += LstSugerencias_DrawItem;
+            lstSugerencias.Click += (s, e) => InsertarSugerenciaSeleccionada();
+            lstSugerencias.KeyDown += (s, e) =>
             {
                 if (e.KeyCode == Keys.Enter)
                 {
                     e.SuppressKeyPress = true;
-                    agregarEquipo();
+                    InsertarSugerenciaSeleccionada();
+                }
+                else if (e.KeyCode == Keys.Escape)
+                {
+                    OcultarSugerencias();
+                    txtCodigo.Focus();
                 }
             };
+            panelSugerenciasContenedor.Controls.Add(lstSugerencias);
+
+            // ── Timer para búsqueda con debounce ──
+            timerBusqueda = new System.Windows.Forms.Timer { Interval = 220 };
+            timerBusqueda.Tick += (s, e) =>
+            {
+                timerBusqueda.Stop();
+                BuscarEquiposSugerencias(txtCodigo.Text.Trim());
+            };
+
+            txtCodigo.TextChanged += (s, e) =>
+            {
+                timerBusqueda.Stop();
+                timerBusqueda.Start();
+            };
+
+            // 🔥 Al hacer focus con campo vacío, mostrar todos los equipos disponibles
+            txtCodigo.Enter += (s, e) =>
+            {
+                if (string.IsNullOrWhiteSpace(txtCodigo.Text))
+                {
+                    timerBusqueda.Stop();
+                    BuscarEquiposSugerencias("");
+                }
+            };
+
+            // 🔥 Al hacer click también refrescar si está vacío
+            txtCodigo.Click += (s, e) =>
+            {
+                if (string.IsNullOrWhiteSpace(txtCodigo.Text))
+                {
+                    timerBusqueda.Stop();
+                    BuscarEquiposSugerencias("");
+                }
+            };
+
+            txtCodigo.KeyDown += (s, e) =>
+            {
+                if (e.KeyCode == Keys.Down && lstSugerencias.Items.Count > 0 && panelSugerenciasContenedor.Visible)
+                {
+                    e.SuppressKeyPress = true;
+                    lstSugerencias.Focus();
+                    if (lstSugerencias.SelectedIndex < 0)
+                        lstSugerencias.SelectedIndex = 0;
+                }
+                else if (e.KeyCode == Keys.Enter)
+                {
+                    e.SuppressKeyPress = true;
+                    if (panelSugerenciasContenedor.Visible && lstSugerencias.Items.Count > 0)
+                    {
+                        if (lstSugerencias.SelectedIndex < 0)
+                            lstSugerencias.SelectedIndex = 0;
+                        InsertarSugerenciaSeleccionada();
+                    }
+                    else
+                    {
+                        // Fallback: buscar por código exacto
+                        string cod = txtCodigo.Text.Trim();
+                        if (!string.IsNullOrWhiteSpace(cod))
+                            AgregarEquipoPorCodigo(cod);
+                    }
+                }
+                else if (e.KeyCode == Keys.Escape)
+                {
+                    OcultarSugerencias();
+                }
+            };
+
+            txtCodigo.Leave += (s, e) =>
+            {
+                // Pequeño delay para permitir el click en el ListBox
+                var t = new System.Windows.Forms.Timer { Interval = 180 };
+                t.Tick += (ss, ee) =>
+                {
+                    t.Stop();
+                    t.Dispose();
+                    if (!panelSugerenciasContenedor.Focused && !lstSugerencias.Focused)
+                        OcultarSugerencias();
+                };
+                t.Start();
+            };
+
+            // ── Botón AGREGAR ──
+            Button btnAdd = new Button
+            {
+                Text = "＋  AGREGAR SELECCIONADO",
+                Width = 240,
+                Height = 42,
+                Location = new Point(670, 48),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = morado,
+                ForeColor = blanco,
+                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+                Cursor = Cursors.Hand
+            };
+            btnAdd.FlatAppearance.BorderSize = 0;
+            btnAdd.FlatAppearance.MouseOverBackColor = moradoHover;
+            btnAdd.Click += (s, e) =>
+            {
+                if (panelSugerenciasContenedor.Visible && lstSugerencias.Items.Count > 0)
+                {
+                    if (lstSugerencias.SelectedIndex < 0)
+                        lstSugerencias.SelectedIndex = 0;
+                    InsertarSugerenciaSeleccionada();
+                }
+                else
+                {
+                    string cod = txtCodigo.Text.Trim();
+                    if (string.IsNullOrWhiteSpace(cod))
+                    {
+                        MessageBox.Show("Escribe un código o selecciona un equipo de la lista.");
+                        return;
+                    }
+                    AgregarEquipoPorCodigo(cod);
+                    txtCodigo.Clear();
+                    txtCodigo.Focus();
+                }
+            };
+            AplicarBordeRedondeado(btnAdd, 10);
             panelAdd.Controls.Add(btnAdd);
 
+            // ── Contador de equipos ──
+            Label lblContador = new Label
+            {
+                Text = "0 equipos asignados",
+                Font = new Font("Segoe UI", 9, FontStyle.Italic),
+                ForeColor = gris,
+                Location = new Point(930, 58),
+                AutoSize = true,
+                Name = "lblContadorEquipos"
+            };
+            panelAdd.Controls.Add(lblContador);
+
+            // ── Lista de equipos asignados ──
             FlowLayoutPanel flpEquipos = new FlowLayoutPanel
             {
-                Location = new Point(0, 175),
-                Size = new Size(1255, 500),
+                Location = new Point(0, 200),
+                Size = new Size(1255, 480),
                 AutoScroll = true,
                 FlowDirection = FlowDirection.TopDown,
                 WrapContents = false,
@@ -1891,15 +2111,280 @@ namespace SUSTENTACION.PanelTrabajador
 
             foreach (var eq in equiposAsignados)
                 CrearTarjetaEquipoUI(eq);
+
+            ActualizarContadorEquipos();
         }
 
-        private void AgregarEquipoPorCodigo(string codigo)
+        // ─────────────────────────────────────────────
+        // AUTOCOMPLETADO: dibujado personalizado del ListBox
+        // ─────────────────────────────────────────────
+        private void LstSugerencias_DrawItem(object sender, DrawItemEventArgs e)
         {
+            if (e.Index < 0 || e.Index >= lstSugerencias.Items.Count) return;
+
+            var item = lstSugerencias.Items[e.Index] as EquipoSugerencia;
+            if (item == null) return;
+
+            bool seleccionado = (e.State & DrawItemState.Selected) == DrawItemState.Selected;
+            Color fondoItem = seleccionado ? moradoSuave : Color.FromArgb(22, 20, 36);
+
+            using (var brush = new SolidBrush(fondoItem))
+                e.Graphics.FillRectangle(brush, e.Bounds);
+
+            if (seleccionado)
+            {
+                using (var pen = new Pen(morado, 1.4f))
+                    e.Graphics.DrawLine(pen, e.Bounds.Left, e.Bounds.Top, e.Bounds.Left, e.Bounds.Bottom);
+            }
+
+            // Código (badge morado)
+            string codigo = string.IsNullOrEmpty(item.Codigo) ? "—" : item.Codigo;
+            var rectCod = new Rectangle(e.Bounds.X + 12, e.Bounds.Y + 10, 110, 24);
+            using (var path = RoundedRect(rectCod, 6))
+            using (var brush = new SolidBrush(moradoSuave))
+                e.Graphics.FillPath(brush, path);
+
+            TextRenderer.DrawText(
+                e.Graphics, codigo,
+                new Font("Segoe UI", 9, FontStyle.Bold),
+                rectCod, morado,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+
+            // Nombre
+            var rectNom = new Rectangle(e.Bounds.X + 132, e.Bounds.Y + 6, e.Bounds.Width - 260, 20);
+            TextRenderer.DrawText(
+                e.Graphics, item.Nombre,
+                new Font("Segoe UI", 10, FontStyle.Bold),
+                rectNom, blanco,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+
+            // Categoría + estado
+            string sub = "";
+            if (!string.IsNullOrEmpty(item.Categoria)) sub += item.Categoria;
+            if (!string.IsNullOrEmpty(item.Estado))
+                sub += (sub.Length > 0 ? "  •  " : "") + item.Estado;
+
+            if (sub.Length > 0)
+            {
+                var rectSub = new Rectangle(e.Bounds.X + 132, e.Bounds.Y + 24, e.Bounds.Width - 260, 16);
+                TextRenderer.DrawText(
+                    e.Graphics, sub,
+                    new Font("Segoe UI", 8.5f),
+                    rectSub, gris,
+                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+            }
+
+            // Stock a la derecha
+            Color colStock = item.Stock <= 0 ? rojo : (item.Stock < 3 ? naranja : verde);
+            var rectStock = new Rectangle(e.Bounds.Right - 100, e.Bounds.Y + 12, 88, 22);
+            TextRenderer.DrawText(
+                e.Graphics, $"Stock: {item.Stock}",
+                new Font("Segoe UI", 9, FontStyle.Bold),
+                rectStock, colStock,
+                TextFormatFlags.Right | TextFormatFlags.VerticalCenter);
+        }
+
+        // ─────────────────────────────────────────────
+        // AUTOCOMPLETADO: buscar sugerencias
+        // ─────────────────────────────────────────────
+        private void BuscarEquiposSugerencias(string texto)
+        {
+            sugerenciasActuales = new List<EquipoSugerencia>();
+
             Conexion conexionDB = new Conexion();
             try
             {
                 NpgsqlConnection con = conexionDB.ObtenerConexion();
-                string q = "SELECT id, codigo, nombre, stock, estado FROM equipos WHERE codigo = @codigo";
+
+                string q;
+                bool vacio = string.IsNullOrWhiteSpace(texto);
+
+                if (vacio)
+                {
+                    // 🔥 Sin texto: mostrar TODOS los equipos con stock
+                    q = @"
+                SELECT id, codigo, nombre, stock, estado, categoria
+                FROM equipos
+                WHERE stock > 0
+                ORDER BY 
+                    CASE WHEN estado ILIKE '%disponible%' THEN 0 ELSE 1 END,
+                    codigo
+                LIMIT 30";
+                }
+                else
+                {
+                    // 🔥 Con texto: buscar por código o nombre, ordenado por relevancia
+                    q = @"
+                SELECT id, codigo, nombre, stock, estado, categoria
+                FROM equipos
+                WHERE stock > 0
+                  AND (
+                      codigo ILIKE @patron 
+                      OR nombre ILIKE @patron
+                      OR categoria ILIKE @patron
+                  )
+                ORDER BY
+                    CASE 
+                        WHEN codigo ILIKE @exacto THEN 0
+                        WHEN codigo ILIKE @empieza THEN 1
+                        WHEN nombre ILIKE @empieza THEN 2
+                        WHEN codigo ILIKE @patron THEN 3
+                        WHEN nombre ILIKE @patron THEN 4
+                        WHEN categoria ILIKE @patron THEN 5
+                        ELSE 6
+                    END,
+                    codigo
+                LIMIT 20";
+                }
+
+                using (NpgsqlCommand cmd = new NpgsqlCommand(q, con))
+                {
+                    if (!vacio)
+                    {
+                        cmd.Parameters.AddWithValue("@patron", "%" + texto + "%");
+                        cmd.Parameters.AddWithValue("@exacto", texto);
+                        cmd.Parameters.AddWithValue("@empieza", texto + "%");
+                    }
+
+                    using (NpgsqlDataReader rd = cmd.ExecuteReader())
+                    {
+                        while (rd.Read())
+                        {
+                            sugerenciasActuales.Add(new EquipoSugerencia
+                            {
+                                Id = Convert.ToInt32(rd["id"]),
+                                Codigo = rd["codigo"]?.ToString() ?? "",
+                                Nombre = rd["nombre"]?.ToString() ?? "",
+                                Categoria = rd["categoria"]?.ToString() ?? "",
+                                Estado = rd["estado"]?.ToString() ?? "",
+                                Stock = rd["stock"] != DBNull.Value ? Convert.ToInt32(rd["stock"]) : 0
+                            });
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("Error autocompletado: " + ex.Message);
+            }
+            finally
+            {
+                conexionDB.CerrarConexion();
+            }
+
+            // Filtrar los que ya están asignados
+            sugerenciasActuales = sugerenciasActuales
+                .Where(s => !equiposAsignados.Any(eq => eq.IdEquipo == s.Id))
+                .ToList();
+
+            if (sugerenciasActuales.Count == 0)
+            {
+                // Si escribió algo y no hay resultados, mostrar mensaje
+                if (!string.IsNullOrWhiteSpace(texto))
+                {
+                    lstSugerencias.Items.Clear();
+                    lstSugerencias.Items.Add("(sin resultados)");
+
+                    Point posCampoVacio = txtCodigoActivo.PointToScreen(Point.Empty);
+                    Point posPanelVacio = panelContenido.PointToClient(posCampoVacio);
+
+                    panelSugerenciasContenedor.Location = new Point(posPanelVacio.X, posPanelVacio.Y + txtCodigoActivo.Height + 32);
+                    panelSugerenciasContenedor.Size = new Size(600, 50);
+                    panelSugerenciasContenedor.Visible = true;
+                    panelSugerenciasContenedor.BringToFront();
+                }
+                else
+                {
+                    OcultarSugerencias();
+                }
+                return;
+            }
+
+            // Cargar el ListBox
+            lstSugerencias.Items.Clear();
+            foreach (var s in sugerenciasActuales)
+                lstSugerencias.Items.Add(s);
+
+            // Posicionar el contenedor justo debajo del campo
+            Point posCampo = txtCodigoActivo.PointToScreen(Point.Empty);
+            Point posPanel = panelContenido.PointToClient(posCampo);
+
+            int anchoLista = 600;
+            int altoLista = Math.Min(320, sugerenciasActuales.Count * 44 + 4);
+
+            panelSugerenciasContenedor.Location = new Point(posPanel.X, posPanel.Y + txtCodigoActivo.Height + 32);
+            panelSugerenciasContenedor.Size = new Size(anchoLista, altoLista);
+            panelSugerenciasContenedor.Visible = true;
+            panelSugerenciasContenedor.BringToFront();
+            lstSugerencias.SelectedIndex = 0;
+        }
+
+        private void InsertarSugerenciaSeleccionada()
+        {
+            if (lstSugerencias.SelectedItem is EquipoSugerencia sug)
+            {
+                AgregarEquipoDesdeSugerencia(sug);
+                OcultarSugerencias();
+                txtCodigoActivo?.Clear();
+                txtCodigoActivo?.Focus();
+            }
+        }
+
+        private void OcultarSugerencias()
+        {
+            if (panelSugerenciasContenedor != null)
+            {
+                panelSugerenciasContenedor.Visible = false;
+                lstSugerencias?.Items.Clear();
+            }
+            sugerenciasActuales?.Clear();
+        }
+
+        // ─────────────────────────────────────────────
+        // AGREGAR EQUIPO: desde sugerencia (ya tenemos datos)
+        // ─────────────────────────────────────────────
+        private void AgregarEquipoDesdeSugerencia(EquipoSugerencia s)
+        {
+            if (s.Stock <= 0)
+            {
+                MessageBox.Show($"El equipo '{s.Nombre}' no tiene stock disponible.",
+                    "Sin stock", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            if (equiposAsignados.Any(e => e.IdEquipo == s.Id))
+            {
+                MessageBox.Show("Este equipo ya fue agregado.");
+                return;
+            }
+
+            var equipo = new EquipoAsignado
+            {
+                IdEquipo = s.Id,
+                Codigo = s.Codigo,
+                Nombre = s.Nombre,
+                Categoria = s.Categoria,
+                Estado = s.Estado,
+                Stock = s.Stock
+            };
+            equiposAsignados.Add(equipo);
+            CrearTarjetaEquipoUI(equipo);
+            ActualizarContadorEquipos();
+        }
+
+        // ─────────────────────────────────────────────
+        // AGREGAR EQUIPO: por código exacto (fallback)
+        // ─────────────────────────────────────────────
+        private void AgregarEquipoPorCodigo(string codigo)
+        {
+            OcultarSugerencias();
+
+            Conexion conexionDB = new Conexion();
+            try
+            {
+                NpgsqlConnection con = conexionDB.ObtenerConexion();
+                string q = @"SELECT id, codigo, nombre, stock, estado, categoria
+                     FROM equipos WHERE codigo ILIKE @codigo LIMIT 1";
 
                 using (NpgsqlCommand cmd = new NpgsqlCommand(q, con))
                 {
@@ -1917,36 +2402,38 @@ namespace SUSTENTACION.PanelTrabajador
                         string nom = rd["nombre"].ToString();
                         int stock = Convert.ToInt32(rd["stock"]);
                         string estado = rd["estado"]?.ToString() ?? "";
+                        string categoria = rd["categoria"]?.ToString() ?? "";
 
-                        // 🔥 Validar stock disponible
                         if (stock <= 0)
                         {
                             MessageBox.Show(
                                 $"El equipo '{nom}' no tiene stock disponible.\n" +
                                 $"Estado actual: {estado}",
-                                "Sin stock",
-                                MessageBoxButtons.OK,
-                                MessageBoxIcon.Warning);
+                                "Sin stock", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                             return;
                         }
 
-                        foreach (var e in equiposAsignados)
+                        if (equiposAsignados.Any(e => e.IdEquipo == idEq))
                         {
-                            if (e.IdEquipo == idEq)
-                            {
-                                MessageBox.Show("Este equipo ya fue agregado.");
-                                return;
-                            }
+                            MessageBox.Show("Este equipo ya fue agregado.");
+                            return;
                         }
 
                         var equipo = new EquipoAsignado
                         {
                             IdEquipo = idEq,
                             Codigo = cod,
-                            Nombre = nom
+                            Nombre = nom,
+                            Categoria = categoria,
+                            Estado = estado,
+                            Stock = stock
                         };
                         equiposAsignados.Add(equipo);
                         CrearTarjetaEquipoUI(equipo);
+                        ActualizarContadorEquipos();
+
+                        txtCodigoActivo?.Clear();
+                        txtCodigoActivo?.Focus();
                     }
                 }
             }
@@ -1960,6 +2447,9 @@ namespace SUSTENTACION.PanelTrabajador
             }
         }
 
+        // ─────────────────────────────────────────────
+        // TARJETA DE EQUIPO (diseño mejorado)
+        // ─────────────────────────────────────────────
         private void CrearTarjetaEquipoUI(EquipoAsignado eq)
         {
             var flp = panelContenido.Controls["flpEquipos"] as FlowLayoutPanel;
@@ -1968,76 +2458,184 @@ namespace SUSTENTACION.PanelTrabajador
             Panel card = new Panel
             {
                 Width = 1220,
-                Height = 142,
+                Height = 150,
                 BackColor = tarjeta,
                 Margin = new Padding(0, 0, 0, 10),
                 Padding = new Padding(20)
             };
             AplicarBordeRedondeado(card, 12);
-
-            card.Controls.Add(new Label
+            card.Paint += (s, e) =>
             {
-                Text = eq.Codigo,
+                using (var pen = new Pen(Color.FromArgb(60, 55, 90), 1.2f))
+                {
+                    e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                    using (var p = RoundedRect(new Rectangle(0, 0, card.Width - 1, card.Height - 1), 12))
+                        e.Graphics.DrawPath(pen, p);
+                }
+            };
+
+            // ── Badge de código ──
+            Panel badgeCod = new Panel
+            {
+                Location = new Point(20, 18),
+                Size = new Size(140, 32),
+                BackColor = moradoSuave
+            };
+            AplicarBordeRedondeado(badgeCod, 8);
+            badgeCod.Controls.Add(new Label
+            {
+                Text = string.IsNullOrEmpty(eq.Codigo) ? "—" : eq.Codigo,
                 Font = new Font("Segoe UI", 10, FontStyle.Bold),
                 ForeColor = morado,
-                Location = new Point(20, 15),
-                AutoSize = true
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleCenter,
+                BackColor = Color.Transparent
             });
+            card.Controls.Add(badgeCod);
 
+            // ── Nombre del equipo ──
             card.Controls.Add(new Label
             {
                 Text = eq.Nombre,
-                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+                Font = new Font("Segoe UI", 11, FontStyle.Bold),
                 ForeColor = blanco,
-                Location = new Point(20, 40),
-                AutoSize = true
+                Location = new Point(175, 22),
+                AutoSize = true,
+                BackColor = Color.Transparent
             });
 
+            // ── Chip de categoría (si existe) ──
+            if (!string.IsNullOrWhiteSpace(eq.Categoria))
+            {
+                Panel chipCat = new Panel
+                {
+                    Location = new Point(178, 50),
+                    Size = new Size(120, 22),
+                    BackColor = Color.FromArgb(45, 55, 85)
+                };
+                AplicarBordeRedondeado(chipCat, 10);
+                chipCat.Controls.Add(new Label
+                {
+                    Text = eq.Categoria,
+                    Font = new Font("Segoe UI", 8, FontStyle.Bold),
+                    ForeColor = azul,
+                    Dock = DockStyle.Fill,
+                    TextAlign = ContentAlignment.MiddleCenter,
+                    BackColor = Color.Transparent
+                });
+                card.Controls.Add(chipCat);
+            }
+
+            // ── Chip de stock ──
+            Color colStock = eq.Stock <= 0 ? rojo : (eq.Stock < 3 ? naranja : verde);
+            string txtStock = "Stock: " + eq.Stock;
+            Panel chipStock = new Panel
+            {
+                Location = new Point(string.IsNullOrWhiteSpace(eq.Categoria) ? 178 : 310, 50),
+                Size = new Size(90, 22),
+                BackColor = Color.FromArgb(30, 30, 45)
+            };
+            AplicarBordeRedondeado(chipStock, 10);
+            chipStock.Controls.Add(new Label
+            {
+                Text = txtStock,
+                Font = new Font("Segoe UI", 8, FontStyle.Bold),
+                ForeColor = colStock,
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleCenter,
+                BackColor = Color.Transparent
+            });
+            card.Controls.Add(chipStock);
+
+            // ── Botón quitar ──
+            Button btnQ = new Button
+            {
+                Text = "✗  QUITAR",
+                Width = 110,
+                Height = 32,
+                Location = new Point(1080, 18),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = rojo,
+                ForeColor = blanco,
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                Cursor = Cursors.Hand
+            };
+            btnQ.FlatAppearance.BorderSize = 0;
+            btnQ.FlatAppearance.MouseOverBackColor = Color.FromArgb(255, 110, 130);
+            btnQ.Click += (s, e) =>
+            {
+                equiposAsignados.Remove(eq);
+                flp.Controls.Remove(card);
+                ActualizarContadorEquipos();
+            };
+            AplicarBordeRedondeado(btnQ, 8);
+            card.Controls.Add(btnQ);
+
+            // ── Lugar ──
             card.Controls.Add(new Label
             {
-                Text = "Lugar:",
-                Font = new Font("Segoe UI", 9, FontStyle.Bold),
-                ForeColor = blanco,
-                Location = new Point(20, 75),
-                AutoSize = true
+                Text = "📍  Lugar",
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                ForeColor = gris,
+                Location = new Point(20, 92),
+                AutoSize = true,
+                BackColor = Color.Transparent
             });
+
+            Panel panelLugar = new Panel
+            {
+                Location = new Point(20, 112),
+                Size = new Size(500, 34),
+                BackColor = campo
+            };
+            AplicarBordeRedondeado(panelLugar, 8);
 
             ComboBox cboLugar = new ComboBox
             {
-                Location = new Point(75, 72),
-                Size = new Size(400, 28),
+                Location = new Point(8, 6),
+                Size = new Size(484, 22),
                 DropDownStyle = ComboBoxStyle.DropDownList,
                 BackColor = campo,
                 ForeColor = blanco,
                 FlatStyle = FlatStyle.Flat,
-                Font = new Font("Segoe UI", 9)
+                Font = new Font("Segoe UI", 9.5f)
             };
             for (int i = 0; i < lugares.Count; i++)
                 cboLugar.Items.Add(lugares[i].Nombre);
             if (cboLugar.Items.Count > 0) cboLugar.SelectedIndex = 0;
             cboLugar.SelectedIndexChanged += (s, e) => eq.IdLugar = cboLugar.SelectedIndex;
-            card.Controls.Add(cboLugar);
+            panelLugar.Controls.Add(cboLugar);
+            card.Controls.Add(panelLugar);
 
+            // ── Responsable ──
             card.Controls.Add(new Label
             {
-                Text = "Responsable:",
-                Font = new Font("Segoe UI", 9, FontStyle.Bold),
-                ForeColor = blanco,
-                Location = new Point(510, 75),
-                AutoSize = true
+                Text = "👤  Responsable",
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                ForeColor = gris,
+                Location = new Point(540, 92),
+                AutoSize = true,
+                BackColor = Color.Transparent
             });
+
+            Panel panelResp = new Panel
+            {
+                Location = new Point(540, 112),
+                Size = new Size(500, 34),
+                BackColor = campo
+            };
+            AplicarBordeRedondeado(panelResp, 8);
 
             ComboBox cboResp = new ComboBox
             {
-                Location = new Point(610, 72),
-                Size = new Size(400, 28),
+                Location = new Point(8, 6),
+                Size = new Size(484, 22),
                 DropDownStyle = ComboBoxStyle.DropDownList,
                 BackColor = campo,
                 ForeColor = blanco,
                 FlatStyle = FlatStyle.Flat,
-                Font = new Font("Segoe UI", 9)
+                Font = new Font("Segoe UI", 9.5f)
             };
-
             CargarResponsables(cboResp);
             cboResp.SelectedIndexChanged += (s, e) =>
             {
@@ -2048,33 +2646,35 @@ namespace SUSTENTACION.PanelTrabajador
                     eq.ResponsableNombre = ri.Nombre;
                 }
             };
-            card.Controls.Add(cboResp);
-
-            Button btnQ = new Button
-            {
-                Text = "✗ QUITAR",
-                Width = 110,
-                Height = 30,
-                Location = new Point(1020, 15),
-                FlatStyle = FlatStyle.Flat,
-                BackColor = rojo,
-                ForeColor = blanco,
-                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-                Cursor = Cursors.Hand
-            };
-            btnQ.FlatAppearance.BorderSize = 0;
-            btnQ.Click += (s, e) =>
-            {
-                equiposAsignados.Remove(eq);
-                flp.Controls.Remove(card);
-            };
-            AplicarBordeRedondeado(btnQ, 6);
-            card.Controls.Add(btnQ);
+            panelResp.Controls.Add(cboResp);
+            card.Controls.Add(panelResp);
 
             eq.Panel = card;
             flp.Controls.Add(card);
         }
 
+        // ─────────────────────────────────────────────
+        // CONTADOR DE EQUIPOS
+        // ─────────────────────────────────────────────
+        private void ActualizarContadorEquipos()
+        {
+            foreach (Control c in panelContenido.Controls)
+            {
+                if (c is Panel p)
+                {
+                    var lbl = p.Controls["lblContadorEquipos"] as Label;
+                    if (lbl != null)
+                    {
+                        lbl.Text = equiposAsignados.Count + " equipos asignados";
+                        break;
+                    }
+                }
+            }
+        }
+
+        // ─────────────────────────────────────────────
+        // RESPONSABLES (sin cambios funcionales)
+        // ─────────────────────────────────────────────
         private void CargarResponsables(ComboBox cbo)
         {
             cbo.Items.Clear();
@@ -2512,16 +3112,21 @@ namespace SUSTENTACION.PanelTrabajador
                     string sqlStock = @"
                         UPDATE equipos
                         SET stock = stock - 1,
-                            estado = CASE 
-                                WHEN (stock - 1) <= 0 THEN 'En evento'
-                                ELSE 'En evento'
-                            END
-                        WHERE id = @id";
+                            estado = 'En evento'
+                        WHERE id = @id AND stock > 0";
 
                     using (NpgsqlCommand cmdStock = new NpgsqlCommand(sqlStock, con, transaccion))
                     {
                         cmdStock.Parameters.AddWithValue("@id", eq.IdEquipo);
-                        cmdStock.ExecuteNonQuery();
+                        int filas = cmdStock.ExecuteNonQuery();
+
+                        if (filas == 0)
+                        {
+                            throw new Exception(
+                                $"⚠ El equipo '{eq.Codigo} - {eq.Nombre}' ya no tiene stock disponible.\n\n" +
+                                $"Otro usuario pudo haberlo tomado, o el stock llegó a 0.\n" +
+                                $"Actualiza la lista de equipos e intenta de nuevo.");
+                        }
                     }
                 }
 

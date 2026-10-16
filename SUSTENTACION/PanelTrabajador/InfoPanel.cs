@@ -9,9 +9,12 @@ namespace SUSTENTACION.PanelTrabajador
 {
     public class InfoPanel : UserControl
     {
-        // Paleta
+        // ═══════════════════════════════════════════
+        // PALETA
+        // ═══════════════════════════════════════════
         private readonly Color bgMain = Color.FromArgb(15, 15, 20);
         private readonly Color bgCard = Color.FromArgb(25, 25, 35);
+        private readonly Color bgRow = Color.FromArgb(32, 32, 45);
         private readonly Color accentOrange = Color.FromArgb(255, 87, 34);
         private readonly Color accentPurple = Color.FromArgb(156, 39, 176);
         private readonly Color accentCyan = Color.FromArgb(0, 188, 212);
@@ -20,12 +23,13 @@ namespace SUSTENTACION.PanelTrabajador
         private readonly Color textWhite = Color.White;
         private readonly Color textMuted = Color.FromArgb(150, 150, 160);
 
-        // Datos del trabajador
+        // ═══════════════════════════════════════════
+        // DATOS
+        // ═══════════════════════════════════════════
         private int idTrabajador;
         private string nombreTrabajador;
         private DateTime mesSeleccionado = DateTime.Now;
 
-        // KPIs reales
         private int salidasDelMes = 0;
         private int salidasRetornadas = 0;
         private int salidasActivas = 0;
@@ -35,13 +39,16 @@ namespace SUSTENTACION.PanelTrabajador
         private int totalEventosDelMes = 0;
         private int[] salidasPorMes = new int[12];
 
-        // Paneles de gráficos
+        // Paneles
         private Panel pnlLineChart;
         private Panel pnlDona1;
         private Panel pnlDona2;
         private Panel pnlBarras;
         private Panel pnlTarjeta;
         private FlowLayoutPanel pnlMeses;
+
+        // KPIs (referencias para actualizar)
+        private Label lblKpiSalidas, lblKpiActivas, lblKpiRetornadas, lblKpiEquipos;
 
         public InfoPanel(int idTrabajador = 1, string nombreTrabajador = "Trabajador")
         {
@@ -53,6 +60,9 @@ namespace SUSTENTACION.PanelTrabajador
             RefrescarGraficos();
         }
 
+        // ═══════════════════════════════════════════
+        // INICIALIZACIÓN
+        // ═══════════════════════════════════════════
         private void InitializeComponentes()
         {
             this.Dock = DockStyle.Fill;
@@ -63,94 +73,42 @@ namespace SUSTENTACION.PanelTrabajador
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = 3,
+                RowCount = 4,
                 BackColor = Color.Transparent
             };
-            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 50f));
-            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40f));
-            mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 50f));   // Header
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40f));   // Meses
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 100f));  // KPIs
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));   // Contenido
 
-            // ═══════════════════════════════════════
-            // TÍTULO
-            // ═══════════════════════════════════════
-            Panel headerPanel = new Panel { Dock = DockStyle.Fill, BackColor = bgCard };
-            AplicarBordesRedondeados(headerPanel, 8);
-
-            Label lblTitulo = new Label
-            {
-                Text = $"📊  Dashboard de {nombreTrabajador}",
-                Font = new Font("Segoe UI", 14f, FontStyle.Bold),
-                ForeColor = textWhite,
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleCenter
-            };
-            headerPanel.Controls.Add(lblTitulo);
+            // ─── HEADER ───
+            Panel headerPanel = CrearHeader();
             mainLayout.Controls.Add(headerPanel, 0, 0);
 
-            // ═══════════════════════════════════════
-            // BOTONES DE MESES
-            // ═══════════════════════════════════════
-            pnlMeses = new FlowLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                FlowDirection = FlowDirection.LeftToRight,
-                WrapContents = false,
-                BackColor = Color.Transparent,
-                Padding = new Padding(0, 5, 0, 5)
-            };
-
-            string[] meses = { "ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO",
-                              "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE" };
-
-            for (int i = 0; i < 12; i++)
-            {
-                int mesIndex = i;
-                bool esMesActual = (i == DateTime.Now.Month - 1);
-
-                Button btnMes = new Button
-                {
-                    Text = meses[i],
-                    Font = new Font("Segoe UI", 7f, FontStyle.Bold),
-                    ForeColor = esMesActual ? textWhite : textMuted,
-                    BackColor = esMesActual ? accentOrange : Color.Transparent,
-                    FlatStyle = FlatStyle.Flat,
-                    Height = 25,
-                    Width = 80,
-                    Margin = new Padding(2, 0, 2, 0),
-                    Cursor = Cursors.Hand,
-                    Tag = mesIndex
-                };
-                btnMes.FlatAppearance.BorderSize = 0;
-                AplicarBordesRedondeados(btnMes, 4);
-
-                btnMes.Click += (s, e) =>
-                {
-                    mesSeleccionado = new DateTime(DateTime.Now.Year, mesIndex + 1, 1);
-
-                    // Actualizar colores
-                    foreach (Control c in pnlMeses.Controls)
-                    {
-                        if (c is Button b)
-                        {
-                            int tag = (int)b.Tag;
-                            bool activo = tag == mesIndex;
-                            b.BackColor = activo ? accentOrange : Color.Transparent;
-                            b.ForeColor = activo ? textWhite : textMuted;
-                        }
-                    }
-
-                    CargarDatosReales();
-                    RefrescarGraficos();
-                };
-
-                pnlMeses.Controls.Add(btnMes);
-            }
-
+            // ─── MESES ───
+            pnlMeses = CrearPanelMeses();
             mainLayout.Controls.Add(pnlMeses, 0, 1);
 
-            // ═══════════════════════════════════════
-            // CONTENIDO
-            // ═══════════════════════════════════════
+            // ─── KPIs ───
+            TableLayoutPanel kpiLayout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 4,
+                RowCount = 1,
+                BackColor = Color.Transparent,
+                Margin = new Padding(0, 5, 0, 10)
+            };
+            for (int i = 0; i < 4; i++)
+                kpiLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25f));
+
+            kpiLayout.Controls.Add(CrearKPI("📤", "Salidas del mes", "0", accentOrange, out lblKpiSalidas), 0, 0);
+            kpiLayout.Controls.Add(CrearKPI("🔄", "Activas", "0", accentYellow, out lblKpiActivas), 1, 0);
+            kpiLayout.Controls.Add(CrearKPI("✅", "Retornadas", "0", accentGreen, out lblKpiRetornadas), 2, 0);
+            kpiLayout.Controls.Add(CrearKPI("📦", "Equipos disponibles", "0", accentCyan, out lblKpiEquipos), 3, 0);
+
+            mainLayout.Controls.Add(kpiLayout, 0, 2);
+
+            // ─── CONTENIDO ───
             TableLayoutPanel contentLayout = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
@@ -161,7 +119,7 @@ namespace SUSTENTACION.PanelTrabajador
             contentLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60f));
             contentLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40f));
 
-            // ─── IZQUIERDA ───
+            // ─── COLUMNA IZQUIERDA (gráficos) ───
             TableLayoutPanel leftColumn = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
@@ -173,12 +131,10 @@ namespace SUSTENTACION.PanelTrabajador
             leftColumn.RowStyles.Add(new RowStyle(SizeType.Percent, 35f));
             leftColumn.RowStyles.Add(new RowStyle(SizeType.Percent, 30f));
 
-            // Gráfico de líneas: salidas por mes
             pnlLineChart = CrearPanelGrafico("Salidas durante el año", "📈");
             pnlLineChart.Paint += (s, e) => DibujarGraficoLineas(e.Graphics, pnlLineChart.ClientRectangle);
             leftColumn.Controls.Add(pnlLineChart, 0, 0);
 
-            // Donas
             TableLayoutPanel pnlDonaLayout = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
@@ -205,7 +161,6 @@ namespace SUSTENTACION.PanelTrabajador
             pnlDonaLayout.Controls.Add(pnlDona2, 1, 0);
             leftColumn.Controls.Add(pnlDonaLayout, 0, 1);
 
-            // Barras circulares: eventos del mes
             pnlBarras = CrearPanelGrafico("Actividad del mes", "🎯");
             pnlBarras.Paint += (s, e) => DibujarBarrasCirculares(
                 e.Graphics, pnlBarras.ClientRectangle,
@@ -214,7 +169,7 @@ namespace SUSTENTACION.PanelTrabajador
 
             contentLayout.Controls.Add(leftColumn, 0, 0);
 
-            // ─── DERECHA ───
+            // ─── COLUMNA DERECHA (perfil + personal externo) ───
             TableLayoutPanel rightColumn = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
@@ -222,59 +177,227 @@ namespace SUSTENTACION.PanelTrabajador
                 RowCount = 2,
                 BackColor = Color.Transparent
             };
-            rightColumn.RowStyles.Add(new RowStyle(SizeType.Percent, 40f));
-            rightColumn.RowStyles.Add(new RowStyle(SizeType.Percent, 60f));
+            rightColumn.RowStyles.Add(new RowStyle(SizeType.Percent, 60f));   // Perfil
+            rightColumn.RowStyles.Add(new RowStyle(SizeType.Percent, 40f));   // Personal externo
 
-            // Tarjeta
-            pnlTarjeta = new Panel { Dock = DockStyle.Fill, BackColor = bgCard, Margin = new Padding(5) };
-            AplicarBordesRedondeados(pnlTarjeta, 10);
-            pnlTarjeta.Paint += (s, e) => DibujarTarjeta(e.Graphics, pnlTarjeta.ClientRectangle);
-            rightColumn.Controls.Add(pnlTarjeta, 0, 0);
-
-            // Lista de resumen
-            Panel pnlLista = new Panel
+            // ═══════════════════════════════════════════
+            // PANEL DE PERFIL (datos de la cuenta)
+            // ═══════════════════════════════════════════
+            Panel pnlPerfil = new Panel
             {
                 Dock = DockStyle.Fill,
                 BackColor = bgCard,
                 Margin = new Padding(5),
-                Padding = new Padding(10),
-                AutoScroll = true
+                Padding = new Padding(18)
             };
-            AplicarBordesRedondeados(pnlLista, 10);
+            AplicarBordesRedondeados(pnlPerfil, 10);
 
-            Label lblListaTitle = new Label
+            Label lblPerfilTitle = new Label
             {
-                Text = "📋  Resumen de Actividad",
-                Font = new Font("Segoe UI", 11f, FontStyle.Bold),
+                Text = "👤  Mi cuenta",
+                Font = new Font("Segoe UI", 10.5f, FontStyle.Bold),
                 ForeColor = textWhite,
                 Dock = DockStyle.Top,
-                Height = 35
+                Height = 32,
+                Padding = new Padding(2, 4, 0, 0)
             };
-            pnlLista.Controls.Add(lblListaTitle);
+            pnlPerfil.Controls.Add(lblPerfilTitle);
 
-            // Se llenará con datos reales
-            FlowLayoutPanel flpResumen = new FlowLayoutPanel
+            // Contenedor scrollable de campos
+            FlowLayoutPanel flpPerfil = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 FlowDirection = FlowDirection.TopDown,
                 WrapContents = false,
                 AutoScroll = true,
                 BackColor = Color.Transparent,
-                Name = "flpResumen"
+                Name = "flpPerfil"
             };
-            pnlLista.Controls.Add(flpResumen);
-            lblListaTitle.BringToFront();
+            pnlPerfil.Controls.Add(flpPerfil);
+            flpPerfil.BringToFront();
 
-            rightColumn.Controls.Add(pnlLista, 0, 1);
+            rightColumn.Controls.Add(pnlPerfil, 0, 0);
+
+            // ═══════════════════════════════════════════
+            // PANEL DE PERSONAL EXTERNO
+            // ═══════════════════════════════════════════
+            Panel pnlPersonalExt = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = bgCard,
+                Margin = new Padding(5),
+                Padding = new Padding(12, 8, 12, 12)
+            };
+            AplicarBordesRedondeados(pnlPersonalExt, 10);
+
+            Label lblExtTitle = new Label
+            {
+                Text = "🧑‍🔧  Personal externo",
+                Font = new Font("Segoe UI", 10.5f, FontStyle.Bold),
+                ForeColor = textWhite,
+                Dock = DockStyle.Top,
+                Height = 32,
+                Padding = new Padding(4, 4, 0, 0)
+            };
+            pnlPersonalExt.Controls.Add(lblExtTitle);
+
+            FlowLayoutPanel flpPersonalExt = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.TopDown,
+                WrapContents = false,
+                AutoScroll = true,
+                BackColor = Color.Transparent,
+                Name = "flpPersonalExt"
+            };
+            pnlPersonalExt.Controls.Add(flpPersonalExt);
+            flpPersonalExt.BringToFront();
+
+            rightColumn.Controls.Add(pnlPersonalExt, 0, 1);
 
             contentLayout.Controls.Add(rightColumn, 1, 0);
-            mainLayout.Controls.Add(contentLayout, 0, 2);
+
+            mainLayout.Controls.Add(contentLayout, 0, 3);
+
             this.Controls.Add(mainLayout);
         }
 
-        // ==========================================
-        // CARGA DE DATOS REALES DESDE POSTGRESQL
-        // ==========================================
+        // ═══════════════════════════════════════════
+        // HEADER CON AVATAR
+        // ═══════════════════════════════════════════
+        private Panel CrearHeader()
+        {
+            Panel headerPanel = new Panel { Dock = DockStyle.Fill, BackColor = bgCard };
+            AplicarBordesRedondeados(headerPanel, 8);
+
+            Panel avatar = new Panel
+            {
+                Size = new Size(36, 36),
+                Location = new Point(18, 7),
+                BackColor = accentOrange
+            };
+            AplicarBordesRedondeados(avatar, 18);
+            avatar.Controls.Add(new Label
+            {
+                Text = "👤",
+                Font = new Font("Segoe UI", 14f),
+                ForeColor = textWhite,
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleCenter,
+                BackColor = Color.Transparent
+            });
+            headerPanel.Controls.Add(avatar);
+
+            headerPanel.Controls.Add(new Label
+            {
+                Text = "Dashboard",
+                Font = new Font("Segoe UI", 13f, FontStyle.Bold),
+                ForeColor = textWhite,
+                Location = new Point(64, 8),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            });
+
+            headerPanel.Controls.Add(new Label
+            {
+                Text = "Bienvenido, " + nombreTrabajador + " · " + DateTime.Now.ToString("dddd, dd 'de' MMMM 'de' yyyy"),
+                Font = new Font("Segoe UI", 8.5f),
+                ForeColor = textMuted,
+                Location = new Point(64, 28),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            });
+
+            Panel badge = new Panel
+            {
+                Size = new Size(90, 24),
+                BackColor = Color.FromArgb(20, 60, 40),
+                Anchor = AnchorStyles.Top | AnchorStyles.Right
+            };
+            badge.Location = new Point(headerPanel.Width - 110, 13);
+            AplicarBordesRedondeados(badge, 12);
+            badge.Controls.Add(new Label
+            {
+                Text = "● En línea",
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                ForeColor = accentGreen,
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleCenter,
+                BackColor = Color.Transparent
+            });
+            headerPanel.Controls.Add(badge);
+            headerPanel.Resize += (s, e) => badge.Left = headerPanel.Width - badge.Width - 18;
+
+            return headerPanel;
+        }
+
+        // ═══════════════════════════════════════════
+        // PANEL DE MESES
+        // ═══════════════════════════════════════════
+        private FlowLayoutPanel CrearPanelMeses()
+        {
+            FlowLayoutPanel pnl = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false,
+                BackColor = Color.Transparent,
+                Padding = new Padding(0, 5, 0, 5)
+            };
+
+            string[] meses = { "ENE", "FEB", "MAR", "ABR", "MAY", "JUN",
+                              "JUL", "AGO", "SEP", "OCT", "NOV", "DIC" };
+
+            for (int i = 0; i < 12; i++)
+            {
+                int mesIndex = i;
+                bool esMesActual = (i == DateTime.Now.Month - 1);
+
+                Button btnMes = new Button
+                {
+                    Text = meses[i],
+                    Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                    ForeColor = esMesActual ? textWhite : textMuted,
+                    BackColor = esMesActual ? accentOrange : bgRow,
+                    FlatStyle = FlatStyle.Flat,
+                    Height = 28,
+                    Width = 68,
+                    Margin = new Padding(2, 0, 2, 0),
+                    Cursor = Cursors.Hand,
+                    Tag = mesIndex
+                };
+                btnMes.FlatAppearance.BorderSize = 0;
+                btnMes.FlatAppearance.MouseOverBackColor = Color.FromArgb(45, 45, 60);
+                AplicarBordesRedondeados(btnMes, 14);
+
+                btnMes.Click += (s, e) =>
+                {
+                    mesSeleccionado = new DateTime(DateTime.Now.Year, mesIndex + 1, 1);
+
+                    foreach (Control c in pnlMeses.Controls)
+                    {
+                        if (c is Button b)
+                        {
+                            int tag = (int)b.Tag;
+                            bool activo = tag == mesIndex;
+                            b.BackColor = activo ? accentOrange : bgRow;
+                            b.ForeColor = activo ? textWhite : textMuted;
+                        }
+                    }
+
+                    CargarDatosReales();
+                    RefrescarGraficos();
+                };
+
+                pnl.Controls.Add(btnMes);
+            }
+
+            return pnl;
+        }
+
+        // ═══════════════════════════════════════════
+        // CARGA DE DATOS
+        // ═══════════════════════════════════════════
         private void CargarDatosReales()
         {
             Conexion conexionDB = new Conexion();
@@ -285,7 +408,7 @@ namespace SUSTENTACION.PanelTrabajador
                 int mes = mesSeleccionado.Month;
                 int anio = mesSeleccionado.Year;
 
-                // 1. Salidas del mes (encargadas por este trabajador)
+                // 1. Salidas del mes
                 string sqlSalidasMes = @"
                     SELECT 
                         COUNT(*) AS total,
@@ -313,7 +436,7 @@ namespace SUSTENTACION.PanelTrabajador
                     }
                 }
 
-                // 2. Salidas por mes (para el gráfico de líneas)
+                // 2. Salidas por mes (gráfico líneas)
                 string sqlPorMes = @"
                     SELECT EXTRACT(MONTH FROM fecha_salida)::int AS mes, COUNT(*) AS total
                     FROM salidas
@@ -339,7 +462,7 @@ namespace SUSTENTACION.PanelTrabajador
                     }
                 }
 
-                // 3. Equipos a cargo (en salidas activas del trabajador)
+                // 3. Equipos a cargo
                 string sqlEquiposCargo = @"
                     SELECT COUNT(DISTINCT se.id_equipo) AS total
                     FROM salida_equipos se
@@ -354,7 +477,7 @@ namespace SUSTENTACION.PanelTrabajador
                     equiposEnEvento = r != null ? Convert.ToInt32(r) : 0;
                 }
 
-                // 4. Equipos disponibles (global)
+                // 4. Equipos disponibles
                 string sqlDisponibles = @"
                     SELECT COALESCE(SUM(stock), 0) FROM equipos 
                     WHERE LOWER(TRIM(estado)) = 'disponible'";
@@ -366,7 +489,7 @@ namespace SUSTENTACION.PanelTrabajador
 
                 equiposAsignadosActivos = equiposEnEvento;
 
-                // 5. Total eventos del mes (donde trabaja este trabajador)
+                // 5. Eventos del mes
                 string sqlEventosMes = @"
                     SELECT COUNT(DISTINCT e.id)
                     FROM eventos e
@@ -386,109 +509,539 @@ namespace SUSTENTACION.PanelTrabajador
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine("Error en InfoPanel: " + ex.Message);
+                System.Diagnostics.Debug.WriteLine("Error InfoPanel: " + ex.Message);
             }
             finally
             {
                 conexionDB.CerrarConexion();
             }
 
-            // Actualizar lista de resumen
-            ActualizarListaResumen();
+            ActualizarKPIs();
+            CargarPerfil();
+            CargarPersonalExterno();
         }
 
-        private void ActualizarListaResumen()
+        private void ActualizarKPIs()
         {
-            var flp = this.Controls.Find("flpResumen", true);
-            if (flp.Length == 0) return;
-            FlowLayoutPanel panel = flp[0] as FlowLayoutPanel;
-            if (panel == null) return;
+            if (lblKpiSalidas != null) lblKpiSalidas.Text = salidasDelMes.ToString();
+            if (lblKpiActivas != null) lblKpiActivas.Text = salidasActivas.ToString();
+            if (lblKpiRetornadas != null) lblKpiRetornadas.Text = salidasRetornadas.ToString();
+            if (lblKpiEquipos != null) lblKpiEquipos.Text = equiposDisponibles.ToString();
+        }
 
-            panel.Controls.Clear();
+        // ═══════════════════════════════════════════════════════════
+        // PERFIL DEL TRABAJADOR (nombre, correo, contraseña, celular)
+        // ═══════════════════════════════════════════════════════════
+        private void CargarPerfil()
+        {
+            var found = this.Controls.Find("flpPerfil", true);
+            if (found.Length == 0) return;
+            var flp = found[0] as FlowLayoutPanel;
+            if (flp == null) return;
 
-            string[,] valores = {
-                { "📤", "Salidas del mes", salidasDelMes.ToString(), "255,87,34" },
-                { "🔄", "Salidas activas", salidasActivas.ToString(), "255,193,7" },
-                { "✅", "Salidas retornadas", salidasRetornadas.ToString(), "46,204,148" },
-                { "🚚", "Equipos a mi cargo", equiposEnEvento.ToString(), "156,39,176" },
-                { "📦", "Equipos disponibles", equiposDisponibles.ToString(), "0,188,212" },
-                { "📅", "Eventos del mes", totalEventosDelMes.ToString(), "255,193,7" },
-                { "👤", "Encargado", nombreTrabajador, "150,150,160" }
-            };
+            flp.Controls.Clear();
 
-            int filas = valores.GetLength(0);
-
-            for (int i = 0; i < filas; i++)
+            Conexion conexionDB = new Conexion();
+            try
             {
-                string icono = valores[i, 0];
-                string nombre = valores[i, 1];
-                string monto = valores[i, 2];
-                string rgbStr = valores[i, 3];
+                NpgsqlConnection con = conexionDB.ObtenerConexion();
 
-                Panel itemPanel = new Panel
+                string sql = @"
+            SELECT 
+                t.nombre,
+                COALESCE(t.correo, '') AS correo,
+                COALESCE(t.password, '') AS contrasena,
+                COALESCE(t.telefono, '') AS celular,
+                COALESCE(t.dni, '') AS dni,
+                COALESCE(r.nombre_rol, 'Sin rol') AS rol
+            FROM trabajadores t
+            LEFT JOIN roles r ON r.id_rol = t.id_rol
+            WHERE t.id_trabajador = @id
+            LIMIT 1";
+
+                using (NpgsqlCommand cmd = new NpgsqlCommand(sql, con))
                 {
-                    Width = 300,
-                    Height = 35,
-                    Margin = new Padding(0, 3, 0, 3),
-                    BackColor = Color.FromArgb(30, 30, 42)
-                };
-                AplicarBordesRedondeados(itemPanel, 8);
+                    cmd.Parameters.AddWithValue("@id", idTrabajador);
 
-                Label lblIcon = new Label
+                    using (NpgsqlDataReader rd = cmd.ExecuteReader())
+                    {
+                        if (rd.Read())
+                        {
+                            string nombre = rd["nombre"].ToString();
+                            string correo = rd["correo"].ToString();
+                            string contrasena = rd["contrasena"].ToString();
+                            string celular = rd["celular"].ToString();
+                            string dni = rd["dni"].ToString();
+                            string rol = rd["rol"].ToString();
+
+                            // 🎭 Rol
+                            flp.Controls.Add(CrearCampoPerfil_Rol(rol));
+
+                            // 👤 Nombre
+                            flp.Controls.Add(CrearCampoPerfil("👤", "Nombre completo", nombre, false));
+
+                            // ✉ Correo
+                            flp.Controls.Add(CrearCampoPerfil("✉", "Correo electrónico",
+                                string.IsNullOrWhiteSpace(correo) ? "Sin correo" : correo, false));
+
+                            // 📱 Celular
+                            flp.Controls.Add(CrearCampoPerfil("📱", "Celular",
+                                string.IsNullOrWhiteSpace(celular) ? "Sin celular" : celular, false));
+
+                            // 🪪 DNI (solo si existe)
+                            if (!string.IsNullOrWhiteSpace(dni))
+                            {
+                                flp.Controls.Add(CrearCampoPerfil("🪪", "DNI", dni, false));
+                            }
+
+                            // 🔒 Contraseña
+                            flp.Controls.Add(CrearCampoPerfil_Password(contrasena));
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("Error perfil: " + ex.Message);
+            }
+            finally
+            {
+                conexionDB.CerrarConexion();
+            }
+
+            // Separador
+            flp.Controls.Add(new Panel
+            {
+                Width = 380,
+                Height = 1,
+                BackColor = Color.FromArgb(45, 45, 60),
+                Margin = new Padding(0, 8, 0, 8)
+            });
+
+            // Botón solicitar cambio
+            Button btnSolicitar = new Button
+            {
+                Text = "📩  Solicitar cambio de datos al administrador",
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                ForeColor = accentOrange,
+                BackColor = Color.FromArgb(45, 25, 20),
+                FlatStyle = FlatStyle.Flat,
+                Width = 380,
+                Height = 40,
+                Cursor = Cursors.Hand
+            };
+            btnSolicitar.FlatAppearance.BorderColor = accentOrange;
+            btnSolicitar.FlatAppearance.BorderSize = 1;
+            AplicarBordesRedondeados(btnSolicitar, 8);
+            btnSolicitar.Click += (s, e) =>
+            {
+                using (var form = new FormSolicitarCambio(idTrabajador, nombreTrabajador))
                 {
-                    Text = icono,
-                    Font = new Font("Segoe UI", 11f),
-                    ForeColor = textWhite,
-                    Location = new Point(10, 8),
-                    AutoSize = true
-                };
+                    if (form.ShowDialog() == DialogResult.OK)
+                    {
+                        CargarPerfil();
+                    }
+                }
+            };
+            flp.Controls.Add(btnSolicitar);
+        }
 
-                Label lblNombre = new Label
-                {
-                    Text = nombre,
-                    Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-                    ForeColor = textWhite,
-                    Location = new Point(45, 10),
-                    AutoSize = true
-                };
+        private Panel CrearCampoPerfil(string icono, string etiqueta, string valor, bool esPassword)
+        {
+            Panel item = new Panel
+            {
+                Width = 380,
+                Height = 60,
+                Margin = new Padding(0, 4, 0, 4),
+                BackColor = bgRow
+            };
+            AplicarBordesRedondeados(item, 8);
 
-                string[] rgb = rgbStr.Split(',');
-                Color color = Color.FromArgb(
-                    int.Parse(rgb[0]),
-                    int.Parse(rgb[1]),
-                    int.Parse(rgb[2])
-                );
+            // Ícono
+            item.Controls.Add(new Label
+            {
+                Text = icono,
+                Font = new Font("Segoe UI", 14f),
+                ForeColor = accentCyan,
+                Location = new Point(14, 18),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            });
 
-                Label lblMonto = new Label
-                {
-                    Text = monto,
-                    Font = new Font("Segoe UI", 10f, FontStyle.Bold),
-                    ForeColor = color,
-                    Location = new Point(230, 9),
-                    AutoSize = true,
-                    TextAlign = ContentAlignment.MiddleRight
-                };
+            // Etiqueta
+            item.Controls.Add(new Label
+            {
+                Text = etiqueta.ToUpper(),
+                Font = new Font("Segoe UI", 7.5f, FontStyle.Bold),
+                ForeColor = textMuted,
+                Location = new Point(50, 10),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            });
 
-                itemPanel.Controls.Add(lblIcon);
-                itemPanel.Controls.Add(lblNombre);
-                itemPanel.Controls.Add(lblMonto);
+            // Valor
+            item.Controls.Add(new Label
+            {
+                Text = valor,
+                Font = new Font("Segoe UI", 10.5f, FontStyle.Bold),
+                ForeColor = textWhite,
+                Location = new Point(50, 28),
+                AutoSize = true,
+                BackColor = Color.Transparent,
+                MaximumSize = new Size(310, 0)
+            });
 
-                panel.Controls.Add(itemPanel);
+            return item;
+        }
+
+        private Panel CrearCampoPerfil_Rol(string rol)
+        {
+            Panel item = new Panel
+            {
+                Width = 380,
+                Height = 44,
+                Margin = new Padding(0, 4, 0, 4),
+                BackColor = Color.FromArgb(40, 25, 55)
+            };
+            AplicarBordesRedondeados(item, 8);
+
+            item.Controls.Add(new Label
+            {
+                Text = "🎭",
+                Font = new Font("Segoe UI", 14f),
+                ForeColor = accentPurple,
+                Location = new Point(14, 10),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            });
+
+            item.Controls.Add(new Label
+            {
+                Text = "ROL",
+                Font = new Font("Segoe UI", 7.5f, FontStyle.Bold),
+                ForeColor = textMuted,
+                Location = new Point(50, 6),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            });
+
+            item.Controls.Add(new Label
+            {
+                Text = rol,
+                Font = new Font("Segoe UI", 10.5f, FontStyle.Bold),
+                ForeColor = accentPurple,
+                Location = new Point(50, 22),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            });
+
+            return item;
+        }
+
+        private Panel CrearCampoPerfil_Password(string contrasena)
+        {
+            Panel item = new Panel
+            {
+                Width = 380,
+                Height = 60,
+                Margin = new Padding(0, 4, 0, 4),
+                BackColor = bgRow
+            };
+            AplicarBordesRedondeados(item, 8);
+
+            item.Controls.Add(new Label
+            {
+                Text = "🔒",
+                Font = new Font("Segoe UI", 14f),
+                ForeColor = accentYellow,
+                Location = new Point(14, 18),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            });
+
+            item.Controls.Add(new Label
+            {
+                Text = "CONTRASEÑA",
+                Font = new Font("Segoe UI", 7.5f, FontStyle.Bold),
+                ForeColor = textMuted,
+                Location = new Point(50, 10),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            });
+
+            // 🔒 Solo asteriscos según la cantidad de caracteres
+            int largo = string.IsNullOrEmpty(contrasena) ? 8 : contrasena.Length;
+            if (largo > 24) largo = 24;   // tope visual para no desbordar
+
+            string asteriscos = new string('•', largo);
+
+            item.Controls.Add(new Label
+            {
+                Text = asteriscos,
+                Font = new Font("Segoe UI", 12f, FontStyle.Bold),
+                ForeColor = textMuted,
+                Location = new Point(50, 26),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            });
+
+            // Botón "Cambiar" a la derecha
+            Button btnCambiar = new Button
+            {
+                Text = "🔑  Cambiar",
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                ForeColor = textWhite,
+                BackColor = Color.FromArgb(50, 50, 70),
+                FlatStyle = FlatStyle.Flat,
+                Width = 110,
+                Height = 30,
+                Location = new Point(255, 15),
+                Cursor = Cursors.Hand
+            };
+            btnCambiar.FlatAppearance.BorderSize = 0;
+            btnCambiar.FlatAppearance.MouseOverBackColor = Color.FromArgb(70, 70, 90);
+            AplicarBordesRedondeados(btnCambiar, 6);
+            btnCambiar.Click += (s, e) => MostrarDialogoCambiarPassword();
+            item.Controls.Add(btnCambiar);
+
+            return item;
+        }
+
+        private void MostrarDialogoCambiarPassword()
+        {
+            MessageBox.Show(
+                "🔑 Cambio de contraseña\n\n" +
+                "Por seguridad, debes solicitar el cambio al administrador.\n\n" +
+                "El admin verificará tu identidad y actualizará tu contraseña.",
+                "Cambiar contraseña",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+        }
+
+        private void MostrarDialogoSolicitud()
+        {
+            var resp = MessageBox.Show(
+                "¿Deseas enviar una solicitud al administrador para cambiar tus datos?\n\n" +
+                "El admin revisará tu solicitud y te contactará.",
+                "Solicitar cambio de datos",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question);
+
+            if (resp == DialogResult.Yes)
+            {
+                MessageBox.Show(
+                    "✅ Solicitud enviada correctamente.\n\n" +
+                    "El administrador será notificado.",
+                    "Solicitud enviada",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
             }
         }
 
-        private void RefrescarGraficos()
+        // ═══════════════════════════════════════════
+        // 🔥 PERSONAL EXTERNO (nombre + celular)
+        // ═══════════════════════════════════════════
+        private void CargarPersonalExterno()
         {
-            pnlLineChart?.Invalidate();
-            pnlDona1?.Invalidate();
-            pnlDona2?.Invalidate();
-            pnlBarras?.Invalidate();
-            pnlTarjeta?.Invalidate();
+            var found = this.Controls.Find("flpPersonalExt", true);
+            if (found.Length == 0) return;
+
+            var flp = found[0] as FlowLayoutPanel;
+            if (flp == null) return;
+
+            flp.Controls.Clear();
+
+            Conexion conexionDB = new Conexion();
+            try
+            {
+                NpgsqlConnection con = conexionDB.ObtenerConexion();
+
+                // 🔥 CORREGIDO: consulta a personal_externo, no a trabajadores
+                string sql = @"
+            SELECT nombre, apellido, celular
+            FROM personal_externo
+            WHERE activo = TRUE
+            ORDER BY nombre, apellido";
+
+                using (NpgsqlCommand cmd = new NpgsqlCommand(sql, con))
+                using (NpgsqlDataReader rd = cmd.ExecuteReader())
+                {
+                    bool hay = false;
+                    while (rd.Read())
+                    {
+                        hay = true;
+                        string nombre = rd["nombre"]?.ToString() ?? "";
+                        string apellido = rd["apellido"]?.ToString() ?? "";
+                        string celular = rd["celular"]?.ToString() ?? "";
+
+                        flp.Controls.Add(CrearItemPersonalExterno(nombre, apellido, celular));
+                    }
+
+                    if (!hay)
+                    {
+                        flp.Controls.Add(new Label
+                        {
+                            Text = "Sin personal externo registrado",
+                            Font = new Font("Segoe UI", 9f, FontStyle.Italic),
+                            ForeColor = textMuted,
+                            AutoSize = true,
+                            Margin = new Padding(10, 20, 0, 0)
+                        });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("Error personal externo: " + ex.Message);
+            }
+            finally
+            {
+                conexionDB.CerrarConexion();
+            }
         }
 
-        // ==========================================
-        // DIBUJO DE GRÁFICOS
-        // ==========================================
+        private Panel CrearItemPersonalExterno(string nombre, string apellido, string celular)
+        {
+            Panel item = new Panel
+            {
+                Width = 380,
+                Height = 52,
+                Margin = new Padding(0, 4, 0, 4),
+                BackColor = bgRow
+            };
+            AplicarBordesRedondeados(item, 8);
+
+            // Barra de acento izquierda
+            Panel barra = new Panel
+            {
+                Width = 4,
+                Dock = DockStyle.Left,
+                BackColor = accentPurple
+            };
+            item.Controls.Add(barra);
+
+            // Avatar pequeño
+            Panel avatar = new Panel
+            {
+                Size = new Size(32, 32),
+                Location = new Point(14, 10),
+                BackColor = accentPurple
+            };
+            AplicarBordesRedondeados(avatar, 16);
+            avatar.Controls.Add(new Label
+            {
+                Text = "🧑‍🔧",
+                Font = new Font("Segoe UI", 12f),
+                ForeColor = textWhite,
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleCenter,
+                BackColor = Color.Transparent
+            });
+            item.Controls.Add(avatar);
+
+            // Nombre completo
+            Label lblNombre = new Label
+            {
+                Text = $"{nombre} {apellido}".Trim(),
+                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+                ForeColor = textWhite,
+                Location = new Point(56, 10),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            };
+            item.Controls.Add(lblNombre);
+
+            // Celular
+            Label lblCelular = new Label
+            {
+                Text = "📱  " + (string.IsNullOrWhiteSpace(celular) ? "Sin teléfono" : celular),
+                Font = new Font("Segoe UI", 8.5f),
+                ForeColor = string.IsNullOrWhiteSpace(celular) ? textMuted : accentGreen,
+                Location = new Point(56, 28),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            };
+            item.Controls.Add(lblCelular);
+
+            return item;
+        }
+
+        // ═══════════════════════════════════════════
+        // KPI CARD
+        // ═══════════════════════════════════════════
+        private Panel CrearKPI(string icono, string titulo, string valor, Color colorAcento, out Label lblValOut)
+        {
+            Panel card = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = bgCard,
+                Margin = new Padding(5)
+            };
+            AplicarBordesRedondeados(card, 10);
+            card.Paint += (s, e) =>
+            {
+                using (var pen = new Pen(Color.FromArgb(45, 45, 60), 1f))
+                {
+                    e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                    using (var p = new GraphicsPath())
+                    {
+                        int r = 10;
+                        p.AddArc(0, 0, r, r, 180, 90);
+                        p.AddArc(card.Width - r - 1, 0, r, r, 270, 90);
+                        p.AddArc(card.Width - r - 1, card.Height - r - 1, r, r, 0, 90);
+                        p.AddArc(0, card.Height - r - 1, r, r, 90, 90);
+                        p.CloseAllFigures();
+                        e.Graphics.DrawPath(pen, p);
+                    }
+                }
+            };
+
+            Panel barra = new Panel
+            {
+                Width = 4,
+                Dock = DockStyle.Left,
+                BackColor = colorAcento
+            };
+            card.Controls.Add(barra);
+
+            card.Controls.Add(new Label
+            {
+                Text = icono,
+                Font = new Font("Segoe UI", 20f),
+                ForeColor = colorAcento,
+                Location = new Point(16, 14),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            });
+
+            card.Controls.Add(new Label
+            {
+                Text = titulo.ToUpper(),
+                Font = new Font("Segoe UI", 7.5f, FontStyle.Bold),
+                ForeColor = textMuted,
+                Location = new Point(60, 12),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            });
+
+            Label lblVal = new Label
+            {
+                Text = valor,
+                Font = new Font("Segoe UI", 22f, FontStyle.Bold),
+                ForeColor = textWhite,
+                Location = new Point(58, 28),
+                AutoSize = true,
+                BackColor = Color.Transparent
+            };
+            card.Controls.Add(lblVal);
+
+            lblValOut = lblVal;
+            return card;
+        }
+
+        // ═══════════════════════════════════════════
+        // PANEL DE GRÁFICOS
+        // ═══════════════════════════════════════════
         private Panel CrearPanelGrafico(string titulo, string icono)
         {
             Panel pnl = new Panel { Dock = DockStyle.Fill, BackColor = bgCard, Margin = new Padding(5) };
@@ -507,6 +1060,18 @@ namespace SUSTENTACION.PanelTrabajador
             return pnl;
         }
 
+        private void RefrescarGraficos()
+        {
+            pnlLineChart?.Invalidate();
+            pnlDona1?.Invalidate();
+            pnlDona2?.Invalidate();
+            pnlBarras?.Invalidate();
+            pnlTarjeta?.Invalidate();
+        }
+
+        // ═══════════════════════════════════════════
+        // DIBUJO DE GRÁFICOS
+        // ═══════════════════════════════════════════
         private void DibujarGraficoLineas(Graphics g, Rectangle rect)
         {
             g.SmoothingMode = SmoothingMode.AntiAlias;
@@ -519,7 +1084,6 @@ namespace SUSTENTACION.PanelTrabajador
             int ancho = rect.Width - margenIzq - margenDer;
             int alto = rect.Height - margenSup - margenInf;
 
-            // Grid
             Pen gridPen = new Pen(Color.FromArgb(40, 40, 55), 1);
             for (int i = 0; i <= 4; i++)
             {
@@ -527,11 +1091,9 @@ namespace SUSTENTACION.PanelTrabajador
                 g.DrawLine(gridPen, margenIzq, y, margenIzq + ancho, y);
             }
 
-            // Max para escalar
             int maxVal = 1;
             foreach (var v in salidasPorMes) if (v > maxVal) maxVal = v;
 
-            // Puntos
             string[] mesesCortos = { "E", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D" };
             int espaciado = ancho / 11;
 
@@ -542,24 +1104,35 @@ namespace SUSTENTACION.PanelTrabajador
                 int y = margenSup + alto - (int)(((float)salidasPorMes[i] / maxVal) * alto * 0.9f);
                 puntos[i] = new Point(x, y);
 
-                // Etiqueta del mes
                 g.DrawString(mesesCortos[i], new Font("Segoe UI", 7f),
                     new SolidBrush(textMuted), x - 3, margenSup + alto + 8);
             }
 
-            // Línea
             if (puntos.Length > 1)
             {
+                var areaPuntos = new Point[puntos.Length + 2];
+                Array.Copy(puntos, areaPuntos, puntos.Length);
+                areaPuntos[puntos.Length] = new Point(puntos[puntos.Length - 1].X, margenSup + alto);
+                areaPuntos[puntos.Length + 1] = new Point(puntos[0].X, margenSup + alto);
+
+                using (var brush = new LinearGradientBrush(
+                    new Rectangle(0, margenSup, rect.Width, alto),
+                    Color.FromArgb(80, accentOrange),
+                    Color.FromArgb(0, accentOrange),
+                    LinearGradientMode.Vertical))
+                {
+                    g.FillPolygon(brush, areaPuntos);
+                }
+
                 g.DrawLines(new Pen(accentOrange, 2.5f), puntos);
+
+                foreach (var p in puntos)
+                {
+                    g.FillEllipse(new SolidBrush(accentOrange), p.X - 4, p.Y - 4, 8, 8);
+                    g.FillEllipse(new SolidBrush(bgCard), p.X - 2, p.Y - 2, 4, 4);
+                }
             }
 
-            // Puntos visibles
-            foreach (var p in puntos)
-            {
-                g.FillEllipse(new SolidBrush(accentOrange), p.X - 3, p.Y - 3, 6, 6);
-            }
-
-            // Valor máximo del gráfico
             g.DrawString($"Máx: {maxVal}", new Font("Segoe UI", 7f),
                 new SolidBrush(textMuted), margenIzq, margenSup - 15);
         }
@@ -568,11 +1141,12 @@ namespace SUSTENTACION.PanelTrabajador
         {
             g.SmoothingMode = SmoothingMode.AntiAlias;
 
-            int size = Math.Min(rect.Width, rect.Height) - 90;
-            if (size < 40) size = 40;
+            int grosor = 16;
+            int size = Math.Min(rect.Width, rect.Height) - 100;
+            if (size < 60) size = 60;
 
             int x = (rect.Width - size) / 2;
-            int y = (rect.Height - size) / 2 + 15;
+            int y = (rect.Height - size) / 2 + 10;
 
             int totalReal = valor1 + valor2;
             if (totalReal == 0) totalReal = 1;
@@ -580,34 +1154,39 @@ namespace SUSTENTACION.PanelTrabajador
             int angulo1 = (int)((valor1 / (float)totalReal) * 360);
             int angulo2 = 360 - angulo1;
 
-            // Fondo del círculo
-            g.DrawArc(new Pen(Color.FromArgb(40, 40, 55), 12), x, y, size, size, -90, 360);
+            g.DrawArc(new Pen(Color.FromArgb(30, 30, 42), grosor), x, y, size, size, -90, 360);
 
             if (valor1 > 0)
-                g.DrawArc(new Pen(c1, 12), x, y, size, size, -90, angulo1);
+            {
+                using (var p = new Pen(c1, grosor) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+                    g.DrawArc(p, x, y, size, size, -90, angulo1);
+            }
             if (valor2 > 0)
-                g.DrawArc(new Pen(c2, 12), x, y, size, size, -90 + angulo1, angulo2);
+            {
+                using (var p = new Pen(c2, grosor) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+                    g.DrawArc(p, x, y, size, size, -90 + angulo1, angulo2);
+            }
 
-            // Texto central
             string texto = $"{valor1 + valor2}";
-            Font font = new Font("Segoe UI", 14f, FontStyle.Bold);
-            SizeF sizeTexto = g.MeasureString(texto, font);
-            g.DrawString(texto, font, new SolidBrush(textWhite),
-                x + (size - sizeTexto.Width) / 2,
-                y + (size - sizeTexto.Height) / 2);
+            using (var font = new Font("Segoe UI", 18f, FontStyle.Bold))
+            {
+                var sizeTexto = g.MeasureString(texto, font);
+                g.DrawString(texto, font, new SolidBrush(textWhite),
+                    x + (size - sizeTexto.Width) / 2,
+                    y + (size - sizeTexto.Height) / 2 - 5);
+            }
 
-            // Etiquetas debajo
-            string labels = $"{c1.Name} : {valor1}    {c2.Name} : {valor2}";
-            Font fontSmall = new Font("Segoe UI", 7f);
-            SizeF stSmall = g.MeasureString(labels, fontSmall);
+            using (var fontSmall = new Font("Segoe UI", 7.5f))
+            {
+                string s1 = $"{valor1}";
+                string s2 = $"{valor2}";
 
-            g.FillEllipse(new SolidBrush(c1), x + 5, y + size + 8, 8, 8);
-            g.DrawString($"Activos: {valor1}", fontSmall, new SolidBrush(textMuted),
-                x + 18, y + size + 6);
+                g.FillEllipse(new SolidBrush(c1), x + 12, y + size - 20, 8, 8);
+                g.DrawString(s1, fontSmall, new SolidBrush(textWhite), x + 24, y + size - 22);
 
-            g.FillEllipse(new SolidBrush(c2), x + 90, y + size + 8, 8, 8);
-            g.DrawString($"Otros: {valor2}", fontSmall, new SolidBrush(textMuted),
-                x + 103, y + size + 6);
+                g.FillEllipse(new SolidBrush(c2), x + size - 50, y + size - 20, 8, 8);
+                g.DrawString(s2, fontSmall, new SolidBrush(textWhite), x + size - 38, y + size - 22);
+            }
         }
 
         private void DibujarBarrasCirculares(Graphics g, Rectangle rect, int salidas, int eventos)
@@ -621,12 +1200,10 @@ namespace SUSTENTACION.PanelTrabajador
             int maxVal = Math.Max(salidas, Math.Max(eventos, 1));
             float proporcion = (float)salidas / maxVal;
 
-            // Fondo gris
             g.DrawArc(new Pen(Color.FromArgb(40, 40, 55), 14),
                 centerX - radioBase, centerY - radioBase,
                 radioBase * 2, radioBase * 2, -90, 360);
 
-            // Arco proporcional
             int angulo = (int)(360 * proporcion);
             if (angulo > 0)
             {
@@ -635,7 +1212,6 @@ namespace SUSTENTACION.PanelTrabajador
                     radioBase * 2, radioBase * 2, -90, angulo);
             }
 
-            // Texto
             string texto = $"{salidas}/{maxVal}";
             Font font = new Font("Segoe UI", 14f, FontStyle.Bold);
             SizeF sizeTexto = g.MeasureString(texto, font);
@@ -643,7 +1219,6 @@ namespace SUSTENTACION.PanelTrabajador
                 centerX - sizeTexto.Width / 2,
                 centerY - sizeTexto.Height / 2);
 
-            // Subtítulo
             string sub = $"{salidas} salidas en el mes";
             Font fontSub = new Font("Segoe UI", 8f);
             SizeF stSub = g.MeasureString(sub, fontSub);
@@ -656,30 +1231,24 @@ namespace SUSTENTACION.PanelTrabajador
         {
             g.SmoothingMode = SmoothingMode.AntiAlias;
 
-            // Ícono usuario
             g.FillEllipse(new SolidBrush(accentOrange), 20, 20, 40, 40);
             g.DrawString("👤", new Font("Segoe UI", 18f), new SolidBrush(textWhite), 27, 27);
 
-            // Nombre
             g.DrawString(nombreTrabajador, new Font("Segoe UI", 13f, FontStyle.Bold),
                 new SolidBrush(textWhite), 75, 24);
 
-            // Rol
             g.DrawString("Trabajador", new Font("Segoe UI", 9f),
                 new SolidBrush(textMuted), 76, 47);
 
-            // Línea
             g.DrawLine(new Pen(Color.FromArgb(60, 60, 80), 1),
                 20, 80, rect.Width - 20, 80);
 
-            // Info
             string fechaActual = mesSeleccionado.ToString("MMMM 'de' yyyy").ToUpper();
             g.DrawString("MES:", new Font("Segoe UI", 8f, FontStyle.Bold),
                 new SolidBrush(textMuted), 20, 95);
             g.DrawString(fechaActual, new Font("Segoe UI", 11f, FontStyle.Bold),
                 new SolidBrush(accentOrange), 20, 112);
 
-            // Stats
             g.DrawString("Salidas:", new Font("Segoe UI", 8.5f),
                 new SolidBrush(textMuted), 20, 145);
             g.DrawString(salidasDelMes.ToString(), new Font("Segoe UI", 11f, FontStyle.Bold),
@@ -696,9 +1265,9 @@ namespace SUSTENTACION.PanelTrabajador
                 new SolidBrush(accentGreen), 100, 193);
         }
 
-        // ==========================================
+        // ═══════════════════════════════════════════
         // UTILIDADES
-        // ==========================================
+        // ═══════════════════════════════════════════
         private void AplicarBordesRedondeados(Control control, int radio)
         {
             Action recalcularRegion = () =>
