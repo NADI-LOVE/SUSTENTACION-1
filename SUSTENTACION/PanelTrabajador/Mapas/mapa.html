@@ -1,145 +1,145 @@
 ﻿<!DOCTYPE html>
 <html lang="es">
-	<head>
-		<meta charset="UTF-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<title>ARTEMUSA | Selector de ubicación</title>
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>ARTEMUSA | Selector de ubicación</title>
 
-		<link rel="icon" href="data:," />
-		<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-		<link rel="stylesheet" href="css/style.css" />
-	</head>
-	<body>
-		<main class="layout">
-			<!-- ════════════════════════════════════════
-             SIDEBAR IZQUIERDO (320px)
-             ════════════════════════════════════════ -->
-			<aside class="sidebar">
-				<header class="sidebar-header">
-					<span class="eyebrow">
-						<span class="online-dot"></span>
-						ARTEMUSA · UBICACIONES
-					</span>
-					<h1>Seleccionar destino</h1>
-					<p>Busca una ubicación o selecciónala directamente en el mapa.</p>
-				</header>
+	<link rel="icon" href="data:," />
+	<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+	<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+	<main class="layout">
+		<!-- ════════════════════════════════════════
+		 SIDEBAR FLOTANTE (Se superpone al mapa)
+		 ════════════════════════════════════════ -->
+		<aside class="sidebar flotante">
+			<header class="sidebar-header">
+				<span class="eyebrow">
+					<span class="online-dot"></span>
+					ARTEMUSA · UBICACIONES
+				</span>
+				<h1>Seleccionar destino</h1>
+				<p>Busca una ubicación o selecciónala directamente en el mapa.</p>
+			</header>
 
-				<section class="search-panel">
-					<div class="section-title">
-						<span>Buscar destino</span>
-						<span class="step-pill">PASO 02</span>
-					</div>
-
-					<div class="tabs" role="tablist">
-						<button type="button" class="tab active" data-mode="localidad" onclick="cambiarModo('localidad')">Localidad</button>
-						<button type="button" class="tab" data-mode="coordenadas" onclick="cambiarModo('coordenadas')">Coordenadas</button>
-						<button type="button" class="tab" data-mode="direccion" onclick="cambiarModo('direccion')">Dirección</button>
-					</div>
-
-					<div class="search-content">
-						<div class="group active" id="localidad">
-							<label for="inputLocalidad">Ciudad, distrito o localidad</label>
-							<input id="inputLocalidad" placeholder="Ej. Yunguyo, Puno, Perú" autocomplete="off" />
-							<button type="button" class="search" onclick="buscarLocalidad()">
-								Buscar localidad <span>→</span>
-							</button>
-						</div>
-
-						<div class="group" id="coordenadas">
-							<div class="coord-grid">
-								<div>
-									<label for="inputLat">Latitud</label>
-									<input id="inputLat" placeholder="-15.49" inputmode="decimal" />
-								</div>
-								<div>
-									<label for="inputLon">Longitud</label>
-									<input id="inputLon" placeholder="-70.13" inputmode="decimal" />
-								</div>
-							</div>
-							<button type="button" class="search" onclick="buscarCoordenadas()">
-								Localizar coordenadas <span>→</span>
-							</button>
-						</div>
-
-						<div class="group" id="direccion">
-							<label for="inputDireccion">Dirección o lugar de referencia</label>
-							<input id="inputDireccion" placeholder="Ej. Plaza de Armas, Puno" autocomplete="off" />
-							<button type="button" class="search" onclick="buscarDireccion()">
-								Buscar dirección <span>→</span>
-							</button>
-						</div>
-					</div>
-
-					<div id="status" role="status" aria-live="polite">Mapa preparado.</div>
-				</section>
-
-				<section class="details">
-					<div class="section-title">
-						<span>Destino seleccionado</span>
-						<span class="status-dot" title="Datos del mapa"></span>
-					</div>
-
-					<div class="detail-row">
-						<span class="detail-label">Lugar</span>
-						<div class="detail-value" id="datoLugar">Sin seleccionar</div>
-					</div>
-					<div class="detail-row">
-						<span class="detail-label">Dirección</span>
-						<div class="detail-value" id="datoDireccion">Pendiente</div>
-					</div>
-					<div class="detail-row">
-						<span class="detail-label">Localidad</span>
-						<div class="detail-value" id="datoLocalidad">Pendiente</div>
-					</div>
-					<div class="detail-row">
-						<span class="detail-label">Coordenadas</span>
-						<div class="detail-value coordinate" id="datoCoordenadas">Pendiente</div>
-					</div>
-				</section>
-
-				<section class="route-info">
-					<div class="section-title">
-						<span>Ruta de traslado</span>
-						<span class="route-icon">↗</span>
-					</div>
-
-					<div class="route-grid">
-						<div class="route-stat">
-							<span>Distancia estimada</span>
-							<strong id="distanciaRuta">-- km</strong>
-						</div>
-						<div class="route-stat">
-							<span>Tiempo estimado</span>
-							<strong id="tiempoRuta">-- min</strong>
-						</div>
-					</div>
-
-					<div id="estadoRuta">Selecciona un destino para consultar la ruta.</div>
-				</section>
-
-				<footer class="sidebar-footer">
-					Datos de OpenStreetMap · Ruta referencial
-				</footer>
-			</aside>
-
-			<!-- ════════════════════════════════════════
-             MAPA (70% del ancho)
-             ════════════════════════════════════════ -->
-			<section class="map-wrapper">
-				<div id="map"></div>
-
-				<div class="map-hint">
-					<span class="map-hint-dot"></span>
-					Haz clic en el mapa para elegir un destino
+			<section class="search-panel">
+				<div class="section-title">
+					<span>Buscar destino</span>
+					<span class="step-pill">PASO 02</span>
 				</div>
 
-				<div class="map-brand">
-					ARTEMUSA <span>· Mapa de destinos</span>
+				<div class="tabs" role="tablist">
+					<button type="button" class="tab active" data-mode="localidad" onclick="cambiarModo('localidad')">Localidad</button>
+					<button type="button" class="tab" data-mode="coordenadas" onclick="cambiarModo('coordenadas')">Coordenadas</button>
+					<button type="button" class="tab" data-mode="direccion" onclick="cambiarModo('direccion')">Dirección</button>
+				</div>
+
+				<div class="search-content">
+					<div class="group active" id="localidad">
+						<label for="inputLocalidad">Ciudad, distrito o localidad</label>
+						<input id="inputLocalidad" placeholder="Ej. Yunguyo, Puno, Perú" autocomplete="off" />
+						<button type="button" class="search" onclick="buscarLocalidad()">
+							Buscar localidad <span>→</span>
+						</button>
+					</div>
+
+					<div class="group" id="coordenadas">
+						<div class="coord-grid">
+							<div>
+								<label for="inputLat">Latitud</label>
+								<input id="inputLat" placeholder="-15.49" inputmode="decimal" />
+							</div>
+							<div>
+								<label for="inputLon">Longitud</label>
+								<input id="inputLon" placeholder="-70.13" inputmode="decimal" />
+							</div>
+						</div>
+						<button type="button" class="search" onclick="buscarCoordenadas()">
+							Localizar coordenadas <span>→</span>
+						</button>
+					</div>
+
+					<div class="group" id="direccion">
+						<label for="inputDireccion">Dirección o lugar de referencia</label>
+						<input id="inputDireccion" placeholder="Ej. Plaza de Armas, Puno" autocomplete="off" />
+						<button type="button" class="search" onclick="buscarDireccion()">
+							Buscar dirección <span>→</span>
+						</button>
+					</div>
+				</div>
+
+				<div id="status" role="status" aria-live="polite">Mapa preparado.</div>
+			</section>
+
+			<section class="details">
+				<div class="section-title">
+					<span>Destino seleccionado</span>
+					<span class="status-dot" title="Datos del mapa"></span>
+				</div>
+
+				<div class="detail-row">
+					<span class="detail-label">Lugar</span>
+					<div class="detail-value" id="datoLugar">Sin seleccionar</div>
+				</div>
+				<div class="detail-row">
+					<span class="detail-label">Dirección</span>
+					<div class="detail-value" id="datoDireccion">Pendiente</div>
+				</div>
+				<div class="detail-row">
+					<span class="detail-label">Localidad</span>
+					<div class="detail-value" id="datoLocalidad">Pendiente</div>
+				</div>
+				<div class="detail-row">
+					<span class="detail-label">Coordenadas</span>
+					<div class="detail-value coordinate" id="datoCoordenadas">Pendiente</div>
 				</div>
 			</section>
-		</main>
 
-		<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-		<script src="js/script.js"></script>
-	</body>
+			<section class="route-info">
+				<div class="section-title">
+					<span>Ruta de traslado</span>
+					<span class="route-icon">↗</span>
+				</div>
+
+				<div class="route-grid">
+					<div class="route-stat">
+						<span>Distancia estimada</span>
+						<strong id="distanciaRuta">-- km</strong>
+					</div>
+					<div class="route-stat">
+						<span>Tiempo estimado</span>
+						<strong id="tiempoRuta">-- min</strong>
+					</div>
+				</div>
+
+				<div id="estadoRuta">Selecciona un destino para consultar la ruta.</div>
+			</section>
+
+			<footer class="sidebar-footer">
+				Datos de OpenStreetMap · Ruta referencial
+			</footer>
+		</aside>
+
+		<!-- ════════════════════════════════════════
+		 MAPA A PANTALLA COMPLETA
+		 ════════════════════════════════════════ -->
+		<section class="map-wrapper">
+			<div id="map"></div>
+
+			<div class="map-hint">
+				<span class="map-hint-dot"></span>
+				Haz clic en el mapa para elegir un destino
+			</div>
+
+			<div class="map-brand">
+				ARTEMUSA <span>· Mapa de destinos</span>
+			</div>
+		</section>
+	</main>
+
+	<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+	<script src="js/script.js"></script>
+</body>
 </html>

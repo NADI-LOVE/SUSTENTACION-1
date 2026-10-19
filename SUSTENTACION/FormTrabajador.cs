@@ -37,6 +37,7 @@ namespace SUSTENTACION
 
         // Variable para guardar el ID del trabajador logueado
         private int idTrabajador;
+        public bool SesionCerrada { get; private set; } = false;
 
         public FormTrabajador(int id = 1, string nombre = "María López", string rol = "Trabajador")
         {
@@ -326,6 +327,7 @@ namespace SUSTENTACION
             {
                 if (MessageBox.Show("¿Está seguro de que desea cerrar sesión?", "ARTEMUSA", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
                 {
+                    SesionCerrada = true;   // 👈 marca que fue LOGOUT
                     this.Close();
                 }
             };

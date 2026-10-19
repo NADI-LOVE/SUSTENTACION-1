@@ -308,8 +308,31 @@ namespace SUSTENTACION
                         else
                             dashboard = new FormTrabajador(idTrabajador, nombreTrabajador, nombreRol);
 
-                        // Evita que la aplicación quede oculta después de cerrar el panel.
-                        dashboard.FormClosed += (s, e) => this.Close();
+                        // 👇 NUEVO bloque (reemplaza a "dashboard.FormClosed += (s, e) => this.Close();")
+                        dashboard.FormClosed += (s, e) =>
+                        {
+                            bool fueLogout = false;
+
+                            if (dashboard is FormAdmin admin)
+                                fueLogout = admin.SesionCerrada;
+                            else if (dashboard is FormTrabajador trabajador)
+                                fueLogout = trabajador.SesionCerrada;
+
+                            if (fueLogout)
+                            {
+                                txtPassword.Clear();
+                                if (!chkRememberMe.Checked)
+                                    txtEmail.Clear();
+                                this.Show();
+                                this.BringToFront();
+                                txtEmail.Focus();
+                            }
+                            else
+                            {
+                                this.Close();
+                            }
+                        };
+
                         txtPassword.Clear();
                         this.Hide();
                         dashboard.Show();

@@ -26,6 +26,7 @@ namespace SUSTENTACION
 
         private string nombreUsuario;
         private string rolUsuario;
+        public bool SesionCerrada { get; private set; } = false;
 
         public FormAdmin(string nombre, string rol)
         {
@@ -505,6 +506,7 @@ namespace SUSTENTACION
             DialogResult result = MessageBox.Show("¿Estás seguro de que deseas cerrar sesión?", "Cerrar Sesión", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
             if (result == DialogResult.Yes)
             {
+                SesionCerrada = true;   // 👈 LÍNEA NUEVA
                 this.Close();
             }
         }
