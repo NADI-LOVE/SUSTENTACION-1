@@ -62,8 +62,6 @@ namespace SUSTENTACION
             this.Font = new Font("Segoe UI", 9f, FontStyle.Regular);
             this.DoubleBuffered = true;
             this.FormBorderStyle = FormBorderStyle.Sizable;
-
-            // 🆕 Abrir maximizado (pantalla completa con bordes)
             this.WindowState = FormWindowState.Maximized;
         }
 
@@ -264,6 +262,22 @@ namespace SUSTENTACION
                         vistaEventos.Dock = DockStyle.Fill;
                         panelMainContent.Controls.Add(vistaEventos);
                         break;
+                    case "Settings":
+                        AjustesPanel vistaAjustes = new AjustesPanel(this.idTrabajador, this.nombreUsuario);
+                        vistaAjustes.Dock = DockStyle.Fill;
+                        vistaAjustes.TemaCambiado += (esOscuro) =>
+                        {
+                            // Demostración visual del cambio de tema
+                            MessageBox.Show(
+                                esOscuro ? "🌙 Tema oscuro activado" : "☀️ Tema claro activado",
+                                "Apariencia",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Information);
+
+                            // TODO: Si decides implementar el tema claro, llama a AplicarTemaGlobal(esOscuro);
+                        };
+                        panelMainContent.Controls.Add(vistaAjustes);
+                        break;
                     default:
                         break;
                 }
@@ -327,7 +341,7 @@ namespace SUSTENTACION
             {
                 if (MessageBox.Show("¿Está seguro de que desea cerrar sesión?", "ARTEMUSA", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
                 {
-                    SesionCerrada = true;   // 👈 marca que fue LOGOUT
+                    SesionCerrada = true;
                     this.Close();
                 }
             };
@@ -381,10 +395,6 @@ namespace SUSTENTACION
                 AutoScroll = true
             };
 
-            // ==========================================
-            // CARGAR EVENTOS REALES DESDE LA BASE DE DATOS
-            // ==========================================
-            // 🔥 Cargar en hilo separado para no bloquear la UI
             System.Threading.Tasks.Task.Run(() =>
             {
                 CargarEventosEnLista(flowEvents, fechaSeleccionada);
@@ -462,9 +472,7 @@ namespace SUSTENTACION
             }
             calendarArea.Controls.Add(gridDiasHeader);
 
-            // ==========================================
             // CARGAR DÍAS CON EVENTOS
-            // ==========================================
             HashSet<int> diasConEventos = new HashSet<int>();
             Conexion conexionDias = new Conexion();
             try
@@ -487,7 +495,7 @@ namespace SUSTENTACION
                     diasConEventos.Add(Convert.ToInt32(readerDias["dia"]));
                 }
             }
-            catch { /* silencioso */ }
+            catch { }
             finally { conexionDias.CerrarConexion(); }
 
             DateTime primerDiaDelMes = new DateTime(fechaSeleccionada.Year, fechaSeleccionada.Month, 1);
@@ -529,16 +537,13 @@ namespace SUSTENTACION
                             pnlDia.BackColor = bgCardSelected;
                         }
 
-                        // Si este día tiene eventos, pintarlo con otro color
                         bool tieneEventos = diasConEventos.Contains(contadorDia);
                         if (tieneEventos && !esHoy)
                         {
-                            // 🎨 Color claro para días con evento (turquesa suave)
                             pnlDia.BackColor = Color.FromArgb(120, 200, 230);
                         }
                         else if (tieneEventos && esHoy)
                         {
-                            // 🎨 Día de hoy Y con evento (más intenso)
                             pnlDia.BackColor = Color.FromArgb(255, 150, 200);
                         }
 
@@ -554,18 +559,12 @@ namespace SUSTENTACION
                         };
                         pnlDia.Controls.Add(lblNum);
 
-                        // ==========================================
-                        // GUARDAMOS EL DÍA ACTUAL ANTES DE INCREMENTAR
-                        // ==========================================
                         int diaActual = contadorDia;
                         DateTime fechaDelPanel = new DateTime(fechaSeleccionada.Year, fechaSeleccionada.Month, diaActual);
 
-                        // Solo permitir clic en fechas de hoy o futuras
                         if (fechaDelPanel >= DateTime.Today)
                         {
                             pnlDia.Cursor = Cursors.Hand;
-
-                            // Capturar valores en variables locales (evita bug de closures)
                             int diaParaEvento = diaActual;
                             bool tieneEventoEsteDia = tieneEventos;
 
@@ -573,9 +572,6 @@ namespace SUSTENTACION
                             {
                                 if (tieneEventoEsteDia)
                                 {
-                                    // ==========================================
-                                    // YA HAY UN EVENTO → ABRIR FORMULARIO DE RETORNO
-                                    // ==========================================
                                     using (var formRetorno = new FormRetornoEquipo(
                                         this.idTrabajador,
                                         this.nombreUsuario,
@@ -589,10 +585,7 @@ namespace SUSTENTACION
                                 }
                                 else
                                 {
-                                    // ==========================================
-                                    // NO HAY EVENTO → ABRIR FORMULARIO DE SALIDA
-                                    // ==========================================
-                                    this.Hide();  // 🔥 Ocultar el FormTrabajador
+                                    this.Hide();
                                     using (var formSalida = new FormSalidaEquipo(this.idTrabajador, this.nombreUsuario, fechaDelPanel))
                                     {
                                         formSalida.ShowDialog();
@@ -601,23 +594,22 @@ namespace SUSTENTACION
                                             ConstruirCalendarioEvents();
                                         }
                                     }
-                                    this.Show();  // 🔥 Volver a mostrar el FormTrabajador
+                                    this.Show();
                                     this.BringToFront();
                                 }
                             };
 
-                            // Efecto hover (respeta el color según el estado del día)
                             pnlDia.MouseEnter += (s, ev) => pnlDia.BackColor = Color.FromArgb(60, 62, 90);
                             pnlDia.MouseLeave += (s, ev) =>
                             {
                                 if (esHoy && tieneEventoEsteDia)
-                                    pnlDia.BackColor = Color.FromArgb(255, 150, 200);  // Hoy + evento
+                                    pnlDia.BackColor = Color.FromArgb(255, 150, 200);
                                 else if (esHoy)
-                                    pnlDia.BackColor = bgCardSelected;                 // Solo hoy
+                                    pnlDia.BackColor = bgCardSelected;
                                 else if (tieneEventoEsteDia)
-                                    pnlDia.BackColor = Color.FromArgb(120, 200, 230);  // Solo evento (turquesa claro)
+                                    pnlDia.BackColor = Color.FromArgb(120, 200, 230);
                                 else
-                                    pnlDia.BackColor = bgCard;                         // Sin evento
+                                    pnlDia.BackColor = bgCard;
                             };
                         }
                         else
@@ -643,9 +635,6 @@ namespace SUSTENTACION
             panelMainContent.Controls.Add(panelEventList);
         }
 
-        // ==========================================
-        // CARGAR EVENTOS EN LA LISTA LATERAL (desde MySQL)
-        // ==========================================
         private void CargarEventosEnLista(FlowLayoutPanel contenedor, DateTime mes)
         {
             Conexion conexionDB = new Conexion();
@@ -700,20 +689,15 @@ namespace SUSTENTACION
                     string estadoRetorno = reader["estado_retorno"].ToString();
                     string tituloEvento = reader["titulo_evento"]?.ToString() ?? "";
 
-                    // 🔥 Leer la hora desde la tabla eventos (soporta TimeOnly, TimeSpan y string)
                     string horaTexto = "00:00";
                     if (reader["hora_inicio"] != DBNull.Value)
                     {
                         object valorHora = reader["hora_inicio"];
 
                         if (valorHora is TimeOnly timeOnly)
-                        {
                             horaTexto = timeOnly.ToString("HH:mm");
-                        }
                         else if (valorHora is TimeSpan timeSpan)
-                        {
                             horaTexto = timeSpan.ToString(@"hh\:mm");
-                        }
                         else
                         {
                             string str = valorHora.ToString();
@@ -724,24 +708,17 @@ namespace SUSTENTACION
 
                     string fechaTexto = fecha.ToString("dd MMM yyyy", new CultureInfo("es-ES"));
 
-                    // 🔥 Mostrar si es SALIDA o RETORNO
                     string titulo = estadoRetorno == "Retornado"
                         ? $"✅ Retorno - {encargado}"
                         : $"📤 Salida - {encargado}";
 
                     string detalles = $"{equipos} | {ubicacion}";
 
-                    // Color del título según estado
                     Color colorTitulo = estadoRetorno == "Retornado"
                         ? Color.FromArgb(100, 220, 160)
                         : textWhite;
 
-                    Panel tarjeta = CrearTarjetaEvento(
-                        fechaTexto,
-                        titulo,
-                        detalles,
-                        horaTexto,
-                        colorTitulo);
+                    Panel tarjeta = CrearTarjetaEvento(fechaTexto, titulo, detalles, horaTexto, colorTitulo);
 
                     if (contenedor.InvokeRequired)
                         contenedor.Invoke(new Action(() => contenedor.Controls.Add(tarjeta)));
@@ -759,7 +736,11 @@ namespace SUSTENTACION
                         AutoSize = true,
                         Margin = new Padding(10)
                     };
-                    contenedor.Controls.Add(lblVacio);
+
+                    if (contenedor.InvokeRequired)
+                        contenedor.Invoke(new Action(() => contenedor.Controls.Add(lblVacio)));
+                    else
+                        contenedor.Controls.Add(lblVacio);
                 }
             }
             catch (Exception ex)
@@ -851,6 +832,20 @@ namespace SUSTENTACION
 
         private void FormTrabajador_Load(object sender, EventArgs e)
         {
+        }
+
+        // 🚀 MÉTODO PARA EL TEMA GLOBAL (Preparado para el futuro)
+        private void AplicarTemaGlobal(bool esOscuro)
+        {
+            // Si decides implementar el tema claro completo, aquí debes
+            // cambiar los colores de this.BackColor, panelSidebar, etc.
+            // y luego recargar los paneles hijos.
+
+            /*
+            this.BackColor = esOscuro ? bgMain : Color.White;
+            panelSidebar.BackColor = esOscuro ? bgSidebar : Color.FromArgb(240, 240, 240);
+            // etc...
+            */
         }
     }
 }
