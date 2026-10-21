@@ -8,6 +8,7 @@ using System.Text;
 using System.Windows.Forms;
 using Npgsql;
 using NpgsqlTypes;
+using SUSTENTACION.PanelTrabajador;
 
 namespace SUSTENTACION
 {
@@ -167,7 +168,7 @@ namespace SUSTENTACION
             lblEstadoConexion.TextAlign = ContentAlignment.MiddleLeft;
             principal.Controls.Add(lblEstadoConexion, 0, 5);
         }
-        //Ajustar el panel de contro de equipo encabezado
+
         private Control ConstruirEncabezado()
         {
             Panel encabezado = new Panel
@@ -178,7 +179,6 @@ namespace SUSTENTACION
                 MinimumSize = new Size(0, 110)
             };
 
-            // Texto superior
             Label marca = Etiqueta(
                 "ARTEMUSA TV  /  INVENTARIO AUDIOVISUAL",
                 8f,
@@ -187,7 +187,6 @@ namespace SUSTENTACION
             );
             marca.Location = new Point(20, 10);
 
-            // Título principal
             Label titulo = Etiqueta(
                 "Control de equipos",
                 22f,
@@ -196,7 +195,6 @@ namespace SUSTENTACION
             );
             titulo.Location = new Point(18, 32);
 
-            // Subtítulo
             Label subtitulo = Etiqueta(
                 "Gestión y seguimiento de equipos audiovisuales",
                 8.5f,
@@ -205,7 +203,6 @@ namespace SUSTENTACION
             subtitulo.Location = new Point(21, 72);
             subtitulo.AutoSize = true;
 
-            // Botón Actualizar
             btnActualizar = Boton(
                 "↻  Actualizar",
                 false,
@@ -219,7 +216,6 @@ namespace SUSTENTACION
                 28
             );
 
-            // Mantener el botón alineado a la derecha
             encabezado.Resize += delegate
             {
                 btnActualizar.Location = new Point(
@@ -246,37 +242,36 @@ namespace SUSTENTACION
                 Margin = new Padding(0)
             };
             string[] titulos =
-{
-    "EQUIPOS REGISTRADOS",
-    "DISPONIBLES",
-    "ASIGNADOS",
-    "EN MANTENIMIENTO"
-};
+            {
+                "EQUIPOS REGISTRADOS",
+                "DISPONIBLES",
+                "ASIGNADOS",
+                "EN MANTENIMIENTO"
+            };
 
             string[] detalles =
             {
-    "Total de equipos registrados",
-    "Equipos disponibles actualmente",
-    "Equipos con asignación activa",
-    "Equipos actualmente en mantenimiento"
-};
+                "Total de equipos registrados",
+                "Equipos disponibles actualmente",
+                "Equipos con asignación activa",
+                "Equipos actualmente en mantenimiento"
+            };
 
             Color[] colores =
             {
-    colorVerde,
-    Color.FromArgb(43, 103, 163),
-    Color.FromArgb(172, 102, 17),
-    Color.FromArgb(119, 79, 178)
-};
+                colorVerde,
+                Color.FromArgb(43, 103, 163),
+                Color.FromArgb(172, 102, 17),
+                Color.FromArgb(119, 79, 178)
+            };
 
             Color[] fondos =
             {
-    Color.FromArgb(229, 244, 237),
-    Color.FromArgb(233, 242, 252),
-    Color.FromArgb(255, 245, 226),
-    Color.FromArgb(241, 236, 252)
-};
-
+                Color.FromArgb(229, 244, 237),
+                Color.FromArgb(233, 242, 252),
+                Color.FromArgb(255, 245, 226),
+                Color.FromArgb(241, 236, 252)
+            };
 
             for (int i = 0; i < 4; i++)
             {
@@ -323,29 +318,22 @@ namespace SUSTENTACION
             fila.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
             string[] titulos =
-{
-    "BUSCAR EQUIPO",
-    "CATEGORÍA",
-    "ESTADO",
-    "STOCK",
-    "",
-    ""
-};
+            {
+                "BUSCAR EQUIPO",
+                "CATEGORÍA",
+                "ESTADO",
+                "STOCK",
+                "",
+                ""
+            };
 
             for (int i = 0; i < titulos.Length; i++)
             {
-                Label titulo = Etiqueta(
-                    titulos[i],
-                    7.2f,
-                    colorSecundario,
-                    true
-                );
-
+                Label titulo = Etiqueta(titulos[i], 7.2f, colorSecundario, true);
                 titulo.Dock = DockStyle.Fill;
                 fila.Controls.Add(titulo, i, 0);
             }
 
-            // BUSCADOR
             txtBuscar = new TextBox
             {
                 Dock = DockStyle.Fill,
@@ -353,24 +341,19 @@ namespace SUSTENTACION
                 Margin = new Padding(0, 8, 8, 0)
             };
 
-            // CATEGORÍA
             cmbCategoria = Combo("Todas");
-
-            // ESTADO
             cmbEstado = Combo("Todos");
 
-            // CONDICIÓN
             cmbExistencias = Combo("Todas");
             cmbExistencias.Items.Clear();
             cmbExistencias.Items.AddRange(new object[]
             {
-    "Todas",
-    "Con existencias",
-    "Sin existencias"
+                "Todas",
+                "Con existencias",
+                "Sin existencias"
             });
             cmbExistencias.SelectedIndex = 0;
 
-            // UBICACIÓN
             nudUmbral = new NumericUpDown
             {
                 Minimum = 0,
@@ -378,7 +361,6 @@ namespace SUSTENTACION
                 Visible = false
             };
 
-            // BOTÓN LIMPIAR
             Button limpiar = Boton(
                 "Limpiar",
                 false,
@@ -421,8 +403,8 @@ namespace SUSTENTACION
                 Padding = new Padding(0, 3, 0, 0)
             };
             btnNuevo = Boton("+  Nuevo equipo", true, delegate { EditarEquipo(false); }, 145);
-            btnEntrada = Boton("↙  Entrada", true, delegate { Informar("Entrada pendiente: requiere registro de trazabilidad en Supabase."); }, 120);
-            btnSalida = Boton("↗  Salida", false, delegate { Informar("Salida pendiente: requiere completar el registro transaccional."); }, 120);
+            btnEntrada = Boton("↙  Entrada", true, delegate { RegistrarMovimiento("Entrada"); }, 120);
+            btnSalida = Boton("↗  Salida", false, delegate { RegistrarMovimiento("Salida"); }, 120);
             btnEditar = Boton("Editar equipo", false, delegate { EditarEquipo(true); }, 125);
             Button exportar = Boton("Exportar CSV", false, delegate { ExportarCsv(); }, 122);
             lblConteo = Etiqueta("Sin registros", 8.5f, colorSecundario);
@@ -543,7 +525,6 @@ namespace SUSTENTACION
 
         private NpgsqlConnection AbrirConexion()
         {
-            // Cada operación obtiene una instancia nueva: el llamador la libera con using.
             NpgsqlConnection conexion = new Conexion().ObtenerConexion();
             if (conexion == null) throw new InvalidOperationException("Conexion.ObtenerConexion() devolvió una conexión vacía.");
             try
@@ -568,7 +549,8 @@ namespace SUSTENTACION
                 using (var conexion = AbrirConexion())
                 using (var adaptador = new NpgsqlDataAdapter(@"
 SELECT id, codigo, nombre, COALESCE(categoria,'General') AS categoria,
-       ''::text AS marca, ''::text AS modelo, ''::text AS numero_serie,
+       COALESCE(marca,'') AS marca, COALESCE(modelo,'') AS modelo,
+       ''::text AS numero_serie,
        COALESCE(ubicacion,'') AS ubicacion, COALESCE(stock,0) AS stock,
        COALESCE(estado,'Disponible') AS estado, COALESCE(descripcion,'') AS descripcion,
        NULL::integer AS id_ubicacion
@@ -855,85 +837,278 @@ ORDER BY x.fecha_evento DESC LIMIT 1000";
             return campo;
         }
 
+        // ------------------------------------------------------------------
+        //  EDICIÓN / ALTA DE EQUIPO
+        // ------------------------------------------------------------------
         private void EditarEquipo(bool editar)
         {
             if (!conectado || ocupado) return;
             DataRow fila = editar ? EquipoSeleccionado() : null;
             if (editar && fila == null) return;
-            using (var dialogo = CrearDialogo(editar ? "Editar equipo" : "Nuevo equipo", new Size(530, 520)))
+
+            using (var dialogo = CrearDialogo(editar ? "Editar equipo" : "Nuevo equipo", new Size(530, 690)))
             {
                 var titulo = Etiqueta(editar ? "Editar equipo audiovisual" : "Registrar equipo audiovisual", 16, colorTexto, true);
                 titulo.Location = new Point(22, 12); dialogo.Controls.Add(titulo);
-                var codigo = AgregarCampo(dialogo, "Código *", 55, editar ? Convert.ToString(fila["codigo"]) : "", 80);
+
+                // ---- Código (registro manual) ----
+                Label lblCodigo = Etiqueta("Código *", 8.5f, colorSecundario, true);
+                lblCodigo.Location = new Point(22, 55);
+                dialogo.Controls.Add(lblCodigo);
+
+                TextBox codigo = new TextBox
+                {
+                    Location = new Point(22, 76),
+                    Size = new Size(486, 26),
+                    Text = editar ? Convert.ToString(fila["codigo"]) : "",
+                    MaxLength = 80,
+                    Font = Font
+                };
+                dialogo.Controls.Add(codigo);
+
+                // ---- Nombre ----
                 var nombre = AgregarCampo(dialogo, "Nombre *", 105, editar ? Convert.ToString(fila["nombre"]) : "", 120);
-                var categoria = AgregarCampo(dialogo, "Categoría", 155, editar ? Convert.ToString(fila["categoria"]) : "General", 100);
-                var ubicacion = AgregarCampo(dialogo, "Ubicación", 205, editar ? Convert.ToString(fila["ubicacion"]) : "Almacén Principal", 150);
-                var estado = AgregarCampo(dialogo, "Estado", 255, editar ? Convert.ToString(fila["estado"]) : "Disponible", 60);
-                var descripcion = AgregarCampo(dialogo, "Descripción", 305, editar ? Convert.ToString(fila["descripcion"]) : "", 1000, true);
+
+                // ---- Categoría + Marca ----
+                Label lblCategoria = Etiqueta("Categoría", 8.5f, colorSecundario, true);
+                lblCategoria.Location = new Point(22, 155);
+                dialogo.Controls.Add(lblCategoria);
+
+                TextBox categoria = new TextBox
+                {
+                    Location = new Point(22, 176),
+                    Size = new Size(230, 26),
+                    Font = Font,
+                    Text = editar ? Convert.ToString(fila["categoria"]) : "General",
+                    MaxLength = 100
+                };
+                dialogo.Controls.Add(categoria);
+
+                Label lblMarca = Etiqueta("Marca", 8.5f, colorSecundario, true);
+                lblMarca.Location = new Point(268, 155);
+                dialogo.Controls.Add(lblMarca);
+
+                TextBox marca = new TextBox
+                {
+                    Location = new Point(268, 176),
+                    Size = new Size(240, 26),
+                    Font = Font,
+                    Text = editar ? Convert.ToString(fila["marca"]) : "",
+                    MaxLength = 100
+                };
+                dialogo.Controls.Add(marca);
+
+                // ---- Modelo + Ubicación ----
+                Label lblModelo = Etiqueta("Modelo", 8.5f, colorSecundario, true);
+                lblModelo.Location = new Point(22, 212);
+                dialogo.Controls.Add(lblModelo);
+
+                TextBox modelo = new TextBox
+                {
+                    Location = new Point(22, 233),
+                    Size = new Size(230, 26),
+                    Font = Font,
+                    Text = editar ? Convert.ToString(fila["modelo"]) : "",
+                    MaxLength = 100
+                };
+                dialogo.Controls.Add(modelo);
+
+                Label lblUbicacion = Etiqueta("Ubicación", 8.5f, colorSecundario, true);
+                lblUbicacion.Location = new Point(268, 212);
+                dialogo.Controls.Add(lblUbicacion);
+
+                TextBox ubicacion = new TextBox
+                {
+                    Location = new Point(268, 233),
+                    Size = new Size(240, 26),
+                    Font = Font,
+                    Text = editar ? Convert.ToString(fila["ubicacion"]) : "Almacén Principal",
+                    MaxLength = 150
+                };
+                dialogo.Controls.Add(ubicacion);
+
+                // ---- Estado ----
+                var estado = AgregarCampo(dialogo, "Estado", 269, editar ? Convert.ToString(fila["estado"]) : "Disponible", 60);
+
+                // ---- Stock ----
+                Label lblStock = Etiqueta("Stock (unidades) *", 8.5f, colorSecundario, true);
+                lblStock.Location = new Point(22, 319);
+                dialogo.Controls.Add(lblStock);
+
+                NumericUpDown stock = new NumericUpDown
+                {
+                    Location = new Point(22, 340),
+                    Size = new Size(180, 27),
+                    Minimum = 0,
+                    Maximum = int.MaxValue,
+                    ThousandsSeparator = true,
+                    Font = Font,
+                    TextAlign = HorizontalAlignment.Right
+                };
+                try
+                {
+                    stock.Value = editar && fila["stock"] != DBNull.Value
+                        ? Convert.ToDecimal(fila["stock"], CultureInfo.InvariantCulture)
+                        : 0m;
+                }
+                catch { stock.Value = 0m; }
+                dialogo.Controls.Add(stock);
+
+                Label notaStock = Etiqueta("Sugerencia: si el equipo ya existía usa Entrada para aumentar stock.", 7.8f, colorSecundario);
+                notaStock.Location = new Point(210, 344);
+                dialogo.Controls.Add(notaStock);
+
+                // ---- Descripción ----
+                var descripcion = AgregarCampo(dialogo, "Descripción", 385, editar ? Convert.ToString(fila["descripcion"]) : "", 1000, true);
+
+                // ---- Botones ----
                 var cancelar = Boton("Cancelar", false, (a, b) => dialogo.Close(), 105);
-                cancelar.Location = new Point(210, 455); dialogo.Controls.Add(cancelar);
+                cancelar.Location = new Point(210, 625); dialogo.Controls.Add(cancelar);
                 var guardar = Boton("Guardar", true, (a, b) => { }, 145);
-                guardar.Location = new Point(330, 455); dialogo.Controls.Add(guardar);
+                guardar.Location = new Point(330, 625); dialogo.Controls.Add(guardar);
                 dialogo.CancelButton = cancelar;
+
+                // ---- GUARDAR ----
                 guardar.Click += delegate
                 {
                     if (string.IsNullOrWhiteSpace(codigo.Text) || string.IsNullOrWhiteSpace(nombre.Text))
-                    { Informar("Código y nombre son obligatorios."); return; }
+                    {
+                        Informar("Código y nombre son obligatorios.");
+                        return;
+                    }
+
+                    guardar.Enabled = cancelar.Enabled = false;
+                    ocupado = true;
+                    EstablecerConexion(conectado);
                     try
                     {
-                        GuardarEquipo(editar, editar ? Convert.ToInt32(fila["id"]) : 0,
-                            codigo.Text.Trim(), nombre.Text.Trim(), categoria.Text.Trim(), "", "", "",
-                            ubicacion.Text.Trim(), estado.Text.Trim(), descripcion.Text.Trim());
-                        dialogo.DialogResult = DialogResult.OK; dialogo.Close();
+                        GuardarEquipo(
+                            editar,
+                            editar ? Convert.ToInt32(fila["id"]) : 0,
+                            codigo.Text,
+                            nombre.Text,
+                            categoria.Text,
+                            marca.Text,
+                            modelo.Text,
+                            "",
+                            ubicacion.Text,
+                            estado.Text.Trim(),
+                            descripcion.Text.Trim(),
+                            (int)stock.Value);
+
+                        dialogo.DialogResult = DialogResult.OK;
+                        dialogo.Close();
+                    }
+                    catch (CodigoEquipoDuplicadoException ex)
+                    {
+                        Informar(ex.Message);
+                        codigo.Focus(); codigo.SelectAll();
                     }
                     catch (PostgresException ex) when (ex.SqlState == "23505")
-                    { Informar("El código ya está registrado."); }
-                    catch (Exception ex) { MostrarError("No se pudo guardar", ex); }
+                    {
+                        Informar("El código '" + codigo.Text.Trim().ToUpperInvariant() +
+                                  "' ya está registrado. Usa un código distinto o el botón Entrada para aumentar stock.");
+                        codigo.Focus(); codigo.SelectAll();
+                    }
+                    catch (Exception ex)
+                    {
+                        MostrarError("No se pudo guardar", ex);
+                    }
+                    finally
+                    {
+                        ocupado = false;
+                        guardar.Enabled = cancelar.Enabled = true;
+                        EstablecerConexion(conectado);
+                    }
                 };
-                if (dialogo.ShowDialog(FindForm()) == DialogResult.OK) CargarDatosInventario();
+
+                if (dialogo.ShowDialog(FindForm()) == DialogResult.OK)
+                    CargarDatosInventario();
             }
         }
 
+        // ------------------------------------------------------------------
+        //  GUARDAR EQUIPO (con verificación de duplicados)
+        // ------------------------------------------------------------------
         private void GuardarEquipo(bool editar, int id, string codigo, string nombre, string categoria,
-            string marca, string modelo, string serie, string ubicacion, string estado, string descripcion)
+            string marca, string modelo, string serie, string ubicacion, string estado, string descripcion,
+            int stock)
         {
+            codigo = (codigo ?? "").Trim().ToUpperInvariant();
+            nombre = (nombre ?? "").Trim();
+
+            if (codigo.Length == 0)
+                throw new InvalidOperationException("El código no puede estar vacío.");
+            if (nombre.Length == 0)
+                throw new InvalidOperationException("El nombre no puede estar vacío.");
+
             using (var conexion = AbrirConexion())
             using (var transaccion = conexion.BeginTransaction())
             {
+                const string sqlExiste = @"
+SELECT 1 FROM public.equipos
+WHERE UPPER(TRIM(codigo)) = @codigo
+  AND (@id = 0 OR id <> @id)
+LIMIT 1";
+
+                using (var cmdExiste = new NpgsqlCommand(sqlExiste, conexion, transaccion))
+                {
+                    cmdExiste.Parameters.AddWithValue("@codigo", codigo);
+                    cmdExiste.Parameters.AddWithValue("@id", editar ? id : 0);
+                    if (cmdExiste.ExecuteScalar() != null)
+                        throw new CodigoEquipoDuplicadoException(codigo);
+                }
+
                 if (!editar)
                 {
-                    using (var bloqueo = new NpgsqlCommand("SELECT pg_advisory_xact_lock(192837465)", conexion, transaccion)) bloqueo.ExecuteNonQuery();
+                    using (var bloqueo = new NpgsqlCommand(
+                        "SELECT pg_advisory_xact_lock(192837465)", conexion, transaccion))
+                        bloqueo.ExecuteNonQuery();
                 }
-                string sql = editar ? @"UPDATE public.equipos SET codigo=@codigo,nombre=@nombre,
- categoria=@categoria,ubicacion=@ubicacion,estado=@estado,descripcion=@descripcion WHERE id=@id" :
- @"INSERT INTO public.equipos(id,codigo,nombre,categoria,ubicacion,stock,estado,descripcion)
- VALUES((SELECT COALESCE(MAX(id),0)+1 FROM public.equipos),@codigo,@nombre,@categoria,@ubicacion,0,@estado,@descripcion)";
+
+                string sql = editar
+                    ? @"UPDATE public.equipos
+                           SET codigo=@codigo, nombre=@nombre, categoria=@categoria,
+                               marca=@marca, modelo=@modelo,
+                               ubicacion=@ubicacion, estado=@estado,
+                               descripcion=@descripcion, stock=@stock
+                         WHERE id=@id"
+                    : @"INSERT INTO public.equipos
+                           (id, codigo, nombre, categoria, marca, modelo,
+                            ubicacion, stock, estado, descripcion)
+                        VALUES ((SELECT COALESCE(MAX(id),0)+1 FROM public.equipos),
+                                @codigo, @nombre, @categoria, @marca, @modelo,
+                                @ubicacion, @stock, @estado, @descripcion)";
+
                 using (var cmd = new NpgsqlCommand(sql, conexion, transaccion))
                 {
                     cmd.Parameters.AddWithValue("@codigo", codigo);
                     cmd.Parameters.AddWithValue("@nombre", nombre);
-                    cmd.Parameters.AddWithValue("@categoria", categoria);
-                    cmd.Parameters.AddWithValue("@ubicacion", ubicacion);
-                    cmd.Parameters.AddWithValue("@estado", estado);
+                    cmd.Parameters.AddWithValue("@categoria", categoria ?? "");
+                    cmd.Parameters.AddWithValue("@marca", DbNullIfEmpty(marca));
+                    cmd.Parameters.AddWithValue("@modelo", DbNullIfEmpty(modelo));
+                    cmd.Parameters.AddWithValue("@ubicacion", ubicacion ?? "");
+                    cmd.Parameters.AddWithValue("@estado", estado ?? "Disponible");
                     cmd.Parameters.AddWithValue("@descripcion", DbNullIfEmpty(descripcion));
+                    cmd.Parameters.AddWithValue("@stock", stock);
                     if (editar) cmd.Parameters.AddWithValue("@id", id);
-                    if (cmd.ExecuteNonQuery() != 1) throw new InvalidOperationException("No se guardó el equipo.");
+
+                    if (cmd.ExecuteNonQuery() != 1)
+                        throw new InvalidOperationException("No se guardó el equipo.");
                 }
+
                 transaccion.Commit();
             }
         }
-
-        private int ObtenerOCrearTipo(NpgsqlConnection conexion, NpgsqlTransaction transaccion, string nombre)
-        { throw new NotSupportedException("No existe tabla tipo_equipo en este esquema."); }
-
-        private int ObtenerOCrearUbicacion(NpgsqlConnection conexion, NpgsqlTransaction transaccion, string nombre)
-        { throw new NotSupportedException("No existe tabla ubicacion en este esquema."); }
 
         private static object DbNullIfEmpty(string valor)
         {
             return string.IsNullOrWhiteSpace(valor) ? (object)DBNull.Value : valor.Trim();
         }
 
+        // ------------------------------------------------------------------
+        //  MOVIMIENTOS (Entrada / Salida)
+        // ------------------------------------------------------------------
         private DataTable CargarTrabajadoresActivos()
         {
             var tabla = new DataTable();
@@ -1033,11 +1208,24 @@ ORDER BY x.fecha_evento DESC LIMIT 1000";
                     EstablecerConexion(conectado);
                     try
                     {
-                        guardado = GuardarMovimiento(Convert.ToInt32(equipo["id"]), tipo, (int)cantidad.Value,
-                            Convert.ToInt32(responsable.SelectedValue), motivo.Text.Trim(), ubicacionExterna.Text.Trim(), operationId);
-                        if (!guardado) Informar("Este movimiento ya se había guardado. No se duplicó el descuento o ingreso de stock.");
+                        guardado = GuardarMovimiento(
+                            Convert.ToInt32(equipo["id"]),
+                            tipo,
+                            (int)cantidad.Value,
+                            Convert.ToInt32(responsable.SelectedValue),
+                            motivo.Text.Trim(),
+                            ubicacionExterna.Text.Trim(),
+                            operationId);
+
+                        if (!guardado)
+                            Informar("Este movimiento ya se había guardado. No se duplicó el descuento o ingreso de stock.");
+
                         dialogo.DialogResult = DialogResult.OK;
                         dialogo.Close();
+                    }
+                    catch (InvalidOperationException ex)
+                    {
+                        Informar(ex.Message);
                     }
                     catch (Exception ex)
                     {
@@ -1067,9 +1255,130 @@ ORDER BY x.fecha_evento DESC LIMIT 1000";
         private bool GuardarMovimiento(int idEquipo, string tipo, int cantidad, int idResponsable,
             string motivo, string ubicacionExterna, string operationId)
         {
-            throw new NotSupportedException("Las entradas y salidas requieren adaptar el registro transaccional a las tablas salidas, salida_equipos y retornos. No se modificó el stock para evitar movimientos sin trazabilidad.");
+            if (cantidad <= 0)
+                throw new InvalidOperationException("La cantidad debe ser mayor que cero.");
+            if (string.IsNullOrWhiteSpace(motivo))
+                throw new InvalidOperationException("Debes escribir el motivo del movimiento.");
+            if (string.IsNullOrWhiteSpace(operationId))
+                operationId = Guid.NewGuid().ToString("N");
+
+            bool esEntrada = string.Equals(tipo, "Entrada", StringComparison.OrdinalIgnoreCase);
+
+            using (var conexion = AbrirConexion())
+            using (var transaccion = conexion.BeginTransaction())
+            {
+                const string sqlYaExiste = @"
+SELECT 1 FROM public.salida_equipos
+WHERE codigo_escaneado = @op
+LIMIT 1";
+                using (var cmd = new NpgsqlCommand(sqlYaExiste, conexion, transaccion))
+                {
+                    cmd.Parameters.AddWithValue("@op", operationId);
+                    object ya = cmd.ExecuteScalar();
+                    if (ya != null)
+                    {
+                        transaccion.Rollback();
+                        return false;
+                    }
+                }
+
+                int stockActual;
+                const string sqlStock = @"
+SELECT COALESCE(stock, 0)
+FROM public.equipos
+WHERE id = @id
+FOR UPDATE";
+                using (var cmd = new NpgsqlCommand(sqlStock, conexion, transaccion))
+                {
+                    cmd.Parameters.AddWithValue("@id", idEquipo);
+                    object valor = cmd.ExecuteScalar();
+                    if (valor == null)
+                        throw new InvalidOperationException("El equipo ya no existe en la base de datos.");
+                    stockActual = Convert.ToInt32(valor);
+                }
+
+                if (!esEntrada && stockActual < cantidad)
+                    throw new InvalidOperationException(
+                        "Stock insuficiente. Disponible: " + stockActual + ", solicitado: " + cantidad + ".");
+
+                int nuevoStock = esEntrada ? stockActual + cantidad : stockActual - cantidad;
+
+                const string sqlUpdateStock = @"
+UPDATE public.equipos SET stock = @stock WHERE id = @id";
+                using (var cmd = new NpgsqlCommand(sqlUpdateStock, conexion, transaccion))
+                {
+                    cmd.Parameters.AddWithValue("@stock", nuevoStock);
+                    cmd.Parameters.AddWithValue("@id", idEquipo);
+                    if (cmd.ExecuteNonQuery() != 1)
+                        throw new InvalidOperationException("No se pudo actualizar el stock del equipo.");
+                }
+
+                if (esEntrada)
+                {
+                    const string sqlRetorno = @"
+INSERT INTO public.retornos
+    (id_retorno, fecha_retorno, id_equipo, id_trabajador, estado_equipo, observaciones)
+VALUES
+    ((SELECT COALESCE(MAX(id_retorno),0)+1 FROM public.retornos),
+     @fecha, @idEquipo, @idTrabajador, @estado, @obs)";
+                    using (var cmd = new NpgsqlCommand(sqlRetorno, conexion, transaccion))
+                    {
+                        cmd.Parameters.AddWithValue("@fecha", DateTime.Now);
+                        cmd.Parameters.AddWithValue("@idEquipo", idEquipo);
+                        cmd.Parameters.AddWithValue("@idTrabajador", idResponsable);
+                        cmd.Parameters.AddWithValue("@estado", "Disponible");
+                        string obs = "ENTRADA | " + motivo;
+                        if (!string.IsNullOrWhiteSpace(ubicacionExterna))
+                            obs += " | Origen: " + ubicacionExterna;
+                        obs += " | OP:" + operationId;
+                        cmd.Parameters.AddWithValue("@obs", obs);
+                        cmd.ExecuteNonQuery();
+                    }
+                }
+                else
+                {
+                    int idSalida;
+                    const string sqlSalida = @"
+INSERT INTO public.salidas
+    (id_salida, fecha_salida, id_trabajador, ubicacion, detalles)
+VALUES
+    ((SELECT COALESCE(MAX(id_salida),0)+1 FROM public.salidas),
+     @fecha, @idTrabajador, @ubicacion, @detalles)
+RETURNING id_salida";
+                    using (var cmd = new NpgsqlCommand(sqlSalida, conexion, transaccion))
+                    {
+                        cmd.Parameters.AddWithValue("@fecha", DateTime.Now);
+                        cmd.Parameters.AddWithValue("@idTrabajador", idResponsable);
+                        cmd.Parameters.AddWithValue("@ubicacion", (object)ubicacionExterna ?? DBNull.Value);
+                        string detalles = motivo;
+                        if (!string.IsNullOrWhiteSpace(ubicacionExterna))
+                            detalles += " | Destino: " + ubicacionExterna;
+                        cmd.Parameters.AddWithValue("@detalles", detalles);
+                        idSalida = Convert.ToInt32(cmd.ExecuteScalar());
+                    }
+
+                    const string sqlDetalle = @"
+INSERT INTO public.salida_equipos
+    (id_salida, id_equipo, codigo_escaneado)
+VALUES
+    (@idSalida, @idEquipo, @op)";
+                    using (var cmd = new NpgsqlCommand(sqlDetalle, conexion, transaccion))
+                    {
+                        cmd.Parameters.AddWithValue("@idSalida", idSalida);
+                        cmd.Parameters.AddWithValue("@idEquipo", idEquipo);
+                        cmd.Parameters.AddWithValue("@op", operationId);
+                        cmd.ExecuteNonQuery();
+                    }
+                }
+
+                transaccion.Commit();
+                return true;
+            }
         }
 
+        // ------------------------------------------------------------------
+        //  EXPORTAR CSV
+        // ------------------------------------------------------------------
         private void ExportarCsv()
         {
             DataTable tabla = tabPrincipal.SelectedIndex == 0 ? datosEquipos : datosMovimientos;

@@ -1,123 +1,65 @@
-﻿using System;
+﻿#nullable enable
+using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
-using System.Globalization;
-using System.Linq;
+using System.Drawing.Text;
 using System.Windows.Forms;
-using MySql.Data.MySqlClient;
-using SUSTENTACION.PanelAdministrador;
 using Npgsql;
+using SUSTENTACION.PanelAdministrador;
+using SUSTENTACION.Temas;
 
 namespace SUSTENTACION
 {
     public partial class FormAdmin : Form
     {
         // =========================================================
-        // PALETA VISUAL MODERNA - ARTEMUSA
+        // PANELES PRINCIPALES
         // =========================================================
-        private readonly Color bgDark = Color.FromArgb(10, 14, 20);
-        private readonly Color bgSidebar = Color.FromArgb(15, 20, 28);
-        private readonly Color bgHeader = Color.FromArgb(10, 14, 20);
-        private readonly Color bgCard = Color.FromArgb(22, 28, 36);
-        private readonly Color bgCardHover = Color.FromArgb(28, 35, 44);
-        private readonly Color bgInput = Color.FromArgb(18, 24, 32);
-
-        private readonly Color accentGreen = Color.FromArgb(163, 230, 53);
-        private readonly Color accentGreenSoft = Color.FromArgb(102, 204, 51);
-        private readonly Color accentBlue = Color.FromArgb(56, 189, 248);
-        private readonly Color accentOrange = Color.FromArgb(251, 146, 60);
-        private readonly Color accentPink = Color.FromArgb(236, 72, 153);
-        private readonly Color accentPurple = Color.FromArgb(168, 85, 247);
-
-        private readonly Color textWhite = Color.FromArgb(245, 247, 250);
-        private readonly Color textSoft = Color.FromArgb(203, 213, 225);
-        private readonly Color textGray = Color.FromArgb(148, 163, 184);
-        private readonly Color borderColor = Color.FromArgb(39, 47, 58);
-
-        // =========================================================
-        // PALETA DEL MODO CLARO
-        // =========================================================
-        private readonly Color lightCanvas = Color.FromArgb(244, 248, 250);
-        private readonly Color lightSidebar = Color.FromArgb(248, 250, 252);
-        private readonly Color lightHeader = Color.White;
-        private readonly Color lightCard = Color.White;
-        private readonly Color lightCardHover = Color.FromArgb(232, 240, 235);
-        private readonly Color lightInput = Color.FromArgb(247, 250, 252);
-        private readonly Color lightText = Color.FromArgb(23, 36, 48);
-        private readonly Color lightSoft = Color.FromArgb(60, 76, 90);
-        private readonly Color lightGray = Color.FromArgb(96, 112, 126);
-        private readonly Color lightBorder = Color.FromArgb(214, 225, 231);
-
-        // =========================================================
-        // PANELS PRINCIPALES
-        // =========================================================
-        private Panel panelSidebar = null!;
+        private BarraLateral barra = null!;
         private Panel panelRightSidebar = null!;
+        private Panel panelRightInner = null!;
         private Panel panelHeader = null!;
         private Panel panelMainContent = null!;
 
-        // Referencias visuales del menú lateral
-        private Panel brandCardRef = null!;
-        private Panel statusCardRef = null!;
-        private Label lblMenuPrincipalRef = null!;
-        private Label lblLogoRef = null!;
-        private Label lblLogoSubRef = null!;
-        private Button btnToggleSidebar = null!;
-
-        // Sidebar deslizante
-        private const int SidebarAnchoExpandido = 235;
-        private const int SidebarAnchoColapsado = 76;
-        private const int SidebarPasoAnimacion = 18;
-        private bool sidebarExpandido = true;
-        private int sidebarAnchoObjetivo = SidebarAnchoExpandido;
-        private System.Windows.Forms.Timer timerSidebar = null!;
-        private readonly ToolTip tooltipSidebar = new ToolTip();
-
-        // Referencias navegación
-        private Button btnOverviewRef = null!;
-        private Button btnInventarioRef = null!;
-        private Button btnMovimientosRef = null!;
-        private Button btnTrabajadoresRef = null!;
-        private Button btnReportesRef = null!;
-        private Button btnTemaRef = null!;
-        private Button? botonActivo = null;
-
-        // El panel inicia en modo oscuro, igual que el diseño original.
-        private bool modoOscuro = true;
-
+        private Panel cardUser = null!;
+        private Button btnCerrarSesion = null!;
+        private Button btnResumen = null!;
         private Label lblBreadcrumb = null!;
         private Label lblHeaderTitle = null!;
 
-        // Controles y resultados del panel de equipos audiovisuales.
-        private ComboBox? cmbOverviewCategoria;
-        private ComboBox? cmbOverviewEstado;
-        private ComboBox? cmbOverviewUbicacion;
-        private ComboBox? cmbOverviewTipoMovimiento;
-        private ComboBox? cmbOverviewResponsable;
-        private DateTimePicker? dtOverviewDesde;
-        private DateTimePicker? dtOverviewHasta;
-        private TextBox? txtOverviewBuscar;
-        private NumericUpDown? nudOverviewUmbral;
-        private Button? btnOverviewAplicar;
-        private Label? lblOverviewConexion;
-        private Label? lblOverviewActualizado;
-        private Label? lblSidebarMovimientosHoy;
-        private Label? lblSidebarCondicionBaja;
-        private Label? lblSidebarResponsables;
+        private Label? lblDrawerMov;
+        private Label? lblDrawerDisp;
+        private Label? lblDrawerMant;
+        private Label? lblDrawerAsig;
 
-        private DataGridView? dgvOverviewMovimientos;
+        private PanelResumen? panelResumenRef = null;
 
-        private OverviewBarChart? chartOverviewCategorias;
-        private OverviewMonthlyChart? chartOverviewMovimientos;
-        private OverviewDonutChart? chartOverviewEstados;
-        private readonly Label[] valoresOverview = new Label[5];
-        private readonly Label[] detallesOverview = new Label[5];
-        private DataTable? tablaOverviewMovimientos;
-        private bool cargandoOverview;
+        // =========================================================
+        // ANIMACIONES
+        // =========================================================
+        private const int DrawerAncho = 300;
+        private const int DuracionSidebarMs = 280;
+        private const int DuracionDrawerMs = 260;
 
-        // Datos usuario
+        private sealed class Animacion
+        {
+            public bool Activa;
+            public float Desde;
+            public float Hasta;
+            public long Inicio;
+            public int Duracion;
+        }
+
+        private readonly Animacion animSidebar = new Animacion();
+        private readonly Animacion animDrawer = new Animacion();
+        private readonly Stopwatch reloj = Stopwatch.StartNew();
+        private System.Windows.Forms.Timer animTimer = null!;
+        private bool sidebarExpandido = true;
+        private bool drawerAbierto = false;
+
         private string nombreUsuario;
         private string rolUsuario;
 
@@ -130,491 +72,169 @@ namespace SUSTENTACION
             ConstruirInterfaz();
         }
 
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                CreateParams cp = base.CreateParams;
+                cp.ExStyle |= 0x02000000; // WS_EX_COMPOSITED
+                return cp;
+            }
+        }
+
         private void ConstruirInterfaz()
         {
             this.Size = new Size(1450, 860);
             this.MinimumSize = new Size(1280, 760);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.Text = "Artemusa Inventario - Panel de Administración";
-            this.BackColor = bgDark;
+            this.BackColor = TemaApp.BgDark;
             this.DoubleBuffered = true;
             this.Padding = new Padding(0);
+            this.KeyPreview = true;
 
-            ConfigurarAnimacionSidebar();
-            CrearSidebar();
+            ConfigurarAnimaciones();
+
+            CrearMainContent();
             CrearRightSidebar();
             CrearHeader();
-            CrearMainContent();
+            CrearSidebar();
 
             MostrarOverview();
+
+            this.Shown += (s, e) =>
+            {
+                if (this.ClientSize.Width < 1420)
+                {
+                    sidebarExpandido = false;
+                    barra.Expandido = false;
+                    barra.Width = BarraLateral.AnchoColapsado;
+                }
+            };
+        }
+
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        {
+            if (keyData == (Keys.Control | Keys.B))
+            {
+                AlternarSidebar();
+                return true;
+            }
+
+            if (keyData == Keys.Escape && drawerAbierto)
+            {
+                CerrarDrawer(true);
+                return true;
+            }
+
+            return base.ProcessCmdKey(ref msg, keyData);
         }
 
         // =========================================================
-        // SIDEBAR IZQUIERDO
+        // MOTOR DE ANIMACIÓN
+        // =========================================================
+        private static float EaseInOutCubic(float p) => p < 0.5f ? 4f * p * p * p : 1f - (float)Math.Pow(-2f * p + 2f, 3) / 2f;
+        private static float EaseOutCubic(float p) => 1f - (float)Math.Pow(1f - p, 3);
+
+        private void ConfigurarAnimaciones()
+        {
+            animTimer = new System.Windows.Forms.Timer { Interval = 15 };
+            animTimer.Tick += (s, e) => AvanzarAnimaciones();
+        }
+
+        private void IniciarAnimacion(Animacion a, float desde, float hasta, int duracion)
+        {
+            a.Desde = desde;
+            a.Hasta = hasta;
+            a.Duracion = duracion;
+            a.Inicio = reloj.ElapsedMilliseconds;
+            a.Activa = true;
+            if (!animTimer.Enabled) animTimer.Start();
+        }
+
+        private void AvanzarAnimaciones()
+        {
+            long ahora = reloj.ElapsedMilliseconds;
+            bool alguna = false;
+
+            if (animSidebar.Activa)
+            {
+                float p = Math.Min(1f, (ahora - animSidebar.Inicio) / (float)animSidebar.Duracion);
+                float e = EaseInOutCubic(p);
+                int w = (int)Math.Round(animSidebar.Desde + (animSidebar.Hasta - animSidebar.Desde) * e);
+                if (barra.Width != w) barra.Width = w;
+
+                if (p >= 1f)
+                {
+                    animSidebar.Activa = false;
+                    barra.Width = (int)animSidebar.Hasta;
+                }
+                else alguna = true;
+            }
+
+            if (animDrawer.Activa)
+            {
+                float p = Math.Min(1f, (ahora - animDrawer.Inicio) / (float)animDrawer.Duracion);
+                float e = EaseOutCubic(p);
+                int w = (int)Math.Round(animDrawer.Desde + (animDrawer.Hasta - animDrawer.Desde) * e);
+                if (panelRightSidebar.Width != w) panelRightSidebar.Width = w;
+
+                if (p >= 1f)
+                {
+                    animDrawer.Activa = false;
+                    panelRightSidebar.Width = (int)animDrawer.Hasta;
+                    if (animDrawer.Hasta <= 0f) panelRightSidebar.Visible = false;
+                }
+                else alguna = true;
+            }
+
+            if (!alguna) animTimer.Stop();
+        }
+
+        // =========================================================
+        // MENÚ LATERAL Y NAVEGACIÓN
         // =========================================================
         private void CrearSidebar()
         {
-            panelSidebar = new Panel
+            barra = new BarraLateral
             {
-                Width = SidebarAnchoExpandido,
-                MinimumSize = new Size(SidebarAnchoColapsado, 0),
                 Dock = DockStyle.Left,
-                BackColor = bgSidebar,
-                Padding = new Padding(0)
-            };
-            this.Controls.Add(panelSidebar);
-
-            // Marca
-            brandCardRef = new Panel
-            {
-                Size = new Size(164, 72),
-                Location = new Point(10, 15),
-                BackColor = bgCard
-            };
-            AplicarBordesRedondeados(brandCardRef, 16);
-
-            lblLogoRef = new Label
-            {
-                Text = "ARTEMUSA",
-                Font = new Font("Segoe UI", 15f, FontStyle.Bold),
-                ForeColor = accentGreen,
-                Location = new Point(14, 10),
-                AutoSize = true
-            };
-            brandCardRef.Controls.Add(lblLogoRef);
-
-            lblLogoSubRef = new Label
-            {
-                Text = "Gestión de Inventario",
-                Font = new Font("Segoe UI", 8.1f, FontStyle.Regular),
-                ForeColor = textGray,
-                Location = new Point(15, 40),
-                AutoSize = true
-            };
-            brandCardRef.Controls.Add(lblLogoSubRef);
-            panelSidebar.Controls.Add(brandCardRef);
-
-            // Botón de abrir/cerrar menú
-            btnToggleSidebar = new Button
-            {
-                Name = "btnToggleSidebar",
-                Text = "❮",
-                Size = new Size(40, 40),
-                Location = new Point(184, 30),
-                BackColor = bgCard,
-                ForeColor = textSoft,
-                FlatStyle = FlatStyle.Flat,
-                Font = new Font("Segoe UI Symbol", 12f, FontStyle.Bold),
-                TextAlign = ContentAlignment.MiddleCenter,
-                Cursor = Cursors.Hand,
-                TabStop = false
-            };
-            btnToggleSidebar.FlatAppearance.BorderSize = 1;
-            btnToggleSidebar.FlatAppearance.BorderColor = borderColor;
-            btnToggleSidebar.FlatAppearance.MouseOverBackColor = bgCardHover;
-            AplicarBordesRedondeados(btnToggleSidebar, 12);
-            btnToggleSidebar.Click += (s, e) => AlternarSidebar();
-            tooltipSidebar.SetToolTip(btnToggleSidebar, "Contraer menú");
-            panelSidebar.Controls.Add(btnToggleSidebar);
-
-            lblMenuPrincipalRef = new Label
-            {
-                Text = "MENÚ PRINCIPAL",
-                Font = new Font("Segoe UI", 8f, FontStyle.Bold),
-                ForeColor = textGray,
-                Location = new Point(14, 104),
-                AutoSize = true
-            };
-            panelSidebar.Controls.Add(lblMenuPrincipalRef);
-
-            btnOverviewRef = CrearBotonSidebar("Panel", 130, "◉");
-            btnOverviewRef.Click += (s, e) => MostrarOverview();
-            panelSidebar.Controls.Add(btnOverviewRef);
-
-            btnInventarioRef = CrearBotonSidebar("Inventario", 176, "▣");
-            btnInventarioRef.Click += (s, e) => MostrarInventario();
-            panelSidebar.Controls.Add(btnInventarioRef);
-
-            btnMovimientosRef = CrearBotonSidebar("Movimientos", 222, "⇄");
-            btnMovimientosRef.Click += (s, e) => MostrarMovimientos();
-            panelSidebar.Controls.Add(btnMovimientosRef);
-
-            btnTrabajadoresRef = CrearBotonSidebar("Trabajadores", 268, "👥");
-            btnTrabajadoresRef.Click += (s, e) => MostrarTrabajadores();
-            panelSidebar.Controls.Add(btnTrabajadoresRef);
-
-            btnReportesRef = CrearBotonSidebar("Reportes", 314, "▧");
-            btnReportesRef.Click += (s, e) => MostrarReportes();
-            panelSidebar.Controls.Add(btnReportesRef);
-
-            tooltipSidebar.SetToolTip(btnOverviewRef, "Panel general del inventario audiovisual");
-            tooltipSidebar.SetToolTip(btnInventarioRef, "Inventario");
-            tooltipSidebar.SetToolTip(btnMovimientosRef, "Movimientos");
-            tooltipSidebar.SetToolTip(btnTrabajadoresRef, "Trabajadores");
-            tooltipSidebar.SetToolTip(btnReportesRef, "Reportes");
-
-            // Estado del sistema
-            statusCardRef = new Panel
-            {
-                Size = new Size(200, 105),
-                Location = new Point(10, 525),
-                Anchor = AnchorStyles.Bottom | AnchorStyles.Left,
-                BackColor = bgCard
-            };
-            AplicarBordesRedondeados(statusCardRef, 16);
-
-            Label lblStatusTitle = new Label
-            {
-                Text = "Estado del Sistema",
-                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-                ForeColor = textWhite,
-                Location = new Point(15, 14),
-                AutoSize = true
-            };
-            statusCardRef.Controls.Add(lblStatusTitle);
-
-            Label lblStatusDot = new Label
-            {
-                Text = "●",
-                Font = new Font("Segoe UI", 14f, FontStyle.Bold),
-                ForeColor = accentGreen,
-                Location = new Point(14, 40),
-                AutoSize = true
-            };
-            statusCardRef.Controls.Add(lblStatusDot);
-
-            Label lblStatusText = new Label
-            {
-                Text = "Sistema operativo\nConexión estable",
-                Font = new Font("Segoe UI", 8.5f),
-                ForeColor = textGray,
-                Location = new Point(35, 44),
-                AutoSize = true
-            };
-            statusCardRef.Controls.Add(lblStatusText);
-            panelSidebar.Controls.Add(statusCardRef);
-
-            btnTemaRef = CrearBotonTema();
-            panelSidebar.Controls.Add(btnTemaRef);
-
-            panelSidebar.Resize += (s, e) =>
-            {
-                ReubicarElementosSidebar();
+                Width = BarraLateral.AnchoExpandido
             };
 
-            ReubicarElementosSidebar();
-            AplicarEstadoVisualSidebar();
-        }
+            barra.AgregarItem("Panel", "◉", false);
+            barra.AgregarItem("Inventario", "▣", false);
+            barra.AgregarItem("Movimientos", "⇄", false);
+            barra.AgregarItem("Trabajadores", "👥", true);
+            barra.AgregarItem("Reportes", "▧", false);
 
-        // =========================================================
-        // SIDEBAR DESLIZANTE
-        // =========================================================
-        private void ConfigurarAnimacionSidebar()
-        {
-            timerSidebar = new System.Windows.Forms.Timer
+            barra.Expandido = true;
+            barra.Oscuro = TemaApp.EsModoOscuro;
+
+            barra.ToggleClick += (s, e) => AlternarSidebar();
+            barra.TemaClick += (s, e) => CambiarTema();
+            barra.ItemClick += indice =>
             {
-                Interval = 12
-            };
-
-            timerSidebar.Tick += (s, e) =>
-            {
-                int actual = panelSidebar.Width;
-
-                if (actual == sidebarAnchoObjetivo)
+                switch (indice)
                 {
-                    timerSidebar.Stop();
-                    AplicarEstadoVisualSidebar();
-                    panelMainContent?.PerformLayout();
-                    this.PerformLayout();
-                    return;
-                }
-
-                if (actual < sidebarAnchoObjetivo)
-                {
-                    panelSidebar.Width = Math.Min(
-                        sidebarAnchoObjetivo,
-                        actual + SidebarPasoAnimacion
-                    );
-                }
-                else
-                {
-                    panelSidebar.Width = Math.Max(
-                        sidebarAnchoObjetivo,
-                        actual - SidebarPasoAnimacion
-                    );
-                }
-
-                ReubicarElementosSidebar();
-
-                if (panelSidebar.Width == sidebarAnchoObjetivo)
-                {
-                    timerSidebar.Stop();
-                    AplicarEstadoVisualSidebar();
-                    panelMainContent?.PerformLayout();
-                    this.PerformLayout();
+                    case 0: MostrarOverview(); break;
+                    case 1: MostrarInventario(); break;
+                    case 2: MostrarMovimientos(); break;
+                    case 3: MostrarTrabajadores(); break;
+                    case 4: MostrarReportes(); break;
                 }
             };
+
+            this.Controls.Add(barra);
         }
 
         private void AlternarSidebar()
         {
-            if (timerSidebar.Enabled)
-                return;
-
             sidebarExpandido = !sidebarExpandido;
-            sidebarAnchoObjetivo = sidebarExpandido
-                ? SidebarAnchoExpandido
-                : SidebarAnchoColapsado;
+            barra.Expandido = sidebarExpandido;
 
-            // Al empezar a cerrar se ocultan textos para evitar recortes.
-            if (!sidebarExpandido)
-                AplicarEstadoVisualSidebar();
-
-            timerSidebar.Start();
-        }
-
-        private void AplicarEstadoVisualSidebar()
-        {
-            if (panelSidebar == null)
-                return;
-
-            bool expandido = sidebarExpandido;
-
-            brandCardRef.Visible = expandido;
-            lblMenuPrincipalRef.Visible = expandido;
-            statusCardRef.Visible = expandido;
-
-            btnToggleSidebar.Text = expandido ? "❮" : "☰";
-            tooltipSidebar.SetToolTip(
-                btnToggleSidebar,
-                expandido ? "Contraer menú" : "Expandir menú"
-            );
-
-            ActualizarBotonSidebar(btnOverviewRef, "Panel", "◉", expandido);
-            ActualizarBotonSidebar(btnInventarioRef, "Inventario", "▣", expandido);
-            ActualizarBotonSidebar(btnMovimientosRef, "Movimientos", "⇄", expandido);
-            ActualizarBotonSidebar(btnTrabajadoresRef, "Trabajadores", "👥", expandido);
-            ActualizarBotonSidebar(btnReportesRef, "Reportes", "▧", expandido);
-
-            if (expandido)
-            {
-                btnTemaRef.Text = modoOscuro ? "☀  Modo claro" : "☾  Modo oscuro";
-                btnTemaRef.TextAlign = ContentAlignment.MiddleCenter;
-                btnTemaRef.Font = new Font("Segoe UI", 9.1f, FontStyle.Bold);
-            }
-            else
-            {
-                btnTemaRef.Text = modoOscuro ? "☀" : "☾";
-                btnTemaRef.TextAlign = ContentAlignment.MiddleCenter;
-                btnTemaRef.Font = new Font("Segoe UI Symbol", 11f, FontStyle.Bold);
-            }
-
-            ReubicarElementosSidebar();
-        }
-
-        private void ActualizarBotonSidebar(
-            Button boton,
-            string texto,
-            string icono,
-            bool expandido)
-        {
-            if (boton == null)
-                return;
-
-            boton.Tag = texto;
-
-            if (expandido)
-            {
-                boton.Text = $"  {icono}   {texto}";
-                boton.TextAlign = ContentAlignment.MiddleLeft;
-                boton.Font = boton == botonActivo
-                    ? new Font("Segoe UI", 9.5f, FontStyle.Bold)
-                    : new Font("Segoe UI", 9.3f, FontStyle.Regular);
-            }
-            else
-            {
-                boton.Text = icono;
-                boton.TextAlign = ContentAlignment.MiddleCenter;
-                boton.Font = new Font(
-                    icono == "👥" ? "Segoe UI Emoji" : "Segoe UI Symbol",
-                    12f,
-                    FontStyle.Bold
-                );
-            }
-        }
-
-        private void ReubicarElementosSidebar()
-        {
-            if (panelSidebar == null)
-                return;
-
-            bool compacto = !sidebarExpandido || panelSidebar.Width <= 110;
-            int margen = compacto ? 12 : 10;
-            int anchoBoton = compacto
-                ? Math.Max(46, panelSidebar.ClientSize.Width - 24)
-                : Math.Max(120, panelSidebar.ClientSize.Width - 35);
-
-            btnToggleSidebar.Location = compacto
-                ? new Point(
-                    Math.Max(8, (panelSidebar.ClientSize.Width - btnToggleSidebar.Width) / 2),
-                    24
-                )
-                : new Point(
-                    Math.Max(174, panelSidebar.ClientSize.Width - btnToggleSidebar.Width - 11),
-                    30
-                );
-
-            if (!compacto)
-            {
-                brandCardRef.Width = Math.Max(150, panelSidebar.ClientSize.Width - 70);
-                brandCardRef.Location = new Point(10, 15);
-            }
-
-            Button[] botones =
-            {
-                btnOverviewRef,
-                btnInventarioRef,
-                btnMovimientosRef,
-                btnTrabajadoresRef,
-                btnReportesRef
-            };
-
-            foreach (Button boton in botones)
-            {
-                if (boton == null)
-                    continue;
-
-                boton.Width = anchoBoton;
-                boton.Left = compacto
-                    ? Math.Max(8, (panelSidebar.ClientSize.Width - anchoBoton) / 2)
-                    : margen;
-            }
-
-            btnTemaRef.Width = compacto
-                ? Math.Max(46, panelSidebar.ClientSize.Width - 24)
-                : Math.Max(120, panelSidebar.ClientSize.Width - 35);
-
-            btnTemaRef.Left = compacto
-                ? Math.Max(8, (panelSidebar.ClientSize.Width - btnTemaRef.Width) / 2)
-                : margen;
-
-            int margenInferior = 14;
-            int separacion = 12;
-
-            btnTemaRef.Top = Math.Max(
-                0,
-                panelSidebar.ClientSize.Height - btnTemaRef.Height - margenInferior
-            );
-
-            if (!compacto)
-            {
-                statusCardRef.Width = Math.Max(120, panelSidebar.ClientSize.Width - 35);
-                statusCardRef.Left = margen;
-                statusCardRef.Top = Math.Max(
-                    120,
-                    btnTemaRef.Top - statusCardRef.Height - separacion
-                );
-            }
-        }
-
-        private Button CrearBotonTema()
-        {
-            Button btn = new Button
-            {
-                Name = "btnTema",
-                Text = "☀  Modo claro",
-                Size = new Size(200, 38),
-                Location = new Point(10, 0),
-                Anchor = AnchorStyles.Bottom | AnchorStyles.Left,
-                BackColor = bgCard,
-                ForeColor = textSoft,
-                FlatStyle = FlatStyle.Flat,
-                Font = new Font("Segoe UI", 9.1f, FontStyle.Bold),
-                TextAlign = ContentAlignment.MiddleCenter,
-                Cursor = Cursors.Hand
-            };
-
-            btn.FlatAppearance.BorderSize = 1;
-            btn.FlatAppearance.BorderColor = borderColor;
-            btn.FlatAppearance.MouseOverBackColor = bgCardHover;
-            AplicarBordesRedondeados(btn, 12);
-
-            btn.MouseEnter += (s, e) =>
-            {
-                btn.BackColor = modoOscuro ? bgCardHover : lightCardHover;
-            };
-
-            btn.MouseLeave += (s, e) =>
-            {
-                btn.BackColor = modoOscuro ? bgCard : lightCard;
-            };
-
-            btn.Click += (s, e) => CambiarTema();
-            return btn;
-        }
-
-        private Button CrearBotonSidebar(string texto, int topPos, string icono)
-        {
-            Button btn = new Button
-            {
-                Text = $"  {icono}   {texto}",
-                Tag = texto,
-                Size = new Size(200, 38),
-                Location = new Point(10, topPos),
-                BackColor = Color.Transparent,
-                ForeColor = textGray,
-                FlatStyle = FlatStyle.Flat,
-                Font = new Font("Segoe UI", 9.3f, FontStyle.Regular),
-                TextAlign = ContentAlignment.MiddleLeft,
-                Cursor = Cursors.Hand
-            };
-
-            btn.FlatAppearance.BorderSize = 0;
-            btn.FlatAppearance.MouseOverBackColor = Color.FromArgb(28, 35, 44);
-
-            btn.MouseEnter += (s, e) =>
-            {
-                if (btn != botonActivo)
-                {
-                    btn.BackColor = modoOscuro ? Color.FromArgb(24, 31, 40) : lightCardHover;
-                    btn.ForeColor = modoOscuro ? textWhite : lightText;
-                }
-            };
-
-            btn.MouseLeave += (s, e) =>
-            {
-                if (btn != botonActivo)
-                {
-                    btn.BackColor = Color.Transparent;
-                    btn.ForeColor = modoOscuro ? textGray : lightGray;
-                }
-            };
-
-            return btn;
-        }
-
-        private void ActivarBoton(Button btn)
-        {
-            Color colorTextoNavegacion = modoOscuro ? textGray : lightGray;
-
-            if (botonActivo != null)
-            {
-                botonActivo.BackColor = Color.Transparent;
-                botonActivo.ForeColor = colorTextoNavegacion;
-                botonActivo.Font = new Font("Segoe UI", 9.3f, FontStyle.Regular);
-            }
-
-            botonActivo = btn;
-            botonActivo.BackColor = accentGreen;
-            botonActivo.ForeColor = Color.Black;
-            botonActivo.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
-            AplicarBordesRedondeados(botonActivo, 12);
-
-            // Conserva el formato compacto cuando el menú está cerrado.
-            if (!sidebarExpandido)
-            {
-                AplicarEstadoVisualSidebar();
-            }
+            int destino = sidebarExpandido ? BarraLateral.AnchoExpandido : BarraLateral.AnchoColapsado;
+            IniciarAnimacion(animSidebar, barra.Width, destino, DuracionSidebarMs);
         }
 
         // =========================================================
@@ -622,56 +242,46 @@ namespace SUSTENTACION
         // =========================================================
         private void CambiarTema()
         {
-            modoOscuro = !modoOscuro;
+            TemaApp.EsModoOscuro = !TemaApp.EsModoOscuro;
+            bool modoOscuro = TemaApp.EsModoOscuro;
 
-            // Primero se actualizan los controles existentes, incluidos los
-            // controles de la vista que esté abierta en ese momento.
             AplicarTemaRecursivo(this);
 
-            // Los paneles principales se fijan explícitamente para evitar que
-            // una vista hija pueda dejar el fondo del marco en un color incorrecto.
-            this.BackColor = modoOscuro ? bgDark : lightCanvas;
-            panelSidebar.BackColor = modoOscuro ? bgSidebar : lightSidebar;
-            panelHeader.BackColor = modoOscuro ? bgHeader : lightHeader;
-            panelRightSidebar.BackColor = modoOscuro ? bgSidebar : lightSidebar;
-            panelMainContent.BackColor = modoOscuro ? bgDark : lightCanvas;
+            this.BackColor = modoOscuro ? TemaApp.BgDark : TemaApp.LightCanvas;
+            panelHeader.BackColor = modoOscuro ? TemaApp.BgHeader : TemaApp.LightHeader;
+            panelRightSidebar.BackColor = modoOscuro ? TemaApp.BgSidebar : TemaApp.LightSidebar;
+            panelRightInner.BackColor = modoOscuro ? TemaApp.BgSidebar : TemaApp.LightSidebar;
+            panelMainContent.BackColor = modoOscuro ? TemaApp.BgDark : TemaApp.LightCanvas;
 
-            btnTemaRef.Text = sidebarExpandido
-                ? (modoOscuro ? "☀  Modo claro" : "☾  Modo oscuro")
-                : (modoOscuro ? "☀" : "☾");
-            btnTemaRef.BackColor = modoOscuro ? bgCard : lightCard;
-            btnTemaRef.ForeColor = modoOscuro ? textSoft : lightSoft;
-            btnTemaRef.FlatAppearance.BorderColor = modoOscuro ? borderColor : lightBorder;
-            btnTemaRef.FlatAppearance.MouseOverBackColor = modoOscuro ? bgCardHover : lightCardHover;
+            barra.Oscuro = modoOscuro;
 
-            // El botón activo conserva el color de acento en ambos temas.
-            if (botonActivo != null)
+            ActualizarEstilosGrids(this);
+            ActualizarBotonResumen();
+
+            if (panelResumenRef != null)
             {
-                botonActivo.BackColor = accentGreen;
-                botonActivo.ForeColor = Color.Black;
+                panelResumenRef.BackColor = TemaApp.DashFondo;
+                panelResumenRef.Invalidate(true);
             }
 
-            btnToggleSidebar.BackColor = modoOscuro ? bgCard : lightCard;
-            btnToggleSidebar.ForeColor = modoOscuro ? textSoft : lightSoft;
-            btnToggleSidebar.FlatAppearance.BorderColor = modoOscuro ? borderColor : lightBorder;
-            btnToggleSidebar.FlatAppearance.MouseOverBackColor = modoOscuro ? bgCardHover : lightCardHover;
-
-            AplicarEstadoVisualSidebar();
-            ActualizarEstilosGrids(this);
+            panelHeader.Invalidate();
+            panelRightInner.Invalidate();
             this.Invalidate(true);
         }
 
         private void AplicarTemaRecursivo(Control control)
         {
-            if (control != btnTemaRef)
+            if (control is BarraLateral || control is PanelResumen)
+                return;
+
+            if (control != btnCerrarSesion)
             {
                 control.BackColor = MapearColorFondo(control.BackColor);
                 control.ForeColor = MapearColorTexto(control.ForeColor);
 
                 if (control is Button button)
                 {
-                    button.FlatAppearance.MouseOverBackColor =
-                        modoOscuro ? bgCardHover : lightCardHover;
+                    button.FlatAppearance.MouseOverBackColor = TemaApp.EsModoOscuro ? TemaApp.BgCardHover : TemaApp.LightCardHover;
                 }
 
                 if (control is DataGridView grid)
@@ -689,82 +299,26 @@ namespace SUSTENTACION
         private Color MapearColorFondo(Color color)
         {
             int valor = color.ToArgb();
+            bool modoOscuro = TemaApp.EsModoOscuro;
 
             if (modoOscuro)
             {
-                if (valor == lightCanvas.ToArgb() ||
-                    valor == Color.FromArgb(245, 247, 249).ToArgb() ||
-                    valor == Color.FromArgb(242, 246, 249).ToArgb())
-                {
-                    return bgDark;
-                }
-
-                if (valor == lightSidebar.ToArgb())
-                {
-                    return bgSidebar;
-                }
-
-                if (valor == lightCard.ToArgb() ||
-                    valor == Color.White.ToArgb() ||
-                    valor == Color.FromArgb(250, 252, 253).ToArgb())
-                {
-                    return bgCard;
-                }
-
-                if (valor == lightInput.ToArgb() ||
-                    valor == Color.FromArgb(235, 241, 245).ToArgb())
-                {
-                    return bgInput;
-                }
-
-                if (valor == lightCardHover.ToArgb())
-                {
-                    return bgCardHover;
-                }
-
-                if (valor == lightBorder.ToArgb())
-                {
-                    return borderColor;
-                }
+                if (valor == TemaApp.LightCanvas.ToArgb() || valor == Color.FromArgb(245, 247, 249).ToArgb() || valor == Color.FromArgb(242, 246, 249).ToArgb()) return TemaApp.BgDark;
+                if (valor == TemaApp.LightSidebar.ToArgb()) return TemaApp.BgSidebar;
+                if (valor == TemaApp.LightCard.ToArgb() || valor == Color.White.ToArgb() || valor == Color.FromArgb(250, 252, 253).ToArgb()) return TemaApp.BgCard;
+                if (valor == TemaApp.LightInput.ToArgb() || valor == Color.FromArgb(235, 241, 245).ToArgb()) return TemaApp.BgInput;
+                if (valor == TemaApp.LightCardHover.ToArgb()) return TemaApp.BgCardHover;
+                if (valor == TemaApp.LightBorder.ToArgb()) return TemaApp.BorderColor;
             }
             else
             {
-                if (valor == bgDark.ToArgb())
-                {
-                    return lightCanvas;
-                }
-
-                if (valor == bgSidebar.ToArgb())
-                {
-                    return lightSidebar;
-                }
-
-                if (valor == bgHeader.ToArgb() ||
-                    valor == bgCard.ToArgb())
-                {
-                    return lightCard;
-                }
-
-                if (valor == bgInput.ToArgb())
-                {
-                    return lightInput;
-                }
-
-                if (valor == bgCardHover.ToArgb())
-                {
-                    return lightCardHover;
-                }
-
-                if (valor == borderColor.ToArgb())
-                {
-                    return lightBorder;
-                }
-
-                if (valor == Color.FromArgb(25, 31, 39).ToArgb() ||
-                    valor == Color.FromArgb(32, 42, 53).ToArgb())
-                {
-                    return lightInput;
-                }
+                if (valor == TemaApp.BgDark.ToArgb()) return TemaApp.LightCanvas;
+                if (valor == TemaApp.BgSidebar.ToArgb()) return TemaApp.LightSidebar;
+                if (valor == TemaApp.BgHeader.ToArgb() || valor == TemaApp.BgCard.ToArgb()) return TemaApp.LightCard;
+                if (valor == TemaApp.BgInput.ToArgb()) return TemaApp.LightInput;
+                if (valor == TemaApp.BgCardHover.ToArgb()) return TemaApp.LightCardHover;
+                if (valor == TemaApp.BorderColor.ToArgb()) return TemaApp.LightBorder;
+                if (valor == Color.FromArgb(25, 31, 39).ToArgb() || valor == Color.FromArgb(32, 42, 53).ToArgb()) return TemaApp.LightInput;
             }
 
             return color;
@@ -773,22 +327,19 @@ namespace SUSTENTACION
         private Color MapearColorTexto(Color color)
         {
             int valor = color.ToArgb();
+            bool modoOscuro = TemaApp.EsModoOscuro;
 
             if (modoOscuro)
             {
-                if (valor == lightText.ToArgb()) return textWhite;
-                if (valor == lightSoft.ToArgb()) return textSoft;
-                if (valor == lightGray.ToArgb()) return textGray;
+                if (valor == TemaApp.LightText.ToArgb()) return TemaApp.TextWhite;
+                if (valor == TemaApp.LightSoft.ToArgb()) return TemaApp.TextSoft;
+                if (valor == TemaApp.LightGray.ToArgb()) return TemaApp.TextGray;
             }
             else
             {
-                if (valor == textWhite.ToArgb() || valor == Color.White.ToArgb())
-                {
-                    return lightText;
-                }
-
-                if (valor == textSoft.ToArgb()) return lightSoft;
-                if (valor == textGray.ToArgb()) return lightGray;
+                if (valor == TemaApp.TextWhite.ToArgb() || valor == Color.White.ToArgb()) return TemaApp.LightText;
+                if (valor == TemaApp.TextSoft.ToArgb()) return TemaApp.LightSoft;
+                if (valor == TemaApp.TextGray.ToArgb()) return TemaApp.LightGray;
             }
 
             return color;
@@ -796,6 +347,8 @@ namespace SUSTENTACION
 
         private void ActualizarEstilosGrids(Control raiz)
         {
+            if (raiz is PanelResumen) return;
+
             if (raiz is DataGridView grid)
             {
                 AplicarEstiloGrid(grid);
@@ -809,32 +362,29 @@ namespace SUSTENTACION
 
         private void AplicarEstiloGrid(DataGridView grid)
         {
-            Color fondo = modoOscuro ? bgCard : lightCard;
-            Color fondoEntrada = modoOscuro ? bgInput : lightInput;
-            Color fondoSeleccion = modoOscuro
-                ? Color.FromArgb(32, 42, 53)
-                : Color.FromArgb(221, 240, 228);
-            Color fondoAlterno = modoOscuro
-                ? Color.FromArgb(25, 31, 39)
-                : Color.FromArgb(247, 250, 252);
-            Color texto = modoOscuro ? textWhite : lightText;
+            bool modoOscuro = TemaApp.EsModoOscuro;
+            Color fondo = modoOscuro ? TemaApp.BgCard : TemaApp.LightCard;
+            Color fondoEntrada = modoOscuro ? TemaApp.BgInput : TemaApp.LightInput;
+            Color fondoSeleccion = modoOscuro ? Color.FromArgb(32, 42, 53) : Color.FromArgb(221, 240, 228);
+            Color fondoAlterno = modoOscuro ? Color.FromArgb(25, 31, 39) : Color.FromArgb(247, 250, 252);
+            Color texto = modoOscuro ? TemaApp.TextWhite : TemaApp.LightText;
 
             grid.BackgroundColor = fondo;
-            grid.GridColor = modoOscuro ? borderColor : lightBorder;
+            grid.GridColor = modoOscuro ? TemaApp.BorderColor : TemaApp.LightBorder;
             grid.ColumnHeadersDefaultCellStyle.BackColor = fondoEntrada;
-            grid.ColumnHeadersDefaultCellStyle.ForeColor = accentGreen;
+            grid.ColumnHeadersDefaultCellStyle.ForeColor = TemaApp.AccentGreen;
             grid.ColumnHeadersDefaultCellStyle.SelectionBackColor = fondoEntrada;
-            grid.ColumnHeadersDefaultCellStyle.SelectionForeColor = accentGreen;
+            grid.ColumnHeadersDefaultCellStyle.SelectionForeColor = TemaApp.AccentGreen;
             grid.DefaultCellStyle.BackColor = fondo;
             grid.DefaultCellStyle.ForeColor = texto;
             grid.DefaultCellStyle.SelectionBackColor = fondoSeleccion;
-            grid.DefaultCellStyle.SelectionForeColor = modoOscuro ? accentGreen : Color.FromArgb(22, 101, 52);
+            grid.DefaultCellStyle.SelectionForeColor = modoOscuro ? TemaApp.AccentGreen : Color.FromArgb(22, 101, 52);
             grid.AlternatingRowsDefaultCellStyle.BackColor = fondoAlterno;
             grid.AlternatingRowsDefaultCellStyle.ForeColor = texto;
         }
 
         // =========================================================
-        // HEADER SUPERIOR
+        // HEADER Y PANELES
         // =========================================================
         private void CrearHeader()
         {
@@ -842,8 +392,13 @@ namespace SUSTENTACION
             {
                 Height = 82,
                 Dock = DockStyle.Top,
-                BackColor = bgHeader,
+                BackColor = TemaApp.BgHeader,
                 Padding = new Padding(24, 12, 24, 12)
+            };
+            panelHeader.Paint += (s, e) =>
+            {
+                using (var pen = new Pen(TemaApp.EsModoOscuro ? TemaApp.BorderColor : TemaApp.LightBorder, 1))
+                    e.Graphics.DrawLine(pen, 0, panelHeader.Height - 1, panelHeader.Width, panelHeader.Height - 1);
             };
             this.Controls.Add(panelHeader);
 
@@ -851,7 +406,7 @@ namespace SUSTENTACION
             {
                 Text = "Inicio / Panel",
                 Font = new Font("Segoe UI", 8.8f, FontStyle.Regular),
-                ForeColor = textGray,
+                ForeColor = TemaApp.TextGray,
                 Location = new Point(24, 12),
                 AutoSize = true
             };
@@ -861,128 +416,214 @@ namespace SUSTENTACION
             {
                 Text = "Panel General",
                 Font = new Font("Segoe UI", 18f, FontStyle.Bold),
-                ForeColor = textWhite,
+                ForeColor = TemaApp.TextWhite,
                 Location = new Point(22, 30),
                 AutoSize = true
             };
             panelHeader.Controls.Add(lblHeaderTitle);
 
-            Panel cardUser = new Panel
+            btnResumen = new Button
             {
-                Size = new Size(210, 48),
-                Anchor = AnchorStyles.Top | AnchorStyles.Right,
-                BackColor = bgCard,
-                Location = new Point(panelHeader.Width - 370, 17)
+                Text = "▤  Resumen",
+                Size = new Size(124, 42),
+                BackColor = TemaApp.BgCard,
+                ForeColor = TemaApp.TextSoft,
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                Cursor = Cursors.Hand,
+                TabStop = false
             };
-            AplicarBordesRedondeados(cardUser, 14);
+            btnResumen.FlatAppearance.BorderSize = 1;
+            btnResumen.FlatAppearance.BorderColor = TemaApp.BorderColor;
+            btnResumen.FlatAppearance.MouseOverBackColor = TemaApp.BgCardHover;
+            AplicarBordesRedondeados(btnResumen, 14);
+            btnResumen.Click += (s, e) => AlternarDrawer();
+            panelHeader.Controls.Add(btnResumen);
 
-            Label lblUser = new Label
+            cardUser = new Panel
             {
-                Text = $"👤  {nombreUsuario}\n    Rol: {rolUsuario}",
-                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-                ForeColor = textWhite,
-                Location = new Point(12, 8),
-                AutoSize = true,
-                BackColor = Color.Transparent
+                Size = new Size(226, 50),
+                BackColor = TemaApp.BgCard
             };
-            cardUser.Controls.Add(lblUser);
+            AplicarBordesRedondeados(cardUser, 16);
+
+            string iniciales = ObtenerIniciales(nombreUsuario);
+            cardUser.Paint += (s, e) =>
+            {
+                var g = e.Graphics;
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
+                var av = new Rectangle(9, 8, 34, 34);
+                using (var br = new LinearGradientBrush(av, TemaApp.AccentGreen, TemaApp.AccentGreenSoft, LinearGradientMode.ForwardDiagonal))
+                    g.FillEllipse(br, av);
+                using (var f = new Font("Segoe UI", 9f, FontStyle.Bold))
+                using (var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
+                    g.DrawString(iniciales, f, Brushes.Black, av, sf);
+            };
+
+            cardUser.Controls.Add(new Label
+            {
+                Text = nombreUsuario,
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                ForeColor = TemaApp.TextWhite,
+                Location = new Point(52, 8),
+                Size = new Size(165, 18),
+                AutoEllipsis = true,
+                BackColor = Color.Transparent
+            });
+            cardUser.Controls.Add(new Label
+            {
+                Text = rolUsuario,
+                Font = new Font("Segoe UI", 8f),
+                ForeColor = TemaApp.TextGray,
+                Location = new Point(52, 26),
+                Size = new Size(165, 16),
+                AutoEllipsis = true,
+                BackColor = Color.Transparent
+            });
             panelHeader.Controls.Add(cardUser);
 
-            Button btnCerrarSesion = new Button
+            btnCerrarSesion = new Button
             {
                 Text = "Cerrar Sesión",
-                Size = new Size(116, 40),
-                Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                Size = new Size(120, 42),
                 BackColor = Color.FromArgb(239, 68, 68),
                 ForeColor = Color.White,
                 FlatStyle = FlatStyle.Flat,
                 Font = new Font("Segoe UI", 9f, FontStyle.Bold),
-                Cursor = Cursors.Hand,
-                Location = new Point(panelHeader.Width - 140, 20)
+                Cursor = Cursors.Hand
             };
             btnCerrarSesion.FlatAppearance.BorderSize = 0;
-            AplicarBordesRedondeados(btnCerrarSesion, 12);
+            AplicarBordesRedondeados(btnCerrarSesion, 14);
             btnCerrarSesion.Click += BtnCerrarSesion_Click;
-            panelHeader.Controls.Add(btnCerrarSesion);
-
             btnCerrarSesion.MouseEnter += (s, e) => btnCerrarSesion.BackColor = Color.FromArgb(220, 38, 38);
             btnCerrarSesion.MouseLeave += (s, e) => btnCerrarSesion.BackColor = Color.FromArgb(239, 68, 68);
+            panelHeader.Controls.Add(btnCerrarSesion);
 
-            panelHeader.Resize += (s, e) =>
-            {
-                btnCerrarSesion.Location = new Point(panelHeader.Width - 140, 20);
-                cardUser.Location = new Point(panelHeader.Width - 365, 16);
-            };
+            panelHeader.Resize += (s, e) => ReubicarHeader();
+            ReubicarHeader();
         }
 
-        // =========================================================
-        // SIDEBAR DERECHO - NOTIFICACIONES
-        // =========================================================
+        private void ReubicarHeader()
+        {
+            int ancho = panelHeader.ClientSize.Width;
+            btnCerrarSesion.Location = new Point(ancho - 24 - btnCerrarSesion.Width, 20);
+            cardUser.Location = new Point(btnCerrarSesion.Left - 12 - cardUser.Width, 16);
+            btnResumen.Location = new Point(cardUser.Left - 12 - btnResumen.Width, 20);
+        }
+
+        private static string ObtenerIniciales(string nombre)
+        {
+            if (string.IsNullOrWhiteSpace(nombre)) return "?";
+            var partes = nombre.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            if (partes.Length == 1) return partes[0].Substring(0, 1).ToUpper();
+            return (partes[0].Substring(0, 1) + partes[1].Substring(0, 1)).ToUpper();
+        }
+
         private void CrearRightSidebar()
         {
             panelRightSidebar = new Panel
             {
-                Width = 300,
+                Width = 0,
                 Dock = DockStyle.Right,
-                BackColor = bgSidebar,
-                Padding = new Padding(14),
-                AutoScroll = true
+                BackColor = TemaApp.BgSidebar,
+                Visible = false
             };
             this.Controls.Add(panelRightSidebar);
 
-            Label lblNotifTitle = new Label
+            panelRightInner = new Panel
+            {
+                Width = DrawerAncho,
+                Dock = DockStyle.Right,
+                BackColor = TemaApp.BgSidebar,
+                Padding = new Padding(14)
+            };
+            panelRightInner.Paint += (s, e) =>
+            {
+                using (var pen = new Pen(TemaApp.EsModoOscuro ? TemaApp.BorderColor : TemaApp.LightBorder, 1))
+                    e.Graphics.DrawLine(pen, 0, 0, 0, panelRightInner.Height);
+            };
+            panelRightSidebar.Controls.Add(panelRightInner);
+
+            panelRightInner.Controls.Add(new Label
             {
                 Text = "Resumen del almacén",
                 Font = new Font("Segoe UI", 12.5f, FontStyle.Bold),
-                ForeColor = textWhite,
-                Location = new Point(14, 18),
+                ForeColor = TemaApp.TextWhite,
+                Location = new Point(18, 20),
                 AutoSize = true
-            };
-            panelRightSidebar.Controls.Add(lblNotifTitle);
+            });
 
-            Label lblNotifSub = new Label
+            panelRightInner.Controls.Add(new Label
             {
-                Text = "Indicadores conectados a Artemusa TV",
+                Text = "Indicadores en tiempo real",
                 Font = new Font("Segoe UI", 8.5f),
-                ForeColor = textGray,
-                Location = new Point(15, 43),
+                ForeColor = TemaApp.TextGray,
+                Location = new Point(19, 45),
                 AutoSize = true
+            });
+
+            Button btnCerrarDrawer = new Button
+            {
+                Text = "✕",
+                Size = new Size(32, 32),
+                Location = new Point(DrawerAncho - 14 - 32 - 4, 16),
+                BackColor = TemaApp.BgCard,
+                ForeColor = TemaApp.TextSoft,
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Segoe UI Symbol", 9f, FontStyle.Bold),
+                Cursor = Cursors.Hand,
+                TabStop = false
             };
-            panelRightSidebar.Controls.Add(lblNotifSub);
+            btnCerrarDrawer.FlatAppearance.BorderSize = 1;
+            btnCerrarDrawer.FlatAppearance.BorderColor = TemaApp.BorderColor;
+            btnCerrarDrawer.FlatAppearance.MouseOverBackColor = TemaApp.BgCardHover;
+            AplicarBordesRedondeados(btnCerrarDrawer, 12);
+            btnCerrarDrawer.Click += (s, e) => CerrarDrawer(true);
+            panelRightInner.Controls.Add(btnCerrarDrawer);
 
-            int top = 78;
-
-            Panel tarjetaMovimientos = CrearTarjetaNotificacion(
-                "↔", "Movimientos de hoy", "Consultando actividad…", accentBlue, top);
-            lblSidebarMovimientosHoy = tarjetaMovimientos.Controls.Find("lblDetalle", false).Length > 0
-                ? tarjetaMovimientos.Controls.Find("lblDetalle", false)[0] as Label
-                : null;
-            panelRightSidebar.Controls.Add(tarjetaMovimientos);
-
-            top += 90;
-
-            Panel tarjetaResponsables = CrearTarjetaNotificacion(
-                "👥", "Responsables activos", "Consultando directorio…", accentPurple, top);
-            lblSidebarResponsables = tarjetaResponsables.Controls.Find("lblDetalle", false).Length > 0
-                ? tarjetaResponsables.Controls.Find("lblDetalle", false)[0] as Label
-                : null;
-            panelRightSidebar.Controls.Add(tarjetaResponsables);
+            int top = 86;
+            Panel tMov = CrearTarjetaNotificacion("↔", "Movimientos de hoy", "Consultando actividad…", TemaApp.AccentBlue, top);
+            lblDrawerMov = tMov.Controls["lblDetalle"] as Label;
+            panelRightInner.Controls.Add(tMov);
 
             top += 90;
+            Panel tDisp = CrearTarjetaNotificacion("✓", "Equipos disponibles", "Consultando inventario…", TemaApp.AccentGreen, top);
+            lblDrawerDisp = tDisp.Controls["lblDetalle"] as Label;
+            panelRightInner.Controls.Add(tDisp);
+
+            top += 90;
+            Panel tAsig = CrearTarjetaNotificacion("☻", "Asignados y en préstamo", "Consultando inventario…", TemaApp.AccentPurple, top);
+            lblDrawerAsig = tAsig.Controls["lblDetalle"] as Label;
+            panelRightInner.Controls.Add(tAsig);
+
+            top += 90;
+            Panel tMant = CrearTarjetaNotificacion("⚙", "En mantenimiento", "Consultando inventario…", TemaApp.AccentOrange, top);
+            lblDrawerMant = tMant.Controls["lblDetalle"] as Label;
+            panelRightInner.Controls.Add(tMant);
+
+            Label lblAtajo = new Label
+            {
+                Text = "Ctrl + B  ·  Contraer / expandir menú\nEsc  ·  Cerrar este panel",
+                Font = new Font("Segoe UI", 8f),
+                ForeColor = TemaApp.TextGray,
+                AutoSize = true,
+                Location = new Point(18, 460)
+            };
+            panelRightInner.Controls.Add(lblAtajo);
+            panelRightInner.Resize += (s, e) =>
+            {
+                lblAtajo.Location = new Point(18, Math.Max(top + 90, panelRightInner.Height - 52));
+            };
         }
 
-        private Panel CrearTarjetaNotificacion(
-            string icono,
-            string titulo,
-            string detalle,
-            Color colorAcento,
-            int top)
+        private Panel CrearTarjetaNotificacion(string icono, string titulo, string detalle, Color colorAcento, int top)
         {
             Panel card = new Panel
             {
-                Size = new Size(268, 78),
-                Location = new Point(14, top),
-                BackColor = bgCard
+                Size = new Size(DrawerAncho - 32, 78),
+                Location = new Point(16, top),
+                BackColor = TemaApp.BgCard
             };
             AplicarBordesRedondeados(card, 14);
 
@@ -998,8 +639,8 @@ namespace SUSTENTACION
             Label lblIcon = new Label
             {
                 Text = icono,
-                Font = new Font("Segoe UI Emoji", 13f),
-                ForeColor = textWhite,
+                Font = new Font("Segoe UI Symbol", 13f, FontStyle.Bold),
+                ForeColor = colorAcento,
                 Location = new Point(14, 18),
                 Size = new Size(30, 30),
                 TextAlign = ContentAlignment.MiddleCenter
@@ -1010,8 +651,8 @@ namespace SUSTENTACION
             {
                 Text = titulo,
                 Font = new Font("Segoe UI", 8.8f, FontStyle.Bold),
-                ForeColor = textWhite,
-                Location = new Point(50, 13),
+                ForeColor = TemaApp.TextWhite,
+                Location = new Point(52, 13),
                 Size = new Size(205, 21),
                 AutoEllipsis = true
             };
@@ -1021,9 +662,9 @@ namespace SUSTENTACION
             {
                 Name = "lblDetalle",
                 Text = detalle,
-                Font = new Font("Segoe UI", 8f),
-                ForeColor = textGray,
-                Location = new Point(50, 37),
+                Font = new Font("Segoe UI", 8.25f),
+                ForeColor = TemaApp.TextGray,
+                Location = new Point(52, 37),
                 Size = new Size(205, 31)
             };
             card.Controls.Add(lblDetail);
@@ -1031,43 +672,113 @@ namespace SUSTENTACION
             return card;
         }
 
-        // =========================================================
-        // PANEL CENTRAL
-        // =========================================================
+        private void AlternarDrawer()
+        {
+            if (drawerAbierto) CerrarDrawer(true);
+            else AbrirDrawer();
+        }
+
+        private void AbrirDrawer()
+        {
+            drawerAbierto = true;
+            panelRightSidebar.Visible = true;
+            CargarResumenDrawer();
+            IniciarAnimacion(animDrawer, panelRightSidebar.Width, DrawerAncho, DuracionDrawerMs);
+            ActualizarBotonResumen();
+        }
+
+        private void CerrarDrawer(bool animar)
+        {
+            drawerAbierto = false;
+            if (animar) IniciarAnimacion(animDrawer, panelRightSidebar.Width, 0, DuracionDrawerMs);
+            else
+            {
+                animDrawer.Activa = false;
+                panelRightSidebar.Width = 0;
+                panelRightSidebar.Visible = false;
+            }
+            ActualizarBotonResumen();
+        }
+
+        private void ActualizarBotonResumen()
+        {
+            if (btnResumen == null) return;
+            btnResumen.FlatAppearance.BorderColor = drawerAbierto ? TemaApp.AccentGreen : (TemaApp.EsModoOscuro ? TemaApp.BorderColor : TemaApp.LightBorder);
+            btnResumen.ForeColor = drawerAbierto ? TemaApp.AccentGreen : (TemaApp.EsModoOscuro ? TemaApp.TextSoft : TemaApp.LightSoft);
+        }
+
+        private void CargarResumenDrawer()
+        {
+            try
+            {
+                using (var conexion = new global::SUSTENTACION.Conexion().ObtenerConexion())
+                {
+                    if (conexion == null) throw new InvalidOperationException("Sin conexión");
+                    if (conexion.State != ConnectionState.Open) conexion.Open();
+
+                    int total = 0, disp = 0, asig = 0, prest = 0, mant = 0;
+                    using (var cmd = new NpgsqlCommand("SELECT LOWER(TRIM(COALESCE(estado,''))) AS e, COUNT(*)::int AS n FROM equipos GROUP BY 1;", conexion))
+                    using (var r = cmd.ExecuteReader())
+                    {
+                        while (r.Read())
+                        {
+                            string estado = Convert.ToString(r["e"]) ?? "";
+                            int n = Convert.ToInt32(r["n"]);
+                            total += n;
+                            if (estado == "disponible") disp += n;
+                            else if (estado == "asignado") asig += n;
+                            else if (estado == "prestado") prest += n;
+                            else if (estado == "mantenimiento") mant += n;
+                        }
+                    }
+
+                    int hoy = 0, ing = 0, sal = 0;
+                    using (var cmd = new NpgsqlCommand(@"SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE UPPER(TRIM(tipo_movimiento)) = 'INGRESO')::int AS ingresos, COUNT(*) FILTER (WHERE UPPER(TRIM(tipo_movimiento)) = 'SALIDA')::int AS salidas FROM movimiento WHERE fecha_movimiento::date = CURRENT_DATE;", conexion))
+                    using (var r = cmd.ExecuteReader())
+                    {
+                        if (r.Read())
+                        {
+                            hoy = Convert.ToInt32(r["total"]);
+                            ing = Convert.ToInt32(r["ingresos"]);
+                            sal = Convert.ToInt32(r["salidas"]);
+                        }
+                    }
+
+                    if (lblDrawerMov != null) lblDrawerMov.Text = hoy + " movimientos hoy\n" + ing + " ingresos  ·  " + sal + " salidas";
+                    if (lblDrawerDisp != null) lblDrawerDisp.Text = disp + " de " + total + " equipos\nlistos para usar";
+                    if (lblDrawerAsig != null) lblDrawerAsig.Text = asig + " asignados  ·  " + prest + " en préstamo";
+                    if (lblDrawerMant != null) lblDrawerMant.Text = mant + " equipos\nfuera de servicio";
+                }
+            }
+            catch (Exception)
+            {
+                string msg = "No se pudo consultar la base de datos";
+                if (lblDrawerMov != null) lblDrawerMov.Text = msg;
+                if (lblDrawerDisp != null) lblDrawerDisp.Text = msg;
+                if (lblDrawerAsig != null) lblDrawerAsig.Text = msg;
+                if (lblDrawerMant != null) lblDrawerMant.Text = msg;
+            }
+        }
+
         private void CrearMainContent()
         {
             panelMainContent = new Panel
             {
                 Dock = DockStyle.Fill,
-                BackColor = bgDark,
-                AutoScroll = true,
-                // Menos margen lateral para aprovechar mejor el área al contraer el menú.
+                BackColor = TemaApp.BgDark,
+                AutoScroll = false,
                 Padding = new Padding(16, 12, 16, 18)
             };
             this.Controls.Add(panelMainContent);
-            panelMainContent.BringToFront();
         }
 
-        // =========================================================
-        // NAVEGACIÓN
-        // =========================================================
         private void LimpiarContenidoActual()
         {
-            // Cada página se vuelve a crear al navegar. Liberar la anterior evita
-            // acumular controles y recursos al entrar y salir del directorio.
-            if (dgvOverviewMovimientos != null)
-                dgvOverviewMovimientos.DataSource = null;
-
-            if (tablaOverviewMovimientos != null)
+            if (panelResumenRef != null)
             {
-                tablaOverviewMovimientos.Dispose();
-                tablaOverviewMovimientos = null;
+                panelResumenRef.Dispose();
+                panelResumenRef = null;
             }
-
-            dgvOverviewMovimientos = null;
-            chartOverviewCategorias = null;
-            chartOverviewMovimientos = null;
-            chartOverviewEstados = null;
 
             while (panelMainContent.Controls.Count > 0)
             {
@@ -1077,25 +788,44 @@ namespace SUSTENTACION
             }
         }
 
+        private void ConfigurarVista(bool esOverview)
+        {
+            btnResumen.Visible = esOverview;
+            if (!esOverview && drawerAbierto)
+                CerrarDrawer(false);
+        }
+
         private void MostrarOverview()
         {
             lblBreadcrumb.Text = "Inicio / Panel";
             lblHeaderTitle.Text = "Panel de control";
-            ActivarBoton(btnOverviewRef);
-
-            if (panelRightSidebar != null) panelRightSidebar.Visible = true;
+            barra.Seleccionar(0);
+            ConfigurarVista(true);
 
             LimpiarContenidoActual();
-            CargarContenidoOverview();
+
+            panelResumenRef = new PanelResumen
+            {
+                Dock = DockStyle.Fill,
+                BackColor = TemaApp.DashFondo
+            };
+
+            panelResumenRef.RegistrarEntradaClick += (s, e) => BeginInvoke(new Action(MostrarMovimientos));
+            panelResumenRef.RegistrarSalidaClick += (s, e) => BeginInvoke(new Action(MostrarMovimientos));
+            panelResumenRef.VerMovimientosClick += (s, e) => BeginInvoke(new Action(MostrarMovimientos));
+            panelResumenRef.GenerarReporteClick += (s, e) => BeginInvoke(new Action(MostrarReportes));
+            panelResumenRef.VerNotificacionesClick += (s, e) => BeginInvoke(new Action(AbrirDrawer));
+
+            panelMainContent.Controls.Add(panelResumenRef);
+            panelResumenRef.BringToFront();
         }
 
         private void MostrarInventario()
         {
             lblBreadcrumb.Text = "Inicio / Inventario";
             lblHeaderTitle.Text = "Inventario";
-            ActivarBoton(btnInventarioRef);
-
-            if (panelRightSidebar != null) panelRightSidebar.Visible = false;
+            barra.Seleccionar(1);
+            ConfigurarVista(false);
 
             LimpiarContenidoActual();
             global::SUSTENTACION.InventarioControl ucInventario = new global::SUSTENTACION.InventarioControl();
@@ -1108,16 +838,11 @@ namespace SUSTENTACION
         {
             lblBreadcrumb.Text = "Inicio / Movimientos";
             lblHeaderTitle.Text = "Movimientos";
-            ActivarBoton(btnMovimientosRef);
-
-            if (panelRightSidebar != null) panelRightSidebar.Visible = false;
+            barra.Seleccionar(2);
+            ConfigurarVista(false);
 
             LimpiarContenidoActual();
-
-            var ucMovimientos = new SUSTENTACION.PanelMovimiento.PanelMovimiento
-            {
-                Dock = DockStyle.Fill
-            };
+            var ucMovimientos = new SUSTENTACION.PanelSolicitudes.PanelSolicitudes { Dock = DockStyle.Fill };
             panelMainContent.Controls.Add(ucMovimientos);
             ucMovimientos.BringToFront();
         }
@@ -1126,14 +851,10 @@ namespace SUSTENTACION
         {
             lblBreadcrumb.Text = "Inicio / Trabajadores";
             lblHeaderTitle.Text = "Trabajadores";
-            ActivarBoton(btnTrabajadoresRef);
-            if (panelRightSidebar != null) panelRightSidebar.Visible = false;
+            barra.Seleccionar(3);
+            ConfigurarVista(false);
             LimpiarContenidoActual();
-
-            var trabajadores = new global::SUSTENTACION.PanelTrabajador.Trabajador
-            {
-                Dock = DockStyle.Fill
-            };
+            var trabajadores = new global::SUSTENTACION.PanelTrabajador.Trabajador { Dock = DockStyle.Fill };
             panelMainContent.Controls.Add(trabajadores);
             trabajadores.BringToFront();
         }
@@ -1142,1589 +863,27 @@ namespace SUSTENTACION
         {
             lblBreadcrumb.Text = "Inicio / Reportes";
             lblHeaderTitle.Text = "Reportes";
-            ActivarBoton(btnReportesRef);
-            if (panelRightSidebar != null) panelRightSidebar.Visible = false;
+            barra.Seleccionar(4);
+            ConfigurarVista(false);
             LimpiarContenidoActual();
-            var reportes = new global::SUSTENTACION.PanelAdministrador.CotrolReporte
-            {
-                Dock = DockStyle.Fill
-            };
+            var reportes = new global::SUSTENTACION.PanelAdministrador.CotrolReporte { Dock = DockStyle.Fill };
             panelMainContent.Controls.Add(reportes);
             reportes.BringToFront();
         }
 
-        // =========================================================
-        // PANEL GENERAL DE INVENTARIO AUDIOVISUAL
-        // =========================================================
-        private void CargarContenidoOverview()
-        {
-            FlowLayoutPanel contenido = new FlowLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                AutoScroll = true,
-                FlowDirection = FlowDirection.TopDown,
-                WrapContents = false,
-                Padding = new Padding(0, 0, 8, 16),
-                Margin = new Padding(0),
-                BackColor = Color.Transparent
-            };
-            panelMainContent.Controls.Add(contenido);
-
-            Panel cabecera = CrearCabeceraOverview();
-            Panel filtros = CrearFiltrosOverview();
-            TableLayoutPanel indicadores = CrearIndicadoresOverview();
-            TableLayoutPanel graficos = CrearGraficosOverview();
-            Panel graficoCategorias = CrearGraficoCategoriasOverview();
-            Panel historial = CrearHistorialOverview();
-
-            contenido.Controls.Add(cabecera);
-            contenido.Controls.Add(filtros);
-            contenido.Controls.Add(indicadores);
-            contenido.Controls.Add(graficos);
-            contenido.Controls.Add(graficoCategorias);
-            contenido.Controls.Add(historial);
-
-            Action ajustarAnchos = () =>
-            {
-                int ancho = Math.Max(460, contenido.ClientSize.Width - 24);
-                foreach (Control control in contenido.Controls)
-                    control.Width = ancho;
-            };
-            contenido.Resize += (s, e) => ajustarAnchos();
-            ajustarAnchos();
-
-            CargarDatosOverview();
-        }
-
-        private Panel CrearCabeceraOverview()
-        {
-            Panel panel = new Panel
-            {
-                Height = 126,
-                BackColor = bgCard,
-                Margin = new Padding(0, 0, 0, 12),
-                Padding = new Padding(18)
-            };
-            AplicarBordesRedondeados(panel, 16);
-
-            Label sobrelinea = new Label
-            {
-                Text = "ARTEMUSA TV  /  INVENTARIO AUDIOVISUAL",
-                Location = new Point(20, 12),
-                AutoSize = true,
-                Font = new Font("Segoe UI", 8.2f, FontStyle.Bold),
-                ForeColor = accentGreen,
-                BackColor = Color.Transparent
-            };
-            Label titulo = new Label
-            {
-                Text = "Panel de control",
-                Location = new Point(18, 33),
-                AutoSize = true,
-                Font = new Font("Segoe UI", 19f, FontStyle.Bold),
-                ForeColor = textWhite,
-                BackColor = Color.Transparent
-            };
-            Label subtitulo = new Label
-            {
-                Text = "Resumen del almacén, existencias y actividad de los equipos.",
-                Location = new Point(20, 72),
-                AutoSize = true,
-                Font = new Font("Segoe UI", 8.7f),
-                ForeColor = textGray,
-                BackColor = Color.Transparent
-            };
-            panel.Controls.Add(sobrelinea);
-            panel.Controls.Add(titulo);
-            panel.Controls.Add(subtitulo);
-
-            Button btnVerInventario = CrearBotonOverview("Ver inventario", accentGreen, Color.Black, 126);
-            Button btnActualizar = CrearBotonOverview("Actualizar", bgInput, textWhite, 104);
-            btnVerInventario.Click += (s, e) => MostrarInventario();
-            btnActualizar.Click += (s, e) => CargarDatosOverview();
-            panel.Controls.Add(btnVerInventario);
-            panel.Controls.Add(btnActualizar);
-
-            lblOverviewConexion = new Label
-            {
-                Text = "● Conectando con la base de datos…",
-                Location = new Point(20, 99),
-                AutoSize = true,
-                Font = new Font("Segoe UI", 8f, FontStyle.Bold),
-                ForeColor = accentOrange,
-                BackColor = Color.Transparent,
-                AutoEllipsis = true
-            };
-            lblOverviewActualizado = new Label
-            {
-                Text = "",
-                AutoSize = true,
-                Anchor = AnchorStyles.Bottom | AnchorStyles.Right,
-                Font = new Font("Segoe UI", 8f),
-                ForeColor = textGray,
-                BackColor = Color.Transparent
-            };
-            panel.Controls.Add(lblOverviewConexion);
-            panel.Controls.Add(lblOverviewActualizado);
-
-            Action reubicar = () =>
-            {
-                btnVerInventario.Location = new Point(Math.Max(16, panel.ClientSize.Width - btnVerInventario.Width - 18), 32);
-                btnActualizar.Location = new Point(Math.Max(16, btnVerInventario.Left - btnActualizar.Width - 8), 32);
-                lblOverviewActualizado.Location = new Point(
-                    Math.Max(20, panel.ClientSize.Width - lblOverviewActualizado.Width - 18), 100);
-                lblOverviewConexion.MaximumSize = new Size(Math.Max(200, panel.ClientSize.Width - 280), 22);
-            };
-            panel.Resize += (s, e) => reubicar();
-            reubicar();
-            return panel;
-        }
-
-        private Panel CrearFiltrosOverview()
-        {
-            Panel panel = new Panel
-            {
-                Height = 194,
-                BackColor = bgCard,
-                Margin = new Padding(0, 0, 0, 12),
-                Padding = new Padding(12)
-            };
-            AplicarBordesRedondeados(panel, 14);
-            Label titulo = new Label
-            {
-                Text = "Filtros del panel",
-                Location = new Point(16, 11),
-                AutoSize = true,
-                Font = new Font("Segoe UI", 10f, FontStyle.Bold),
-                ForeColor = textWhite,
-                BackColor = Color.Transparent
-            };
-            Label ayuda = new Label
-            {
-                Text = "Fechas, tipo y responsable filtran movimientos; categoría, estado y ubicación acotan equipos.",
-                Location = new Point(150, 13),
-                AutoSize = true,
-                Font = new Font("Segoe UI", 8f),
-                ForeColor = textGray,
-                BackColor = Color.Transparent
-            };
-            panel.Controls.Add(titulo);
-            panel.Controls.Add(ayuda);
-
-            dtOverviewDesde = new DateTimePicker
-            {
-                Format = DateTimePickerFormat.Custom,
-                CustomFormat = "dd/MM/yyyy",
-                Value = DateTime.Today.AddMonths(-5),
-                Font = new Font("Segoe UI", 8.4f),
-                Height = 28
-            };
-            dtOverviewHasta = new DateTimePicker
-            {
-                Format = DateTimePickerFormat.Custom,
-                CustomFormat = "dd/MM/yyyy",
-                Value = DateTime.Today,
-                Font = new Font("Segoe UI", 8.4f),
-                Height = 28
-            };
-            cmbOverviewCategoria = CrearComboOverview();
-            cmbOverviewEstado = CrearComboOverview();
-            cmbOverviewUbicacion = CrearComboOverview();
-            cmbOverviewTipoMovimiento = CrearComboOverview();
-            cmbOverviewResponsable = CrearComboOverview();
-            cmbOverviewTipoMovimiento.Items.AddRange(new object[]
-            {
-                "Todos", "Ingreso", "Salida", "Traslado", "Devolución", "Mantenimiento"
-            });
-            cmbOverviewTipoMovimiento.SelectedIndex = 0;
-
-            txtOverviewBuscar = new TextBox
-            {
-                Font = new Font("Segoe UI", 8.6f),
-                BorderStyle = BorderStyle.FixedSingle,
-                BackColor = bgInput,
-                ForeColor = textWhite,
-                Height = 28
-            };
-            txtOverviewBuscar.KeyDown += (s, e) =>
-            {
-                if (e.KeyCode == Keys.Enter)
-                {
-                    e.SuppressKeyPress = true;
-                    AplicarFiltrosOverview();
-                }
-            };
-            nudOverviewUmbral = new NumericUpDown
-            {
-                Minimum = 0,
-                Maximum = 999999,
-                Value = 2,
-                Font = new Font("Segoe UI", 8.6f),
-                BackColor = bgInput,
-                ForeColor = textWhite,
-                Height = 28,
-                ThousandsSeparator = true
-            };
-
-            TableLayoutPanel rejilla = new TableLayoutPanel
-            {
-                Dock = DockStyle.Bottom,
-                Height = 130,
-                ColumnCount = 5,
-                RowCount = 2,
-                Padding = new Padding(8, 3, 8, 5),
-                BackColor = Color.Transparent,
-                Margin = new Padding(0)
-            };
-            rejilla.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 16f));
-            rejilla.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 16f));
-            rejilla.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20f));
-            rejilla.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 17f));
-            rejilla.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 31f));
-            rejilla.RowStyles.Add(new RowStyle(SizeType.Percent, 50f));
-            rejilla.RowStyles.Add(new RowStyle(SizeType.Percent, 50f));
-
-            rejilla.Controls.Add(CrearCampoOverview("Desde", dtOverviewDesde), 0, 0);
-            rejilla.Controls.Add(CrearCampoOverview("Hasta", dtOverviewHasta), 1, 0);
-            rejilla.Controls.Add(CrearCampoOverview("Categoría", cmbOverviewCategoria), 2, 0);
-            rejilla.Controls.Add(CrearCampoOverview("Estado", cmbOverviewEstado), 3, 0);
-            rejilla.Controls.Add(CrearCampoOverview("Ubicación", cmbOverviewUbicacion), 4, 0);
-            rejilla.Controls.Add(CrearCampoOverview("Tipo de movimiento", cmbOverviewTipoMovimiento), 0, 1);
-            rejilla.Controls.Add(CrearCampoOverview("Responsable", cmbOverviewResponsable), 1, 1);
-
-            Panel campoBuscar = CrearCampoOverview("Buscar equipo, código o responsable", txtOverviewBuscar);
-            rejilla.Controls.Add(campoBuscar, 2, 1);
-            rejilla.SetColumnSpan(campoBuscar, 2);
-
-            Panel acciones = new Panel
-            {
-                Dock = DockStyle.Fill,
-                BackColor = Color.Transparent,
-                Margin = new Padding(4)
-            };
-            Label etiquetaUmbral = new Label
-            {
-                Text = "Condición",
-                Location = new Point(2, 1),
-                AutoSize = true,
-                Font = new Font("Segoe UI", 7.2f, FontStyle.Bold),
-                ForeColor = textGray,
-                BackColor = Color.Transparent
-            };
-            nudOverviewUmbral.Width = 57;
-            nudOverviewUmbral.Location = new Point(2, 24);
-            btnOverviewAplicar = CrearBotonOverview("Aplicar", accentGreen, Color.Black, 78);
-            Button btnLimpiar = CrearBotonOverview("Limpiar", bgInput, textWhite, 64);
-            btnOverviewAplicar.Click += (s, e) => AplicarFiltrosOverview();
-            btnLimpiar.Click += (s, e) => LimpiarFiltrosOverview();
-            Action ajustarAcciones = () =>
-            {
-                int anchoPanel = acciones.ClientSize.Width;
-                int anchoLimpiar = Math.Min(64, Math.Max(54, anchoPanel / 4));
-                int anchoAplicar = Math.Min(78, Math.Max(62, anchoPanel / 3));
-                btnLimpiar.Width = anchoLimpiar;
-                btnLimpiar.Left = Math.Max(2, anchoPanel - anchoLimpiar - 2);
-                btnOverviewAplicar.Width = anchoAplicar;
-                btnOverviewAplicar.Left = Math.Max(55, btnLimpiar.Left - anchoAplicar - 5);
-                nudOverviewUmbral.Width = Math.Max(42, btnOverviewAplicar.Left - 10);
-                nudOverviewUmbral.Left = 2;
-                nudOverviewUmbral.Top = 24;
-                btnOverviewAplicar.Top = 21;
-                btnLimpiar.Top = 21;
-            };
-            acciones.Resize += (s, e) => ajustarAcciones();
-            acciones.Controls.Add(etiquetaUmbral);
-            acciones.Controls.Add(nudOverviewUmbral);
-            acciones.Controls.Add(btnOverviewAplicar);
-            acciones.Controls.Add(btnLimpiar);
-            ajustarAcciones();
-            rejilla.Controls.Add(acciones, 4, 1);
-
-            panel.Controls.Add(rejilla);
-            return panel;
-        }
-
-        private TableLayoutPanel CrearIndicadoresOverview()
-        {
-            TableLayoutPanel tabla = new TableLayoutPanel
-            {
-                Height = 118,
-                ColumnCount = 5,
-                RowCount = 1,
-                BackColor = Color.Transparent,
-                Margin = new Padding(0, 0, 0, 12),
-                Padding = new Padding(0)
-            };
-            for (int i = 0; i < 5; i++)
-            {
-                tabla.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20f));
-                tabla.Controls.Add(CrearTarjetaIndicadorOverview(i), i, 0);
-            }
-            tabla.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
-            return tabla;
-        }
-
-        private Panel CrearTarjetaIndicadorOverview(int indice)
-        {
-            Color[] colores =
-{
-    accentBlue,
-    accentGreen,
-    accentOrange,
-    accentPurple,
-    accentPink
-};
-
-            string[] titulos =
-            {
-    "EQUIPOS REGISTRADOS",
-    "DISPONIBLES",
-    "ASIGNADOS",
-    "EN MANTENIMIENTO",
-    "MOVIMIENTOS DEL PERÍODO"
-};
-
-            string[] detalles =
-            {
-    "Total de equipos registrados",
-    "Equipos disponibles actualmente",
-    "Equipos con asignación activa",
-    "Equipos actualmente en mantenimiento",
-    "Movimientos según fechas y filtros"
-};
-
-
-            Panel tarjeta = new Panel
-            {
-                Dock = DockStyle.Fill,
-                Margin = new Padding(5, 0, 5, 0),
-                BackColor = bgCard,
-                Padding = new Padding(12)
-            };
-            AplicarBordesRedondeados(tarjeta, 13);
-            Panel acento = new Panel
-            {
-                Dock = DockStyle.Top,
-                Height = 3,
-                BackColor = colores[indice]
-            };
-            Label titulo = new Label
-            {
-                Text = titulos[indice],
-                Location = new Point(12, 12),
-                AutoSize = false,
-                Size = new Size(160, 18),
-                Font = new Font("Segoe UI", 7.1f, FontStyle.Bold),
-                ForeColor = textGray,
-                AutoEllipsis = true,
-                BackColor = Color.Transparent
-            };
-            valoresOverview[indice] = new Label
-            {
-                Text = "—",
-                Location = new Point(11, 33),
-                AutoSize = false,
-                Size = new Size(165, 38),
-                Font = new Font("Segoe UI", 21f, FontStyle.Bold),
-                ForeColor = textWhite,
-                AutoEllipsis = true,
-                BackColor = Color.Transparent
-            };
-            detallesOverview[indice] = new Label
-            {
-                Text = detalles[indice],
-                Location = new Point(12, 77),
-                AutoSize = false,
-                Size = new Size(165, 20),
-                Font = new Font("Segoe UI", 7.5f),
-                ForeColor = textGray,
-                AutoEllipsis = true,
-                BackColor = Color.Transparent
-            };
-            tarjeta.Resize += (s, e) =>
-            {
-                int anchoTexto = Math.Max(55, tarjeta.ClientSize.Width - 24);
-                titulo.Width = anchoTexto;
-                valoresOverview[indice].Width = anchoTexto;
-                detallesOverview[indice].Width = anchoTexto;
-            };
-            tarjeta.Controls.Add(acento);
-            tarjeta.Controls.Add(titulo);
-            tarjeta.Controls.Add(valoresOverview[indice]);
-            tarjeta.Controls.Add(detallesOverview[indice]);
-            return tarjeta;
-        }
-
-        private TableLayoutPanel CrearGraficosOverview()
-        {
-            TableLayoutPanel tabla = new TableLayoutPanel
-            {
-                Height = 254,
-                ColumnCount = 2,
-                RowCount = 1,
-                BackColor = Color.Transparent,
-                Margin = new Padding(0, 0, 0, 12),
-                Padding = new Padding(0)
-            };
-            tabla.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 62f));
-            tabla.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38f));
-            tabla.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
-
-            chartOverviewMovimientos = new OverviewMonthlyChart
-            {
-                Dock = DockStyle.Fill,
-                BackColor = bgCard,
-                ForeColor = textSoft,
-                AccentColor = accentBlue,
-                Margin = new Padding(5, 0, 5, 0)
-            };
-            chartOverviewEstados = new OverviewDonutChart
-            {
-                Dock = DockStyle.Fill,
-                BackColor = bgCard,
-                ForeColor = textSoft,
-                Margin = new Padding(5, 0, 5, 0)
-            };
-            tabla.Controls.Add(CrearTarjetaGraficoOverview("Movimientos registrados por mes y tipo", chartOverviewMovimientos), 0, 0);
-            tabla.Controls.Add(CrearTarjetaGraficoOverview("Estado de los equipos", chartOverviewEstados), 1, 0);
-            return tabla;
-        }
-
-        private Panel CrearGraficoCategoriasOverview()
-        {
-            Panel tarjeta = new Panel
-            {
-                Height = 220,
-                BackColor = bgCard,
-                Margin = new Padding(0, 0, 0, 12),
-                Padding = new Padding(12)
-            };
-            AplicarBordesRedondeados(tarjeta, 13);
-            Label titulo = new Label
-            {
-                Text = "Unidades por categoría audiovisual · principales 6",
-                Location = new Point(14, 11),
-                AutoSize = true,
-                Font = new Font("Segoe UI", 9.6f, FontStyle.Bold),
-                ForeColor = textWhite,
-                BackColor = Color.Transparent
-            };
-            chartOverviewCategorias = new OverviewBarChart
-            {
-                Location = new Point(12, 42),
-                Size = new Size(500, 160),
-                BackColor = bgCard,
-                ForeColor = textSoft,
-                BarColor = accentGreen,
-                Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
-                Margin = new Padding(0)
-            };
-            tarjeta.Controls.Add(titulo);
-            tarjeta.Controls.Add(chartOverviewCategorias);
-            tarjeta.Resize += (s, e) => chartOverviewCategorias.Size = new Size(
-                Math.Max(160, tarjeta.ClientSize.Width - 24), Math.Max(110, tarjeta.ClientSize.Height - 52));
-            return tarjeta;
-        }
-
-        private Panel CrearTarjetaGraficoOverview(string titulo, Control grafico)
-        {
-            Panel panel = new Panel
-            {
-                Dock = DockStyle.Fill,
-                BackColor = bgCard,
-                Margin = new Padding(5, 0, 5, 0),
-                Padding = new Padding(12)
-            };
-            AplicarBordesRedondeados(panel, 13);
-            Label etiqueta = new Label
-            {
-                Text = titulo,
-                Location = new Point(14, 11),
-                AutoSize = true,
-                Font = new Font("Segoe UI", 9.6f, FontStyle.Bold),
-                ForeColor = textWhite,
-                BackColor = Color.Transparent
-            };
-            grafico.Location = new Point(10, 40);
-            grafico.Size = new Size(300, 195);
-            panel.Controls.Add(etiqueta);
-            panel.Controls.Add(grafico);
-            panel.Resize += (s, e) => grafico.Size = new Size(
-                Math.Max(120, panel.ClientSize.Width - 20),
-                Math.Max(100, panel.ClientSize.Height - 50));
-            return panel;
-        }
-
-        private Panel CrearHistorialOverview()
-        {
-            Panel panel = new Panel
-            {
-                Height = 356,
-                BackColor = bgCard,
-                Margin = new Padding(0, 0, 0, 14),
-                Padding = new Padding(12)
-            };
-            AplicarBordesRedondeados(panel, 13);
-            Label titulo = new Label
-            {
-                Text = "Movimientos recientes",
-                Location = new Point(16, 11),
-                AutoSize = true,
-                Font = new Font("Segoe UI", 10f, FontStyle.Bold),
-                ForeColor = textWhite,
-                BackColor = Color.Transparent
-            };
-            Label subtitulo = new Label
-            {
-                Text = "Últimos 100 registros que coinciden con los filtros.",
-                Location = new Point(17, 34),
-                AutoSize = true,
-                Font = new Font("Segoe UI", 8f),
-                ForeColor = textGray,
-                BackColor = Color.Transparent
-            };
-            Button verMovimientos = CrearBotonOverview("Abrir movimientos", bgInput, textWhite, 146);
-            verMovimientos.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            verMovimientos.Click += (s, e) => MostrarMovimientos();
-            panel.Controls.Add(titulo);
-            panel.Controls.Add(subtitulo);
-            panel.Controls.Add(verMovimientos);
-
-            dgvOverviewMovimientos = new DataGridView
-            {
-                Name = "dgvOverviewMovimientos",
-                Location = new Point(12, 64),
-                Size = new Size(500, 276),
-                Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
-                ReadOnly = true,
-                AllowUserToAddRows = false,
-                AllowUserToDeleteRows = false,
-                AllowUserToResizeRows = false,
-                MultiSelect = false,
-                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-                AutoGenerateColumns = true,
-                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-                RowHeadersVisible = false,
-                BorderStyle = BorderStyle.None,
-                BackgroundColor = bgCard,
-                GridColor = borderColor,
-                EnableHeadersVisualStyles = false,
-                ColumnHeadersHeight = 37,
-                RowTemplate = { Height = 34 },
-                Font = new Font("Segoe UI", 8.2f)
-            };
-            dgvOverviewMovimientos.ColumnHeadersDefaultCellStyle.BackColor = bgInput;
-            dgvOverviewMovimientos.ColumnHeadersDefaultCellStyle.ForeColor = accentGreen;
-            dgvOverviewMovimientos.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI", 8f, FontStyle.Bold);
-            dgvOverviewMovimientos.DefaultCellStyle.BackColor = bgCard;
-            dgvOverviewMovimientos.DefaultCellStyle.ForeColor = textWhite;
-            dgvOverviewMovimientos.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(25, 31, 39);
-            dgvOverviewMovimientos.CellDoubleClick += (s, e) => MostrarMovimientos();
-            panel.Controls.Add(dgvOverviewMovimientos);
-            panel.Resize += (s, e) =>
-            {
-                verMovimientos.Location = new Point(Math.Max(12, panel.ClientSize.Width - verMovimientos.Width - 14), 12);
-                dgvOverviewMovimientos.Width = Math.Max(180, panel.ClientSize.Width - 24);
-                dgvOverviewMovimientos.Height = Math.Max(100, panel.ClientSize.Height - 76);
-            };
-            AplicarEstiloGrid(dgvOverviewMovimientos);
-            return panel;
-        }
-
-        private Panel CrearCampoOverview(string titulo, Control control)
-        {
-            Panel campo = new Panel
-            {
-                Dock = DockStyle.Fill,
-                Margin = new Padding(4),
-                BackColor = Color.Transparent
-            };
-            Label etiqueta = new Label
-            {
-                Text = titulo,
-                Dock = DockStyle.Top,
-                Height = 19,
-                Font = new Font("Segoe UI", 7.2f, FontStyle.Bold),
-                ForeColor = textGray,
-                BackColor = Color.Transparent,
-                AutoEllipsis = true
-            };
-            control.Dock = DockStyle.Bottom;
-            control.Height = 29;
-            campo.Controls.Add(control);
-            campo.Controls.Add(etiqueta);
-            return campo;
-        }
-
-        private ComboBox CrearComboOverview()
-        {
-            return new ComboBox
-            {
-                DropDownStyle = ComboBoxStyle.DropDownList,
-                FlatStyle = FlatStyle.Flat,
-                Font = new Font("Segoe UI", 8.4f),
-                BackColor = bgInput,
-                ForeColor = textWhite,
-                IntegralHeight = false,
-                MaxDropDownItems = 12
-            };
-        }
-
-        private Button CrearBotonOverview(string texto, Color fondo, Color textoColor, int ancho)
-        {
-            Button boton = new Button
-            {
-                Text = texto,
-                Size = new Size(ancho, 34),
-                BackColor = fondo,
-                ForeColor = textoColor,
-                FlatStyle = FlatStyle.Flat,
-                Font = new Font("Segoe UI", 8.3f, FontStyle.Bold),
-                Cursor = Cursors.Hand,
-                TextAlign = ContentAlignment.MiddleCenter,
-                Margin = new Padding(3)
-            };
-            boton.FlatAppearance.BorderSize = fondo == bgInput ? 1 : 0;
-            boton.FlatAppearance.BorderColor = borderColor;
-            boton.FlatAppearance.MouseOverBackColor = fondo == accentGreen ? Color.FromArgb(190, 242, 100) : bgCardHover;
-            AplicarBordesRedondeados(boton, 9);
-            return boton;
-        }
-
-        private void AplicarFiltrosOverview()
-        {
-            if (dtOverviewDesde != null && dtOverviewHasta != null && dtOverviewDesde.Value.Date > dtOverviewHasta.Value.Date)
-            {
-                MessageBox.Show("La fecha Desde no puede ser posterior a la fecha Hasta.",
-                    "Revisar filtros", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-            CargarDatosOverview();
-        }
-
-        private void LimpiarFiltrosOverview()
-        {
-            if (dtOverviewDesde != null) dtOverviewDesde.Value = DateTime.Today.AddMonths(-5);
-            if (dtOverviewHasta != null) dtOverviewHasta.Value = DateTime.Today;
-            if (cmbOverviewCategoria != null && cmbOverviewCategoria.Items.Count > 0) cmbOverviewCategoria.SelectedIndex = 0;
-            if (cmbOverviewEstado != null && cmbOverviewEstado.Items.Count > 0) cmbOverviewEstado.SelectedIndex = 0;
-            if (cmbOverviewUbicacion != null && cmbOverviewUbicacion.Items.Count > 0) cmbOverviewUbicacion.SelectedIndex = 0;
-            if (cmbOverviewTipoMovimiento != null && cmbOverviewTipoMovimiento.Items.Count > 0) cmbOverviewTipoMovimiento.SelectedIndex = 0;
-            if (cmbOverviewResponsable != null && cmbOverviewResponsable.Items.Count > 0) cmbOverviewResponsable.SelectedIndex = 0;
-            if (txtOverviewBuscar != null) txtOverviewBuscar.Clear();
-            if (nudOverviewUmbral != null) nudOverviewUmbral.Value = 2;
-            CargarDatosOverview();
-        }
-
-        private void CargarDatosOverview()
-        {
-            if (cargandoOverview || panelMainContent == null || panelMainContent.IsDisposed)
-                return;
-
-            cargandoOverview = true;
-            if (btnOverviewAplicar != null) btnOverviewAplicar.Enabled = false;
-
-            DataTable equiposCategoria = new DataTable();
-            DataTable estadosEquipo = new DataTable();
-            DataTable movimientosMensuales = new DataTable();
-            DataTable movimientosRecientes = new DataTable();
-            try
-            {
-                int totalEquipos;
-                long totalUnidades;
-                int equiposBajoUmbral;
-                int totalMovimientos;
-                int responsablesActivos;
-                int bajoUmbralGlobal;
-                int movimientosHoy;
-                int responsablesActivosGlobal;
-
-                using (NpgsqlConnection conexion = new Conexion().ObtenerConexion())
-                {
-                    if (conexion == null)
-                        throw new InvalidOperationException("La conexión configurada no devolvió una conexión válida.");
-                    if (conexion.State != ConnectionState.Open)
-                        conexion.Open();
-
-                    PoblarComboOverview(conexion, cmbOverviewCategoria,
-                        "SELECT DISTINCT COALESCE(NULLIF(TRIM(categoria), ''), 'Sin categoría') FROM equipos ORDER BY 1",
-                        "Todas");
-                    PoblarComboOverview(conexion, cmbOverviewEstado,
-                        "SELECT DISTINCT COALESCE(NULLIF(TRIM(estado), ''), 'Sin estado') FROM equipos ORDER BY 1",
-                        "Todos");
-                    PoblarComboOverview(conexion, cmbOverviewUbicacion,
-                        "SELECT DISTINCT COALESCE(NULLIF(TRIM(ubicacion), ''), 'Sin ubicación') FROM equipos ORDER BY 1",
-                        "Todas");
-                    PoblarResponsablesOverview(conexion);
-
-                    string whereEquipos = @"
-WHERE (@categoria IS NULL OR e.categoria = @categoria)
-  AND (@estado IS NULL OR e.estado = @estado)
-  AND (@ubicacion IS NULL OR e.ubicacion = @ubicacion)
-  AND (@buscar = '' OR CONCAT_WS(' ', e.codigo, e.nombre, e.categoria, e.marca, e.modelo, e.ubicacion) LIKE @buscar)";
-                    using (NpgsqlCommand comando = new NpgsqlCommand(@"
-SELECT COUNT(*) AS total,
-       COALESCE(SUM(e.stock), 0) AS unidades,
-       COALESCE(SUM(CASE WHEN e.stock <= @umbral THEN 1 ELSE 0 END), 0) AS bajo
-FROM equipos e " + whereEquipos, conexion))
-                    {
-                        AgregarParametrosEquipoOverview(comando);
-                        comando.Parameters.AddWithValue("@umbral", ObtenerUmbralOverview());
-                        using (NpgsqlDataReader lector = comando.ExecuteReader())
-                        {
-                            if (lector.Read())
-                            {
-                                totalEquipos = Convert.ToInt32(lector["total"]);
-                                totalUnidades = Convert.ToInt64(lector["unidades"]);
-                                equiposBajoUmbral = Convert.ToInt32(lector["bajo"]);
-                            }
-                            else
-                            {
-                                totalEquipos = 0;
-                                totalUnidades = 0;
-                                equiposBajoUmbral = 0;
-                            }
-                        }
-                    }
-
-                    using (NpgsqlCommand comando = new NpgsqlCommand(@"
-SELECT COALESCE(NULLIF(TRIM(e.categoria), ''), 'Sin categoría') AS etiqueta,
-       COALESCE(SUM(e.stock), 0) AS total
-FROM equipos e " + whereEquipos + @"
-GROUP BY COALESCE(NULLIF(TRIM(e.categoria), ''), 'Sin categoría')
-ORDER BY total DESC, etiqueta
-LIMIT 8", conexion))
-                    {
-                        AgregarParametrosEquipoOverview(comando);
-                        using (NpgsqlDataAdapter adaptador = new NpgsqlDataAdapter(comando))
-                            adaptador.Fill(equiposCategoria);
-                    }
-
-                    using (NpgsqlCommand comando = new NpgsqlCommand(@"
-SELECT COALESCE(NULLIF(TRIM(e.estado), ''), 'Sin estado') AS etiqueta,
-       COUNT(*) AS total
-FROM equipos e " + whereEquipos + @"
-GROUP BY COALESCE(NULLIF(TRIM(e.estado), ''), 'Sin estado')
-ORDER BY total DESC, etiqueta", conexion))
-                    {
-                        AgregarParametrosEquipoOverview(comando);
-                        using (NpgsqlDataAdapter adaptador = new NpgsqlDataAdapter(comando))
-                            adaptador.Fill(estadosEquipo);
-                    }
-
-                    string whereMovimientos = @"
-WHERE m.fecha_movimiento >= @desde AND m.fecha_movimiento < @hasta
-  AND (@categoria IS NULL OR e.categoria = @categoria)
-  AND (@estado IS NULL OR e.estado = @estado)
-  AND (@ubicacion IS NULL OR e.ubicacion = @ubicacion)
-  AND (@tipo IS NULL OR m.tipo_movimiento = @tipo)
-  AND (@responsable IS NULL OR m.id_responsable = @responsable)
-  AND (@buscar = '' OR CONCAT_WS(' ', e.codigo, e.nombre, e.categoria, e.marca, e.modelo,
-       e.ubicacion, r.nombre, r.apellido, u.nombre, u.apellido, m.motivo, m.observacion) LIKE @buscar)";
-                    using (NpgsqlCommand comando = new NpgsqlCommand(@"
-SELECT COUNT(*)
-FROM movimiento m
-INNER JOIN equipos e ON e.id = m.id_equipo
-LEFT JOIN responsable r ON r.id_responsable = m.id_responsable
-LEFT JOIN usuario u ON u.id_usuario = COALESCE(m.id_usuario, m.id_trabajador) " + whereMovimientos, conexion))
-                    {
-                        AgregarParametrosMovimientoOverview(comando);
-                        totalMovimientos = Convert.ToInt32(comando.ExecuteScalar());
-                    }
-
-                    using (NpgsqlCommand comando = new NpgsqlCommand(@"
-SELECT DATE_FORMAT(m.fecha_movimiento, '%Y-%m') AS periodo,
-       m.tipo_movimiento AS tipo,
-       COUNT(*) AS total
-FROM movimiento m
-INNER JOIN equipos e ON e.id = m.id_equipo
-LEFT JOIN responsable r ON r.id_responsable = m.id_responsable
-LEFT JOIN usuario u ON u.id_usuario = COALESCE(m.id_usuario, m.id_trabajador) " + whereMovimientos + @"
-GROUP BY YEAR(m.fecha_movimiento), MONTH(m.fecha_movimiento), m.tipo_movimiento
-ORDER BY YEAR(m.fecha_movimiento), MONTH(m.fecha_movimiento), m.tipo_movimiento", conexion))
-                    {
-                        AgregarParametrosMovimientoOverview(comando);
-                        using (NpgsqlDataAdapter adaptador = new NpgsqlDataAdapter(comando))
-                            adaptador.Fill(movimientosMensuales);
-                    }
-
-                    using (NpgsqlCommand comando = new NpgsqlCommand(@"
-SELECT DATE_FORMAT(m.fecha_movimiento, '%d/%m/%Y') AS Fecha,
-       TIME_FORMAT(m.hora_movimiento, '%H:%i') AS Hora,
-       CASE m.tipo_movimiento
-         WHEN 'INGRESO' THEN 'Ingreso'
-         WHEN 'SALIDA' THEN 'Salida'
-         WHEN 'TRASLADO' THEN 'Traslado'
-         WHEN 'DEVOLUCION' THEN 'Devolución'
-         ELSE 'Mantenimiento'
-       END AS Tipo,
-       e.codigo AS Codigo,
-       e.nombre AS Equipo,
-       COALESCE(m.cantidad, 1) AS Cantidad,
-       COALESCE(NULLIF(TRIM(CONCAT_WS(' ', NULLIF(r.nombre, ''), NULLIF(r.apellido, ''))), ''),
-                NULLIF(TRIM(CONCAT_WS(' ', NULLIF(u.nombre, ''), NULLIF(u.apellido, ''))), ''),
-                'Sin responsable') AS Responsable,
-       COALESCE(NULLIF(m.ubicacion_destino, ''), NULLIF(m.ubicacion_origen, ''), e.ubicacion, '—') AS Ubicacion,
-       COALESCE(NULLIF(m.motivo, ''), NULLIF(m.observacion, ''), '—') AS Motivo
-FROM movimiento m
-INNER JOIN equipos e ON e.id = m.id_equipo
-LEFT JOIN responsable r ON r.id_responsable = m.id_responsable
-LEFT JOIN usuario u ON u.id_usuario = COALESCE(m.id_usuario, m.id_trabajador) " + whereMovimientos + @"
-ORDER BY m.fecha_movimiento DESC, m.hora_movimiento DESC, m.id_movimiento DESC
-LIMIT 100", conexion))
-                    {
-                        AgregarParametrosMovimientoOverview(comando);
-                        using (NpgsqlDataAdapter adaptador = new NpgsqlDataAdapter(comando))
-                            adaptador.Fill(movimientosRecientes);
-                    }
-
-                    using (NpgsqlCommand comando = new NpgsqlCommand(
-                        "SELECT COUNT(*) FROM responsable WHERE estado = 'Activo'", conexion))
-                        responsablesActivos = Convert.ToInt32(comando.ExecuteScalar());
-
-                    using (NpgsqlCommand comando = new NpgsqlCommand(
-                        "SELECT COUNT(*) FROM equipos WHERE stock <= @umbral", conexion))
-                    {
-                        comando.Parameters.AddWithValue("@umbral", ObtenerUmbralOverview());
-                        bajoUmbralGlobal = Convert.ToInt32(comando.ExecuteScalar());
-                    }
-                    using (NpgsqlCommand comando = new NpgsqlCommand(
-                        "SELECT COUNT(*) FROM movimiento WHERE fecha_movimiento = CURDATE()", conexion))
-                        movimientosHoy = Convert.ToInt32(comando.ExecuteScalar());
-                    responsablesActivosGlobal = responsablesActivos;
-                }
-
-                valoresOverview[0].Text = totalEquipos.ToString("N0", CultureInfo.GetCultureInfo("es-MX"));
-                valoresOverview[1].Text = totalUnidades.ToString("N0", CultureInfo.GetCultureInfo("es-MX"));
-                valoresOverview[2].Text = equiposBajoUmbral.ToString("N0", CultureInfo.GetCultureInfo("es-MX"));
-                valoresOverview[3].Text = totalMovimientos.ToString("N0", CultureInfo.GetCultureInfo("es-MX"));
-                valoresOverview[4].Text = responsablesActivos.ToString("N0", CultureInfo.GetCultureInfo("es-MX"));
-                detallesOverview[2].Text = "Stock ≤ " + ObtenerUmbralOverview().ToString("N0", CultureInfo.GetCultureInfo("es-MX"));
-                detallesOverview[3].Text = dtOverviewDesde == null || dtOverviewHasta == null
-                    ? "En el periodo seleccionado"
-                    : dtOverviewDesde.Value.ToString("dd/MM/yyyy") + " – " + dtOverviewHasta.Value.ToString("dd/MM/yyyy");
-
-                chartOverviewCategorias?.SetBars(CrearBarrasOverview(equiposCategoria), accentGreen);
-                chartOverviewEstados?.SetData(CrearBarrasOverview(estadosEquipo));
-                chartOverviewMovimientos?.SetData(CrearDatosMensualesOverview(movimientosMensuales));
-                if (dgvOverviewMovimientos != null)
-                {
-                    DataTable? anterior = tablaOverviewMovimientos;
-                    tablaOverviewMovimientos = movimientosRecientes;
-                    dgvOverviewMovimientos.DataSource = tablaOverviewMovimientos;
-                    if (anterior != null && !ReferenceEquals(anterior, movimientosRecientes))
-                        anterior.Dispose();
-                    AplicarEstiloGrid(dgvOverviewMovimientos);
-                    ConfigurarColumnasOverview();
-                }
-                else
-                {
-                    movimientosRecientes.Dispose();
-                }
-
-                ActualizarResumenSidebar(bajoUmbralGlobal, movimientosHoy, responsablesActivosGlobal);
-                if (lblOverviewConexion != null)
-                {
-                    lblOverviewConexion.Text = "● Conectado a artemusa_inventario";
-                    lblOverviewConexion.ForeColor = accentGreen;
-                }
-                if (lblOverviewActualizado != null)
-                    lblOverviewActualizado.Text = "Actualizado " + DateTime.Now.ToString("dd/MM/yyyy HH:mm");
-
-                equiposCategoria.Dispose();
-                estadosEquipo.Dispose();
-                movimientosMensuales.Dispose();
-            }
-            catch (Exception ex)
-            {
-                equiposCategoria.Dispose();
-                estadosEquipo.Dispose();
-                movimientosMensuales.Dispose();
-                if (lblOverviewConexion != null)
-                {
-                    lblOverviewConexion.Text = "● No se pudo consultar la base de datos: " + ex.Message;
-                    lblOverviewConexion.ForeColor = accentOrange;
-                }
-                if (lblOverviewActualizado != null) lblOverviewActualizado.Text = "Comprueba la conexión y el esquema";
-                foreach (Label valor in valoresOverview)
-                    if (valor != null) valor.Text = "—";
-                chartOverviewCategorias?.SetBars(new List<OverviewBar>(), accentGreen);
-                chartOverviewEstados?.SetData(new List<OverviewBar>());
-                chartOverviewMovimientos?.SetData(new List<OverviewMonthBucket>());
-                if (dgvOverviewMovimientos != null)
-                    dgvOverviewMovimientos.DataSource = null;
-                bool tablaRecienteAsignada = ReferenceEquals(tablaOverviewMovimientos, movimientosRecientes);
-                if (tablaOverviewMovimientos != null)
-                {
-                    tablaOverviewMovimientos.Dispose();
-                    tablaOverviewMovimientos = null;
-                }
-                if (!tablaRecienteAsignada)
-                    movimientosRecientes.Dispose();
-            }
-            finally
-            {
-                cargandoOverview = false;
-                if (btnOverviewAplicar != null && !btnOverviewAplicar.IsDisposed)
-                    btnOverviewAplicar.Enabled = true;
-            }
-        }
-
-        private void PoblarComboOverview(NpgsqlConnection conexion, ComboBox? combo, string consulta, string opcionGeneral)
-        {
-            if (combo == null || combo.IsDisposed) return;
-            string seleccionado = combo.SelectedItem == null ? opcionGeneral : Convert.ToString(combo.SelectedItem, CultureInfo.CurrentCulture) ?? opcionGeneral;
-            combo.BeginUpdate();
-            try
-            {
-                combo.Items.Clear();
-                combo.Items.Add(opcionGeneral);
-                using (NpgsqlCommand comando = new NpgsqlCommand(consulta, conexion))
-                using (NpgsqlDataReader lector = comando.ExecuteReader())
-                {
-                    while (lector.Read())
-                    {
-                        string valor = Convert.ToString(lector[0], CultureInfo.CurrentCulture) ?? "";
-                        if (!string.IsNullOrWhiteSpace(valor) && !combo.Items.Contains(valor))
-                            combo.Items.Add(valor);
-                    }
-                }
-                int indice = combo.Items.IndexOf(seleccionado);
-                combo.SelectedIndex = indice >= 0 ? indice : 0;
-            }
-            finally
-            {
-                combo.EndUpdate();
-            }
-        }
-
-        private void AgregarParametrosEquipoOverview(NpgsqlCommand comando)
-        {
-            comando.Parameters.AddWithValue("@categoria", (object?)LeerFiltroComboOverview(cmbOverviewCategoria, 0) ?? DBNull.Value);
-            comando.Parameters.AddWithValue("@estado", (object?)LeerFiltroComboOverview(cmbOverviewEstado, 0) ?? DBNull.Value);
-            comando.Parameters.AddWithValue("@ubicacion", (object?)LeerFiltroComboOverview(cmbOverviewUbicacion, 0) ?? DBNull.Value);
-            string busqueda = txtOverviewBuscar == null ? "" : txtOverviewBuscar.Text.Trim();
-            comando.Parameters.AddWithValue("@buscar", busqueda.Length == 0 ? "" : "%" + busqueda + "%");
-        }
-
-        private void AgregarParametrosMovimientoOverview(NpgsqlCommand comando)
-        {
-            comando.Parameters.AddWithValue("@desde", dtOverviewDesde == null ? DateTime.Today.AddMonths(-5) : dtOverviewDesde.Value.Date);
-            comando.Parameters.AddWithValue("@hasta", (dtOverviewHasta == null ? DateTime.Today : dtOverviewHasta.Value.Date).AddDays(1));
-            comando.Parameters.AddWithValue("@categoria", (object?)LeerFiltroComboOverview(cmbOverviewCategoria, 0) ?? DBNull.Value);
-            comando.Parameters.AddWithValue("@estado", (object?)LeerFiltroComboOverview(cmbOverviewEstado, 0) ?? DBNull.Value);
-            comando.Parameters.AddWithValue("@ubicacion", (object?)LeerFiltroComboOverview(cmbOverviewUbicacion, 0) ?? DBNull.Value);
-            comando.Parameters.AddWithValue("@tipo", (object?)ObtenerTipoMovimientoFiltroOverview() ?? DBNull.Value);
-            int? idResponsable = ObtenerResponsableFiltroOverview();
-            comando.Parameters.AddWithValue("@responsable", idResponsable.HasValue ? (object)idResponsable.Value : DBNull.Value);
-            string busqueda = txtOverviewBuscar == null ? "" : txtOverviewBuscar.Text.Trim();
-            comando.Parameters.AddWithValue("@buscar", busqueda.Length == 0 ? "" : "%" + busqueda + "%");
-        }
-
-        private string? LeerFiltroComboOverview(ComboBox? combo, int indiceGeneral)
-        {
-            if (combo == null || combo.SelectedIndex <= indiceGeneral || combo.SelectedItem == null)
-                return null;
-            return Convert.ToString(combo.SelectedItem, CultureInfo.CurrentCulture);
-        }
-
-        private string? ObtenerTipoMovimientoFiltroOverview()
-        {
-            if (cmbOverviewTipoMovimiento == null || cmbOverviewTipoMovimiento.SelectedIndex <= 0)
-                return null;
-            switch (cmbOverviewTipoMovimiento.SelectedIndex)
-            {
-                case 1: return "INGRESO";
-                case 2: return "SALIDA";
-                case 3: return "TRASLADO";
-                case 4: return "DEVOLUCION";
-                case 5: return "MANTENIMIENTO";
-                default: return null;
-            }
-        }
-
-        private void PoblarResponsablesOverview(NpgsqlConnection conexion)
-        {
-            if (cmbOverviewResponsable == null || cmbOverviewResponsable.IsDisposed) return;
-            int? idSeleccionado = ObtenerResponsableFiltroOverview();
-            cmbOverviewResponsable.DisplayMember = nameof(OverviewResponsableOpcion.Nombre);
-            cmbOverviewResponsable.BeginUpdate();
-            try
-            {
-                cmbOverviewResponsable.Items.Clear();
-                cmbOverviewResponsable.Items.Add(new OverviewResponsableOpcion(0, "Todos"));
-                const string consulta = @"
-SELECT id_responsable,
-       TRIM(CONCAT_WS(' ', NULLIF(nombre, ''), NULLIF(apellido, ''))) AS nombre_completo,
-       estado
-FROM responsable
-ORDER BY CASE WHEN estado = 'Activo' THEN 0 ELSE 1 END, apellido, nombre";
-                using (NpgsqlCommand comando = new NpgsqlCommand(consulta, conexion))
-                using (NpgsqlDataReader lector = comando.ExecuteReader())
-                {
-                    while (lector.Read())
-                    {
-                        int id = Convert.ToInt32(lector["id_responsable"]);
-                        string nombre = Convert.ToString(lector["nombre_completo"], CultureInfo.CurrentCulture) ?? "Responsable";
-                        string estado = Convert.ToString(lector["estado"], CultureInfo.CurrentCulture) ?? "";
-                        if (!string.Equals(estado, "Activo", StringComparison.OrdinalIgnoreCase))
-                            nombre += " (Inactivo)";
-                        cmbOverviewResponsable.Items.Add(new OverviewResponsableOpcion(id, nombre));
-                    }
-                }
-                int indice = 0;
-                for (int i = 1; i < cmbOverviewResponsable.Items.Count; i++)
-                {
-                    OverviewResponsableOpcion opcion = (OverviewResponsableOpcion)cmbOverviewResponsable.Items[i];
-                    if (idSeleccionado.HasValue && opcion.Id == idSeleccionado.Value)
-                    {
-                        indice = i;
-                        break;
-                    }
-                }
-                cmbOverviewResponsable.SelectedIndex = indice;
-            }
-            finally
-            {
-                cmbOverviewResponsable.EndUpdate();
-            }
-        }
-
-        private int? ObtenerResponsableFiltroOverview()
-        {
-            if (cmbOverviewResponsable?.SelectedItem is OverviewResponsableOpcion opcion && opcion.Id > 0)
-                return opcion.Id;
-            return null;
-        }
-
-        private int ObtenerUmbralOverview()
-        {
-            return nudOverviewUmbral == null ? 2 : Decimal.ToInt32(nudOverviewUmbral.Value);
-        }
-
-        private List<OverviewBar> CrearBarrasOverview(DataTable datos, bool traducirTipo = false)
-        {
-            List<OverviewBar> barras = new List<OverviewBar>();
-            foreach (DataRow fila in datos.Rows)
-            {
-                string etiqueta = Convert.ToString(fila["etiqueta"], CultureInfo.CurrentCulture) ?? "Sin dato";
-                if (traducirTipo) etiqueta = TraducirTipoMovimientoOverview(etiqueta);
-                barras.Add(new OverviewBar
-                {
-                    Label = etiqueta,
-                    Value = Convert.ToInt32(fila["total"])
-                });
-            }
-            return barras;
-        }
-
-        private List<OverviewMonthBucket> CrearDatosMensualesOverview(DataTable datos)
-        {
-            DateTime desde = dtOverviewDesde == null ? DateTime.Today.AddMonths(-5) : dtOverviewDesde.Value.Date;
-            DateTime hasta = dtOverviewHasta == null ? DateTime.Today : dtOverviewHasta.Value.Date;
-            DateTime primerMes = new DateTime(desde.Year, desde.Month, 1);
-            DateTime ultimoMes = new DateTime(hasta.Year, hasta.Month, 1);
-            DateTime seisMesesAntes = ultimoMes.AddMonths(-5);
-            if (primerMes < seisMesesAntes)
-                primerMes = seisMesesAntes;
-
-            List<OverviewMonthBucket> meses = new List<OverviewMonthBucket>();
-            for (DateTime mes = primerMes; mes <= ultimoMes; mes = mes.AddMonths(1))
-            {
-                meses.Add(new OverviewMonthBucket(mes));
-            }
-
-            Dictionary<string, OverviewMonthBucket> porMes = meses.ToDictionary(
-                mes => mes.Month.ToString("yyyy-MM", CultureInfo.InvariantCulture),
-                mes => mes);
-            foreach (DataRow fila in datos.Rows)
-            {
-                string periodo = Convert.ToString(fila["periodo"], CultureInfo.InvariantCulture) ?? "";
-                if (!DateTime.TryParseExact(periodo, "yyyy-MM", CultureInfo.InvariantCulture,
-                    DateTimeStyles.None, out DateTime fechaMes))
-                    continue;
-
-                string tipo = Convert.ToString(fila["tipo"], CultureInfo.InvariantCulture) ?? "";
-                string claveTipo = tipo.Trim().ToUpperInvariant();
-                string claveMes = fechaMes.ToString("yyyy-MM", CultureInfo.InvariantCulture);
-                if (porMes.TryGetValue(claveMes, out OverviewMonthBucket? mes) &&
-                    mes.Valores.ContainsKey(claveTipo))
-                {
-                    mes.Valores[claveTipo] = Convert.ToInt32(fila["total"], CultureInfo.InvariantCulture);
-                }
-            }
-            return meses;
-        }
-
-        private string TraducirTipoMovimientoOverview(string tipo)
-        {
-            switch ((tipo ?? "").ToUpperInvariant())
-            {
-                case "INGRESO": return "Ingreso";
-                case "SALIDA": return "Salida";
-                case "TRASLADO": return "Traslado";
-                case "DEVOLUCION": return "Devolución";
-                case "MANTENIMIENTO": return "Mantenimiento";
-                default: return tipo;
-            }
-        }
-
-        private void ActualizarResumenSidebar(int bajoUmbral, int movimientosHoy, int responsablesActivos)
-        {
-            if (lblSidebarCondicionBaja != null)
-                lblSidebarCondicionBaja.Text = bajoUmbral.ToString("N0", CultureInfo.GetCultureInfo("es-MX"))
-                    + " equipos requieren revisión";
-
-            if (lblSidebarMovimientosHoy != null)
-                lblSidebarMovimientosHoy.Text = movimientosHoy.ToString("N0", CultureInfo.GetCultureInfo("es-MX"))
-                    + " movimientos registrados hoy";
-
-            if (lblSidebarResponsables != null)
-                lblSidebarResponsables.Text = responsablesActivos.ToString("N0", CultureInfo.GetCultureInfo("es-MX"))
-                    + " personas disponibles para asignación";
-        }
-
-        private void ConfigurarColumnasOverview()
-        {
-            if (dgvOverviewMovimientos == null || dgvOverviewMovimientos.Columns.Count == 0) return;
-            string[] nombres = { "Fecha", "Hora", "Tipo", "Codigo", "Equipo", "Cantidad", "Responsable", "Ubicacion", "Motivo" };
-            string[] encabezados = { "Fecha", "Hora", "Tipo", "Código", "Equipo", "Cantidad", "Responsable", "Ubicación", "Motivo" };
-            float[] pesos = { 10f, 7f, 10f, 9f, 17f, 8f, 15f, 12f, 12f };
-            for (int i = 0; i < encabezados.Length; i++)
-            {
-                if (dgvOverviewMovimientos.Columns.Contains(nombres[i]))
-                {
-                    dgvOverviewMovimientos.Columns[nombres[i]].HeaderText = encabezados[i];
-                    dgvOverviewMovimientos.Columns[nombres[i]].FillWeight = pesos[i];
-                }
-            }
-            if (dgvOverviewMovimientos.Columns.Contains("Cantidad"))
-                dgvOverviewMovimientos.Columns["Cantidad"].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
-        }
-
-        private sealed class OverviewBar
-        {
-            public string Label { get; set; } = "";
-            public int Value { get; set; }
-        }
-
-        private sealed class OverviewMonthBucket
-        {
-            public DateTime Month { get; private set; }
-            public Dictionary<string, int> Valores { get; private set; }
-
-            public OverviewMonthBucket(DateTime month)
-            {
-                Month = month;
-                Valores = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
-                {
-                    { "INGRESO", 0 },
-                    { "SALIDA", 0 },
-                    { "TRASLADO", 0 },
-                    { "DEVOLUCION", 0 },
-                    { "MANTENIMIENTO", 0 }
-                };
-            }
-        }
-
-        private sealed class OverviewResponsableOpcion
-        {
-            public int Id { get; private set; }
-            public string Nombre { get; private set; }
-
-            public OverviewResponsableOpcion(int id, string nombre)
-            {
-                Id = id;
-                Nombre = nombre;
-            }
-
-            public override string ToString()
-            {
-                return Nombre;
-            }
-        }
-
-        private sealed class OverviewMonthlyChart : Panel
-        {
-            private List<OverviewMonthBucket> meses = new List<OverviewMonthBucket>();
-
-            private static readonly string[] TiposMovimiento =
-            {
-                "INGRESO", "SALIDA", "TRASLADO", "DEVOLUCION", "MANTENIMIENTO"
-            };
-
-            private static readonly string[] EtiquetasMovimiento =
-            {
-                "Ingreso", "Salida", "Traslado", "Devolución", "Mantenimiento"
-            };
-
-            private static readonly Color[] ColoresMovimiento =
-            {
-                Color.FromArgb(16, 145, 105),
-                Color.FromArgb(231, 92, 77),
-                Color.FromArgb(49, 130, 206),
-                Color.FromArgb(139, 92, 246),
-                Color.FromArgb(217, 146, 38)
-            };
-
-            [System.ComponentModel.DefaultValue(typeof(Color), "SteelBlue")]
-            public Color AccentColor { get; set; } = Color.SteelBlue;
-
-            public OverviewMonthlyChart()
-            {
-                SetStyle(
-                    ControlStyles.AllPaintingInWmPaint |
-                    ControlStyles.OptimizedDoubleBuffer |
-                    ControlStyles.UserPaint |
-                    ControlStyles.ResizeRedraw,
-                    true);
-
-                TabStop = false;
-            }
-
-            public void SetData(List<OverviewMonthBucket> nuevos)
-            {
-                meses = nuevos ?? new List<OverviewMonthBucket>();
-                Invalidate();
-            }
-
-            protected override void OnPaint(PaintEventArgs e)
-            {
-                base.OnPaint(e);
-                Graphics g = e.Graphics;
-                g.SmoothingMode = SmoothingMode.AntiAlias;
-                g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
-
-                using (Font fuente = new Font("Segoe UI", 7.5f))
-                using (Font fuenteEje = new Font("Segoe UI", 7f))
-                using (Font fuenteLeyenda = new Font("Segoe UI", 7.1f))
-                using (SolidBrush texto = new SolidBrush(ForeColor))
-                using (Pen rejilla = new Pen(Color.FromArgb(48, ForeColor), 1f))
-                {
-                    int ancho = ClientSize.Width;
-                    int alto = ClientSize.Height;
-                    if (ancho < 80 || alto < 70)
-                        return;
-
-                    int left = 34;
-                    int right = 9;
-                    int top = 10;
-                    int bottom = 36;
-                    int plotWidth = Math.Max(1, ancho - left - right);
-                    int plotHeight = Math.Max(1, alto - top - bottom);
-                    int leyendaY = alto - 22;
-
-                    long maximo = 0;
-                    foreach (OverviewMonthBucket mes in meses)
-                        foreach (int valor in mes.Valores.Values)
-                            if (valor > maximo) maximo = valor;
-
-                    if (meses.Count == 0 || maximo == 0)
-                    {
-                        TextRenderer.DrawText(g, "Sin movimientos en el periodo seleccionado", fuente,
-                            new Rectangle(0, top, ancho, Math.Max(30, plotHeight)), ForeColor,
-                            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
-                    }
-                    else
-                    {
-                        long escala = Math.Max(3L, ((maximo + 2L) / 3L) * 3L);
-                        for (int tick = 0; tick <= 3; tick++)
-                        {
-                            int y = top + plotHeight - (plotHeight * tick / 3);
-                            g.DrawLine(rejilla, left, y, left + plotWidth, y);
-                            long valorTick = escala * tick / 3;
-                            Rectangle etiquetaTick = new Rectangle(0, y - 8, left - 5, 16);
-                            TextRenderer.DrawText(g, valorTick.ToString("N0", CultureInfo.GetCultureInfo("es-MX")),
-                                fuenteEje, etiquetaTick, ForeColor,
-                                TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
-                        }
-
-                        int groupWidth = Math.Max(1, plotWidth / Math.Max(1, meses.Count));
-                        int barWidth = Math.Max(2, Math.Min(13, (groupWidth - 12) / 7));
-                        int gap = Math.Max(1, Math.Min(4, (groupWidth - (barWidth * TiposMovimiento.Length)) /
-                            (TiposMovimiento.Length + 1)));
-                        CultureInfo cultura = CultureInfo.GetCultureInfo("es-MX");
-
-                        for (int i = 0; i < meses.Count; i++)
-                        {
-                            OverviewMonthBucket mes = meses[i];
-                            int anchoGrupoBarras = TiposMovimiento.Length * barWidth + (TiposMovimiento.Length - 1) * gap;
-                            int inicio = left + i * groupWidth + Math.Max(0, (groupWidth - anchoGrupoBarras) / 2);
-                            for (int serie = 0; serie < TiposMovimiento.Length; serie++)
-                            {
-                                int valor = mes.Valores.TryGetValue(TiposMovimiento[serie], out int v) ? v : 0;
-                                int altura = maximo == 0 ? 0 : (int)Math.Round(plotHeight * (valor / (double)escala));
-                                if (valor > 0) altura = Math.Max(2, altura);
-                                using (SolidBrush barra = new SolidBrush(ColoresMovimiento[serie]))
-                                {
-                                    Rectangle rect = new Rectangle(
-                                        inicio + serie * (barWidth + gap),
-                                        top + plotHeight - altura,
-                                        barWidth,
-                                        Math.Max(0, altura));
-                                    if (rect.Height > 0) g.FillRectangle(barra, rect);
-                                }
-                            }
-
-                            string mesCorto = mes.Month.ToString("MMM", cultura);
-                            if (mesCorto.Length > 0)
-                                mesCorto = char.ToUpper(mesCorto[0], cultura) + mesCorto.Substring(1);
-                            Rectangle etiquetaMes = new Rectangle(left + i * groupWidth, top + plotHeight + 4,
-                                groupWidth, 17);
-                            TextRenderer.DrawText(g, mesCorto, fuente, etiquetaMes, ForeColor,
-                                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
-                        }
-                    }
-
-                    int anchoLeyenda = Math.Max(1, ancho / TiposMovimiento.Length);
-                    for (int i = 0; i < TiposMovimiento.Length; i++)
-                    {
-                        int x = i * anchoLeyenda + 2;
-                        using (SolidBrush punto = new SolidBrush(ColoresMovimiento[i]))
-                            g.FillEllipse(punto, x, leyendaY + 5, 8, 8);
-                        Rectangle etiqueta = new Rectangle(x + 12, leyendaY, Math.Max(1, anchoLeyenda - 14), 18);
-                        TextRenderer.DrawText(g, EtiquetasMovimiento[i], fuenteLeyenda, etiqueta, ForeColor,
-                            TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
-                    }
-                }
-            }
-        }
-
-        private sealed class OverviewDonutChart : Panel
-        {
-            private List<OverviewBar> estados = new List<OverviewBar>();
-
-            private static readonly Color[] ColoresEstado =
-            {
-                Color.FromArgb(16, 145, 105), Color.FromArgb(49, 130, 206),
-                Color.FromArgb(217, 146, 38), Color.FromArgb(231, 92, 77),
-                Color.FromArgb(139, 92, 246), Color.FromArgb(20, 156, 165),
-                Color.FromArgb(184, 93, 163), Color.FromArgb(116, 130, 145)
-            };
-
-            public OverviewDonutChart()
-            {
-                SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer |
-                         ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
-                TabStop = false;
-            }
-
-            public void SetData(List<OverviewBar> nuevos)
-            {
-                List<OverviewBar> ordenados = (nuevos ?? new List<OverviewBar>())
-                    .Where(x => x.Value > 0).OrderByDescending(x => x.Value).ToList();
-                if (ordenados.Count > 7)
-                {
-                    long totalOtros = ordenados.Skip(6).Sum(x => (long)x.Value);
-                    ordenados = ordenados.Take(6).ToList();
-                    ordenados.Add(new OverviewBar
-                    {
-                        Label = "Otros",
-                        Value = (int)Math.Min(int.MaxValue, totalOtros)
-                    });
-                }
-                estados = ordenados;
-                Invalidate();
-            }
-
-            private static Color ColorParaEstado(string estado)
-            {
-                string valor = (estado ?? "").Trim().ToLowerInvariant();
-                if (valor.Contains("dispon") || valor.Contains("operativ") || valor.Contains("activo"))
-                    return ColoresEstado[0];
-                if (valor.Contains("asign") || valor.Contains("prest"))
-                    return ColoresEstado[1];
-                if (valor.Contains("manten") || valor.Contains("revisi"))
-                    return ColoresEstado[2];
-                if (valor.Contains("baja") || valor.Contains("dañ") || valor.Contains("dan") || valor.Contains("inactiv"))
-                    return ColoresEstado[3];
-                uint hash = unchecked((uint)StringComparer.OrdinalIgnoreCase.GetHashCode(estado ?? ""));
-                return ColoresEstado[4 + (int)(hash % 4u)];
-            }
-
-            protected override void OnPaint(PaintEventArgs e)
-            {
-                base.OnPaint(e);
-                Graphics g = e.Graphics;
-                g.SmoothingMode = SmoothingMode.AntiAlias;
-                g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
-
-                using (Font fuente = new Font("Segoe UI", 7.4f))
-                using (Font fuenteCentro = new Font("Segoe UI", 10f, FontStyle.Bold))
-                using (Font fuenteCentroPequena = new Font("Segoe UI", 6.7f))
-                using (SolidBrush texto = new SolidBrush(ForeColor))
-                using (SolidBrush fondoCentro = new SolidBrush(BackColor))
-                {
-                    int ancho = ClientSize.Width;
-                    int alto = ClientSize.Height;
-                    if (ancho < 100 || alto < 70)
-                        return;
-
-                    List<OverviewBar> valores = estados.Where(x => x.Value > 0)
-                        .OrderByDescending(x => x.Value).Take(8).ToList();
-                    long total = valores.Sum(x => (long)x.Value);
-                    if (total <= 0)
-                    {
-                        TextRenderer.DrawText(g, "Sin equipos para estos filtros", fuente,
-                            ClientRectangle, ForeColor,
-                            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
-                        return;
-                    }
-
-                    int anchoLeyenda = Math.Max(118, (int)(ancho * 0.43));
-                    int areaDonut = Math.Max(70, ancho - anchoLeyenda - 8);
-                    int diametro = Math.Max(58, Math.Min(alto - 24, areaDonut - 12));
-                    int xDonut = Math.Max(2, (areaDonut - diametro) / 2);
-                    int yDonut = Math.Max(2, (alto - diametro) / 2);
-                    Rectangle rectDonut = new Rectangle(xDonut, yDonut, diametro, diametro);
-                    float inicio = -90f;
-                    for (int i = 0; i < valores.Count; i++)
-                    {
-                        float barrido = i == valores.Count - 1
-                            ? 270f - inicio
-                            : (float)(360d * valores[i].Value / total);
-                        using (SolidBrush segmento = new SolidBrush(ColorParaEstado(valores[i].Label)))
-                            g.FillPie(segmento, rectDonut, inicio, Math.Max(0.1f, barrido));
-                        inicio += barrido;
-                    }
-
-                    int hueco = (int)(diametro * 0.58);
-                    Rectangle rectCentro = new Rectangle(
-                        rectDonut.X + (diametro - hueco) / 2,
-                        rectDonut.Y + (diametro - hueco) / 2,
-                        hueco, hueco);
-                    g.FillEllipse(fondoCentro, rectCentro);
-                    Rectangle textoTotal = new Rectangle(rectCentro.X, rectCentro.Y + rectCentro.Height / 2 - 16,
-                        rectCentro.Width, 22);
-                    TextRenderer.DrawText(g, total.ToString("N0", CultureInfo.GetCultureInfo("es-MX")),
-                        fuenteCentro, textoTotal, ForeColor,
-                        TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
-                    Rectangle textoEquipos = new Rectangle(rectCentro.X, textoTotal.Bottom - 1,
-                        rectCentro.Width, 15);
-                    TextRenderer.DrawText(g, "equipos", fuenteCentroPequena, textoEquipos, ForeColor,
-                        TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
-
-                    int leyendaX = areaDonut + 7;
-                    int filas = valores.Count;
-                    int altoFila = Math.Max(17, Math.Min(24, (alto - 8) / Math.Max(1, filas)));
-                    for (int i = 0; i < filas; i++)
-                    {
-                        int y = 4 + i * altoFila;
-                        using (SolidBrush muestra = new SolidBrush(ColorParaEstado(valores[i].Label)))
-                            g.FillEllipse(muestra, leyendaX, y + 5, 8, 8);
-
-                        int anchoValor = 78;
-                        Rectangle rectEtiqueta = new Rectangle(leyendaX + 13, y,
-                            Math.Max(20, ancho - leyendaX - anchoValor - 16), altoFila);
-                        Rectangle rectValor = new Rectangle(ancho - anchoValor - 3, y, anchoValor, altoFila);
-                        TextRenderer.DrawText(g, valores[i].Label, fuente, rectEtiqueta, ForeColor,
-                            TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
-                        string proporcion = ((double)valores[i].Value * 100d / total).ToString("0.#", CultureInfo.GetCultureInfo("es-MX")) + "%";
-                        string conteoYProporcion = valores[i].Value.ToString("N0", CultureInfo.GetCultureInfo("es-MX")) + " · " + proporcion;
-                        TextRenderer.DrawText(g, conteoYProporcion, fuente, rectValor, ForeColor,
-                            TextFormatFlags.VerticalCenter | TextFormatFlags.Right | TextFormatFlags.EndEllipsis);
-                    }
-                }
-            }
-        }
-
-        private sealed class OverviewBarChart : Panel
-        {
-            private List<OverviewBar> barras = new List<OverviewBar>();
-
-            [System.ComponentModel.DefaultValue(typeof(Color), "SeaGreen")]
-            public Color BarColor { get; set; } = Color.SeaGreen;
-
-            public OverviewBarChart()
-            {
-                SetStyle(
-                    ControlStyles.AllPaintingInWmPaint |
-                    ControlStyles.OptimizedDoubleBuffer |
-                    ControlStyles.UserPaint |
-                    ControlStyles.ResizeRedraw, true);
-
-                TabStop = false;
-            }
-
-            public void SetBars(List<OverviewBar> nuevos, Color color)
-            {
-                barras = nuevos ?? new List<OverviewBar>();
-                BarColor = color;
-                Invalidate();
-            }
-
-            protected override void OnPaint(PaintEventArgs e)
-            {
-                base.OnPaint(e);
-                Graphics graphics = e.Graphics;
-                graphics.SmoothingMode = SmoothingMode.AntiAlias;
-                Color texto = ForeColor;
-                Color barraFondo = BackColor == Color.Transparent ? Color.FromArgb(30, 40, 50) : ControlPaint.Dark(BackColor, 0.08f);
-                using (Font fuente = new Font("Segoe UI", 8f, FontStyle.Regular))
-                using (Font fuenteNegrita = new Font("Segoe UI", 8f, FontStyle.Bold))
-                using (SolidBrush brushFondo = new SolidBrush(barraFondo))
-                using (SolidBrush brushBarra = new SolidBrush(BarColor))
-                {
-                    if (barras.Count == 0)
-                    {
-                        TextRenderer.DrawText(graphics, "Sin registros para estos filtros", fuente,
-                            ClientRectangle, texto, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
-                        return;
-                    }
-
-                    List<OverviewBar> visibles = barras.OrderByDescending(b => b.Value).Take(6).ToList();
-                    int maximo = Math.Max(1, visibles.Max(b => b.Value));
-                    int filaAlto = Math.Max(25, Math.Min(34, (ClientSize.Height - 12) / visibles.Count));
-                    int anchoEtiqueta = Math.Min(155, Math.Max(82, ClientSize.Width / 3));
-                    int anchoConteo = 42;
-                    int xBarra = anchoEtiqueta + 8;
-                    int anchoBarra = Math.Max(24, ClientSize.Width - xBarra - anchoConteo - 18);
-
-                    for (int i = 0; i < visibles.Count; i++)
-                    {
-                        OverviewBar barra = visibles[i];
-                        int y = 4 + i * filaAlto;
-                        Rectangle rectEtiqueta = new Rectangle(2, y, anchoEtiqueta, filaAlto - 2);
-                        TextRenderer.DrawText(graphics, barra.Label, fuente, rectEtiqueta, texto,
-                            TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
-                        Rectangle fondo = new Rectangle(xBarra, y + (filaAlto - 12) / 2, anchoBarra, 12);
-                        graphics.FillRectangle(brushFondo, fondo);
-                        int anchoRelleno = Math.Max(barra.Value > 0 ? 3 : 0, (int)(anchoBarra * barra.Value / (double)maximo));
-                        graphics.FillRectangle(brushBarra, new Rectangle(fondo.X, fondo.Y, Math.Min(anchoBarra, anchoRelleno), fondo.Height));
-                        Rectangle rectValor = new Rectangle(xBarra + anchoBarra + 5, y, anchoConteo, filaAlto - 2);
-                        TextRenderer.DrawText(graphics, barra.Value.ToString("N0", CultureInfo.CurrentCulture), fuenteNegrita,
-                            rectValor, texto, TextFormatFlags.VerticalCenter | TextFormatFlags.Right | TextFormatFlags.EndEllipsis);
-                    }
-                }
-            }
-        }
-
-        // =========================================================
-        // ACCIONES
-        // =========================================================
-        private void EjecutarEnvioWhatsApp()
-        {
-            global::SUSTENTACION.PanelAdministrador.CotrolReporte.AbrirNotificacionWhatsApp(this);
-        }
-
         private void BtnCerrarSesion_Click(object? sender, EventArgs e)
         {
-            DialogResult result = MessageBox.Show(
-                "¿Estás seguro de que deseas cerrar sesión?",
-                "Cerrar Sesión",
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Question
-            );
-
-            if (result == DialogResult.Yes)
-            {
-                this.Close();
-            }
+            DialogResult result = MessageBox.Show("¿Estás seguro de que deseas cerrar sesión?", "Cerrar Sesión", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+            if (result == DialogResult.Yes) this.Close();
         }
 
-        // =========================================================
-        // UTILIDADES VISUALES
-        // =========================================================
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            animTimer?.Stop();
+            animTimer?.Dispose();
+            base.OnFormClosed(e);
+        }
+
         private void AplicarBordesRedondeados(Control control, int radio)
         {
             Action recalcularRegion = () =>
@@ -2746,6 +905,566 @@ ORDER BY CASE WHEN estado = 'Activo' THEN 0 ELSE 1 END, apellido, nombre";
 
             control.Resize += (s, e) => recalcularRegion();
             recalcularRegion();
+        }
+    }
+
+    // =============================================================
+    //  MENÚ LATERAL (Restaurado para solucionar los errores)
+    // =============================================================
+    internal sealed class BarraLateral : Control
+    {
+        public const int AnchoColapsado = 76;
+        public const int AnchoExpandido = 240;
+
+        private const int ItemsTop = 122;
+        private const int ItemAlto = 46;
+        private const int ItemSep = 6;
+
+        private const int ZonaMarca = 100;
+        private const int ZonaToggle = 101;
+        private const int ZonaTema = 102;
+
+        private sealed class Paleta
+        {
+            public Color Fondo, Tarjeta, Hover, Borde, Texto, Suave, Gris;
+        }
+
+        private static readonly Paleta Oscura = new Paleta
+        {
+            Fondo = Color.FromArgb(15, 20, 28),
+            Tarjeta = Color.FromArgb(22, 28, 36),
+            Hover = Color.FromArgb(28, 35, 44),
+            Borde = Color.FromArgb(39, 47, 58),
+            Texto = Color.FromArgb(245, 247, 250),
+            Suave = Color.FromArgb(203, 213, 225),
+            Gris = Color.FromArgb(148, 163, 184)
+        };
+
+        private static readonly Paleta Clara = new Paleta
+        {
+            Fondo = Color.FromArgb(248, 250, 252),
+            Tarjeta = Color.White,
+            Hover = Color.FromArgb(232, 240, 235),
+            Borde = Color.FromArgb(214, 225, 231),
+            Texto = Color.FromArgb(23, 36, 48),
+            Suave = Color.FromArgb(60, 76, 90),
+            Gris = Color.FromArgb(96, 112, 126)
+        };
+
+        private static readonly Color Verde = Color.FromArgb(163, 230, 53);
+        private static readonly Color VerdeSuave = Color.FromArgb(102, 204, 51);
+
+        private static readonly Font FMarca = new Font("Segoe UI", 15f, FontStyle.Bold);
+        private static readonly Font FMarcaLetra = new Font("Segoe UI", 17f, FontStyle.Bold);
+        private static readonly Font FSub = new Font("Segoe UI", 8f);
+        private static readonly Font FSeccion = new Font("Segoe UI", 7.75f, FontStyle.Bold);
+        private static readonly Font FItem = new Font("Segoe UI", 9.3f);
+        private static readonly Font FItemB = new Font("Segoe UI", 9.5f, FontStyle.Bold);
+        private static readonly Font FIcono = new Font("Segoe UI Symbol", 12f, FontStyle.Bold);
+        private static readonly Font FEmoji = new Font("Segoe UI Emoji", 12f);
+        private static readonly Font FEstadoT = new Font("Segoe UI", 9f, FontStyle.Bold);
+        private static readonly Font FEstadoS = new Font("Segoe UI", 8.5f);
+        private static readonly Font FTema = new Font("Segoe UI", 9.1f, FontStyle.Bold);
+        private static readonly Font FTemaIcono = new Font("Segoe UI Symbol", 11f, FontStyle.Bold);
+
+        private sealed class Item
+        {
+            public string Texto = "";
+            public string Icono = "";
+            public bool Emoji;
+            public float Hover;
+            public float HoverObjetivo;
+        }
+
+        private readonly List<Item> items = new List<Item>();
+        private readonly System.Windows.Forms.Timer timer;
+        private readonly ToolTip tip = new ToolTip();
+
+        private int seleccionado = -1;
+        private float hlY;
+        private float hlObjetivo;
+        private int zonaHover = -1;
+        private int zonaTooltip = -2;
+        private float hoverTema;
+        private float hoverTemaObjetivo;
+        private int tick;
+        private bool oscuro = true;
+        private bool expandido = true;
+
+        public event Action<int>? ItemClick;
+        public event EventHandler? ToggleClick;
+        public event EventHandler? TemaClick;
+
+        public bool Oscuro
+        {
+            get { return oscuro; }
+            set { oscuro = value; Invalidate(); }
+        }
+
+        public bool Expandido
+        {
+            get { return expandido; }
+            set { expandido = value; Invalidate(); }
+        }
+
+        private Paleta Pal { get { return oscuro ? Oscura : Clara; } }
+
+        private float Progreso
+        {
+            get
+            {
+                float p = (Width - AnchoColapsado) / (float)(AnchoExpandido - AnchoColapsado);
+                return Math.Max(0f, Math.Min(1f, p));
+            }
+        }
+
+        public BarraLateral()
+        {
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint |
+                     ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+            DoubleBuffered = true;
+            TabStop = false;
+            BackColor = Oscura.Fondo;
+
+            timer = new System.Windows.Forms.Timer { Interval = 15 };
+            timer.Tick += (s, e) => Animar();
+        }
+
+        public void AgregarItem(string texto, string icono, bool emoji)
+        {
+            items.Add(new Item { Texto = texto, Icono = icono, Emoji = emoji });
+            Invalidate();
+        }
+
+        public void Seleccionar(int indice)
+        {
+            if (indice < 0 || indice >= items.Count) return;
+
+            bool primera = seleccionado < 0;
+            seleccionado = indice;
+            hlObjetivo = ItemY(indice);
+            if (primera) hlY = hlObjetivo;
+            Invalidate();
+        }
+
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            timer.Start();
+        }
+
+        protected override void OnHandleDestroyed(EventArgs e)
+        {
+            timer.Stop();
+            base.OnHandleDestroyed(e);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                timer.Stop();
+                timer.Dispose();
+                tip.Dispose();
+            }
+            base.Dispose(disposing);
+        }
+
+        private static float ItemY(int i)
+        {
+            return ItemsTop + i * (ItemAlto + ItemSep);
+        }
+
+        private RectangleF ItemRect(int i)
+        {
+            return new RectangleF(12, ItemY(i), Width - 24, ItemAlto);
+        }
+
+        private Rectangle MarcaRect { get { return new Rectangle(16, 16, 44, 44); } }
+        private Rectangle ToggleRect { get { return new Rectangle(Width - 44, 24, 28, 28); } }
+        private Rectangle TemaRect { get { return new Rectangle(12, Height - 14 - 42, Width - 24, 42); } }
+
+        private Rectangle EstadoRect
+        {
+            get { return new Rectangle(12, TemaRect.Top - 12 - 98, Width - 24, 98); }
+        }
+
+        private bool HayEspacioEstado
+        {
+            get { return EstadoRect.Top > ItemY(items.Count) + 10; }
+        }
+
+        private int ZonaEn(Point pt)
+        {
+            float prog = Progreso;
+            if (prog > 0.5f && ToggleRect.Contains(pt)) return ZonaToggle;
+            if (prog <= 0.5f && MarcaRect.Contains(pt)) return ZonaMarca;
+            if (TemaRect.Contains(pt)) return ZonaTema;
+            for (int i = 0; i < items.Count; i++)
+                if (ItemRect(i).Contains(pt.X, pt.Y)) return i;
+            return -1;
+        }
+
+        private void Animar()
+        {
+            bool cambio = false;
+
+            if (Math.Abs(hlObjetivo - hlY) > 0.4f)
+            {
+                hlY += (hlObjetivo - hlY) * 0.26f;
+                cambio = true;
+            }
+            else if (hlY != hlObjetivo)
+            {
+                hlY = hlObjetivo;
+                cambio = true;
+            }
+
+            foreach (Item it in items)
+            {
+                if (Math.Abs(it.HoverObjetivo - it.Hover) > 0.01f)
+                {
+                    it.Hover += (it.HoverObjetivo - it.Hover) * 0.3f;
+                    cambio = true;
+                }
+                else it.Hover = it.HoverObjetivo;
+            }
+
+            if (Math.Abs(hoverTemaObjetivo - hoverTema) > 0.01f)
+            {
+                hoverTema += (hoverTemaObjetivo - hoverTema) * 0.3f;
+                cambio = true;
+            }
+            else hoverTema = hoverTemaObjetivo;
+
+            if (cambio)
+            {
+                Invalidate();
+            }
+            else
+            {
+                tick++;
+                if (tick % 3 == 0 && HayEspacioEstado)
+                    Invalidate(Rectangle.Inflate(EstadoRect, 4, 30));
+            }
+        }
+
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            base.OnMouseMove(e);
+            int zona = ZonaEn(e.Location);
+
+            if (zona != zonaHover)
+            {
+                zonaHover = zona;
+                for (int i = 0; i < items.Count; i++)
+                    items[i].HoverObjetivo = i == zona ? 1f : 0f;
+                hoverTemaObjetivo = zona == ZonaTema ? 1f : 0f;
+                Cursor = zona >= 0 ? Cursors.Hand : Cursors.Default;
+                ActualizarTooltip(zona);
+            }
+        }
+
+        protected override void OnMouseLeave(EventArgs e)
+        {
+            base.OnMouseLeave(e);
+            zonaHover = -1;
+            foreach (Item it in items) it.HoverObjetivo = 0f;
+            hoverTemaObjetivo = 0f;
+            Cursor = Cursors.Default;
+            ActualizarTooltip(-1);
+        }
+
+        private void ActualizarTooltip(int zona)
+        {
+            if (zona == zonaTooltip) return;
+            zonaTooltip = zona;
+
+            if (zona < 0 || Progreso > 0.3f)
+            {
+                tip.Hide(this);
+                return;
+            }
+
+            string texto;
+            int y;
+            if (zona == ZonaMarca)
+            {
+                texto = "Expandir menú  (Ctrl + B)";
+                y = MarcaRect.Top + 12;
+            }
+            else if (zona == ZonaTema)
+            {
+                texto = oscuro ? "Cambiar a modo claro" : "Cambiar a modo oscuro";
+                y = TemaRect.Top + 12;
+            }
+            else if (zona >= 0 && zona < items.Count)
+            {
+                texto = items[zona].Texto;
+                y = (int)ItemY(zona) + 12;
+            }
+            else
+            {
+                tip.Hide(this);
+                return;
+            }
+
+            tip.Show(texto, this, Width + 6, y);
+        }
+
+        protected override void OnMouseClick(MouseEventArgs e)
+        {
+            base.OnMouseClick(e);
+            int zona = ZonaEn(e.Location);
+
+            if (zona == ZonaToggle || zona == ZonaMarca)
+            {
+                var h = ToggleClick;
+                if (h != null) h(this, EventArgs.Empty);
+            }
+            else if (zona == ZonaTema)
+            {
+                var h = TemaClick;
+                if (h != null) h(this, EventArgs.Empty);
+            }
+            else if (zona >= 0 && zona < items.Count)
+            {
+                var h = ItemClick;
+                if (h != null) h(zona);
+            }
+        }
+
+        private static GraphicsPath Redondo(RectangleF r, float radio)
+        {
+            var path = new GraphicsPath();
+            if (r.Width <= 1 || r.Height <= 1) return path;
+            float d = Math.Max(1f, Math.Min(radio * 2f, Math.Min(r.Width, r.Height)));
+            path.AddArc(r.X, r.Y, d, d, 180, 90);
+            path.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+            path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+            path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+            path.CloseFigure();
+            return path;
+        }
+
+        private static Color Lerp(Color a, Color b, float t)
+        {
+            t = Math.Max(0f, Math.Min(1f, t));
+            return Color.FromArgb(
+                (int)(a.A + (b.A - a.A) * t),
+                (int)(a.R + (b.R - a.R) * t),
+                (int)(a.G + (b.G - a.G) * t),
+                (int)(a.B + (b.B - a.B) * t));
+        }
+
+        private static Color Alfa(Color c, float f)
+        {
+            f = Math.Max(0f, Math.Min(1f, f));
+            return Color.FromArgb((int)(c.A * f), c.R, c.G, c.B);
+        }
+
+        private static void Texto(Graphics g, string s, Font f, Color c, RectangleF r, StringAlignment h = StringAlignment.Near)
+        {
+            using (var b = new SolidBrush(c))
+            using (var sf = new StringFormat
+            {
+                Alignment = h,
+                LineAlignment = StringAlignment.Center,
+                Trimming = StringTrimming.EllipsisCharacter,
+                FormatFlags = StringFormatFlags.NoWrap
+            })
+                g.DrawString(s, f, b, r, sf);
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            var g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+
+            Paleta p = Pal;
+            float prog = Progreso;
+            g.Clear(p.Fondo);
+
+            using (var pen = new Pen(p.Borde, 1))
+                g.DrawLine(pen, Width - 1, 0, Width - 1, Height);
+
+            DibujarMarca(g, p, prog);
+            DibujarSeccion(g, p, prog);
+            DibujarResaltado(g);
+            DibujarItems(g, p, prog);
+
+            if (HayEspacioEstado) DibujarEstado(g, p, prog);
+            DibujarTema(g, p, prog);
+        }
+
+        private void DibujarMarca(Graphics g, Paleta p, float prog)
+        {
+            var marca = MarcaRect;
+            using (var path = Redondo(marca, 12))
+            using (var br = new LinearGradientBrush(marca, Verde, VerdeSuave, LinearGradientMode.ForwardDiagonal))
+                g.FillPath(br, path);
+            Texto(g, "A", FMarcaLetra, Color.Black, marca, StringAlignment.Center);
+
+            if (prog > 0.03f)
+            {
+                var estado = g.Save();
+                g.SetClip(new Rectangle(68, 0, Math.Max(1, Width - 68 - 52), 76));
+                Texto(g, "ARTEMUSA", FMarca, Alfa(Verde, prog), new RectangleF(70, 14, 150, 26));
+                Texto(g, "Gestión de Inventario", FSub, Alfa(p.Gris, prog), new RectangleF(71, 40, 160, 16));
+                g.Restore(estado);
+
+                var t = ToggleRect;
+                bool hover = zonaHover == ZonaToggle;
+                using (var b = new SolidBrush(Alfa(hover ? p.Hover : p.Tarjeta, prog)))
+                    g.FillEllipse(b, t);
+                using (var pen = new Pen(Alfa(p.Borde, prog), 1))
+                    g.DrawEllipse(pen, t);
+                using (var pen = new Pen(Alfa(p.Suave, prog), 2f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+                {
+                    float cx = t.X + t.Width / 2f, cy = t.Y + t.Height / 2f;
+                    g.DrawLine(pen, cx + 2.5f, cy - 5.5f, cx - 3f, cy);
+                    g.DrawLine(pen, cx - 3f, cy, cx + 2.5f, cy + 5.5f);
+                }
+            }
+        }
+
+        private void DibujarSeccion(Graphics g, Paleta p, float prog)
+        {
+            if (prog > 0.03f)
+                Texto(g, "MENÚ PRINCIPAL", FSeccion, Alfa(p.Gris, prog), new RectangleF(22, 90, 160, 16));
+
+            if (prog < 0.97f)
+            {
+                using (var pen = new Pen(Alfa(p.Borde, 1f - prog), 1))
+                    g.DrawLine(pen, 24, 98, Width - 24, 98);
+            }
+        }
+
+        private void DibujarResaltado(Graphics g)
+        {
+            if (seleccionado < 0) return;
+
+            var r = new RectangleF(12, hlY, Width - 24, ItemAlto);
+
+            for (int k = 3; k >= 1; k--)
+            {
+                var rg = RectangleF.Inflate(r, k * 2f, k * 2f);
+                using (var path = Redondo(rg, 12 + k))
+                using (var b = new SolidBrush(Color.FromArgb(10, Verde)))
+                    g.FillPath(b, path);
+            }
+
+            using (var path = Redondo(r, 12))
+            using (var br = new LinearGradientBrush(
+                new RectangleF(r.X, r.Y, Math.Max(1f, r.Width), Math.Max(1f, r.Height)),
+                Verde, VerdeSuave, LinearGradientMode.Horizontal))
+                g.FillPath(br, path);
+        }
+
+        private void DibujarItems(Graphics g, Paleta p, float prog)
+        {
+            for (int i = 0; i < items.Count; i++)
+            {
+                Item it = items[i];
+                RectangleF r = ItemRect(i);
+
+                if (it.Hover > 0.02f && i != seleccionado)
+                {
+                    using (var path = Redondo(r, 12))
+                    using (var b = new SolidBrush(Alfa(p.Hover, it.Hover)))
+                        g.FillPath(b, path);
+                }
+
+                float act = seleccionado >= 0
+                    ? Math.Max(0f, 1f - Math.Abs(r.Y - hlY) / (ItemAlto + ItemSep))
+                    : 0f;
+
+                Color baseColor = Lerp(p.Gris, p.Texto, it.Hover);
+                Color color = Lerp(baseColor, Color.Black, act);
+
+                var iconoRect = new RectangleF(12, r.Y, 52, r.Height);
+                Texto(g, it.Icono, it.Emoji ? FEmoji : FIcono, color, iconoRect, StringAlignment.Center);
+
+                if (prog > 0.03f)
+                {
+                    var estado = g.Save();
+                    g.SetClip(new RectangleF(66, r.Y, Math.Max(1f, r.Width - 56), r.Height));
+                    Texto(g, it.Texto, act > 0.5f ? FItemB : FItem, Alfa(color, prog),
+                        new RectangleF(70, r.Y, Math.Max(1f, r.Width - 60), r.Height));
+                    g.Restore(estado);
+                }
+            }
+        }
+
+        private void DibujarEstado(Graphics g, Paleta p, float prog)
+        {
+            float pulso = (float)(0.5 + 0.5 * Math.Sin(Environment.TickCount / 380.0));
+            var r = EstadoRect;
+
+            if (prog > 0.03f)
+            {
+                var estado = g.Save();
+                g.SetClip(r);
+                using (var path = Redondo(r, 14))
+                {
+                    using (var b = new SolidBrush(Alfa(p.Tarjeta, prog)))
+                        g.FillPath(b, path);
+                    using (var pen = new Pen(Alfa(p.Borde, prog), 1))
+                        g.DrawPath(pen, path);
+                }
+
+                Texto(g, "Estado del Sistema", FEstadoT, Alfa(p.Texto, prog),
+                    new RectangleF(r.X + 16, r.Y + 12, r.Width - 24, 20));
+
+                float cy = r.Y + 56;
+                using (var b = new SolidBrush(Alfa(Verde, prog * (0.15f + 0.2f * pulso))))
+                    g.FillEllipse(b, r.X + 14 - 4 * pulso, cy - 4 * pulso - 2, 12 + 8 * pulso, 12 + 8 * pulso);
+                using (var b = new SolidBrush(Alfa(Verde, prog)))
+                    g.FillEllipse(b, r.X + 18, cy + 2, 8, 8);
+
+                Texto(g, "Sistema operativo", FEstadoS, Alfa(p.Suave, prog),
+                    new RectangleF(r.X + 36, r.Y + 42, r.Width - 44, 18));
+                Texto(g, "Conexión estable", FEstadoS, Alfa(p.Gris, prog),
+                    new RectangleF(r.X + 36, r.Y + 60, r.Width - 44, 18));
+                g.Restore(estado);
+            }
+
+            if (prog < 0.97f)
+            {
+                float a = 1f - prog;
+                float cx = 38f, cy = r.Bottom - 20;
+                using (var b = new SolidBrush(Alfa(Verde, a * (0.15f + 0.2f * pulso))))
+                    g.FillEllipse(b, cx - 8 - 3 * pulso, cy - 8 - 3 * pulso, 16 + 6 * pulso, 16 + 6 * pulso);
+                using (var b = new SolidBrush(Alfa(Verde, a)))
+                    g.FillEllipse(b, cx - 4, cy - 4, 8, 8);
+            }
+        }
+
+        private void DibujarTema(Graphics g, Paleta p, float prog)
+        {
+            var r = TemaRect;
+            using (var path = Redondo(r, 12))
+            {
+                using (var b = new SolidBrush(Lerp(p.Tarjeta, p.Hover, hoverTema)))
+                    g.FillPath(b, path);
+                using (var pen = new Pen(p.Borde, 1))
+                    g.DrawPath(pen, path);
+            }
+
+            string glifo = oscuro ? "☀" : "☾";
+            Texto(g, glifo, FTemaIcono, p.Suave,
+                new RectangleF(r.X, r.Y, 52, r.Height), StringAlignment.Center);
+
+            if (prog > 0.03f)
+            {
+                var estado = g.Save();
+                g.SetClip(new RectangleF(r.X + 50, r.Y, Math.Max(1f, r.Width - 54), r.Height));
+                Texto(g, oscuro ? "Modo claro" : "Modo oscuro", FTema, Alfa(p.Suave, prog),
+                    new RectangleF(r.X + 56, r.Y, Math.Max(1f, r.Width - 60), r.Height));
+                g.Restore(estado);
+            }
         }
     }
 }
