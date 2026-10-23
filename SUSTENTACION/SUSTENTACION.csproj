@@ -8,6 +8,7 @@
 		<UseWindowsForms>true</UseWindowsForms>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<NoWarn>$(NoWarn);WFO1000</NoWarn>
+		<ApplicationIcon>logo_artemusa.ico</ApplicationIcon>
 	</PropertyGroup>
 
 	<!-- DEPENDENCIAS DEL ADMINISTRADOR Y TRABAJADOR -->
@@ -17,6 +18,7 @@
 		<PackageReference Include="Npgsql" Version="10.0.3" />
 		<PackageReference Include="Twilio" Version="8.0.0" />
 		<PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" />
+		<Content Include="logo_artemusa.ico" CopyToOutputDirectory="PreserveNewest" />
 	</ItemGroup>
 
 	<!-- EXCLUIR LOGIN ANTIGUO DEL ADMINISTRADOR -->
@@ -26,17 +28,17 @@
 		<Compile Remove="LoginForm1.Designer.cs" />
 		<EmbeddedResource Remove="LoginForm1.resx" />
 	</ItemGroup>
+	<ItemGroup>
+	  <Content Include="logo_artemusa.ico" />
+	</ItemGroup>
 
 	<!-- RECURSOS DEL MAPA DEL TRABAJADOR -->
 	<ItemGroup>
-		<Content Update="PanelTrabajador\Mapas\mapa.html"
-                 CopyToOutputDirectory="PreserveNewest" />
+		<Content Update="PanelTrabajador\Mapas\mapa.html" CopyToOutputDirectory="PreserveNewest" />
 
-		<None Update="PanelTrabajador\Mapas\css\style.css"
-              CopyToOutputDirectory="PreserveNewest" />
+		<None Update="PanelTrabajador\Mapas\css\style.css" CopyToOutputDirectory="PreserveNewest" />
 
-		<None Update="PanelTrabajador\Mapas\js\script.js"
-              CopyToOutputDirectory="PreserveNewest" />
+		<None Update="PanelTrabajador\Mapas\js\script.js" CopyToOutputDirectory="PreserveNewest" />
 	</ItemGroup>
 
 	<!-- CONFIGURACIÓN DE RECURSOS DE VISUAL STUDIO -->

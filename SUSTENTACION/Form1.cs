@@ -30,6 +30,19 @@ namespace SUSTENTACION
         public Form1()
         {
             ConstruirInterfaz();
+
+            string rutaIcono = System.IO.Path.Combine(
+                AppContext.BaseDirectory,
+                "logo_artemusa.ico"
+            );
+
+            if (System.IO.File.Exists(rutaIcono))
+            {
+                this.Icon = new Icon(rutaIcono);
+            }
+
+            this.ShowIcon = true;
+
             CargarCredencialesGuardadas();
         }
 
