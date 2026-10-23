@@ -1,3 +1,4 @@
+
 using System;
 using System.Windows.Forms;
 
@@ -11,8 +12,8 @@ namespace SUSTENTACION
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
-            // Inicio con formulario de login que redirige según rol
-            Application.Run(new LoginForm1());
+            // Iniciar con el login de la rama trabajador
+            Application.Run(new Form1());
         }
     }
 }

@@ -1,11 +1,11 @@
-﻿using System;
+﻿using Npgsql;
+using SUSTENTACION;
+using SUSTENTACION.PanelTrabajador;
+using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
-using System.Threading.Tasks;
 using System.Globalization;
 using System.Windows.Forms;
-// Se agrega la directiva using para acceder al UserControl GestionEquipo
-using SUSTENTACION.PanelTrabajador;
 
 namespace SUSTENTACION
 {
@@ -20,21 +20,14 @@ namespace SUSTENTACION
         private readonly Color textWhite = Color.White;
         private readonly Color textMuted = Color.FromArgb(130, 134, 158);
 
-        // Referencias a paneles principales y estado de navegación
-        private Panel panelSidebar = null!;
-        private Panel panelHeader = null!;
-        private Panel panelMainContent = null!;
-        private Button? botonActivo = null;
+        private Panel panelSidebar;
+        private Panel panelHeader;
+        private Panel panelMainContent;
+        private Button botonActivo = null;
 
-        // Propiedades del usuario que inicia sesión
-        private readonly string nombreUsuario;
-        private readonly string rolUsuario;
-
-        // Timer para la ejecución periódica
-        private System.Windows.Forms.Timer? timerReporte;
-
+        private string nombreUsuario;
+        private string rolUsuario;
         private DateTime fechaSeleccionada = DateTime.Now;
-
 
         // Variables para la animación del Sidebar
         private System.Windows.Forms.Timer timerSidebar;
@@ -42,23 +35,22 @@ namespace SUSTENTACION
         private const int ANCHO_MAX = 220;
         private const int ANCHO_MIN = 60;
 
-        public FormTrabajador(string nombre = "María López", string rol = "Trabajador")
+        // Variable para guardar el ID del trabajador logueado
+        private int idTrabajador;
+        public bool SesionCerrada { get; private set; } = false;
+
+        public FormTrabajador(int id = 1, string nombre = "María López", string rol = "Trabajador")
         {
             InitializeComponent();
-
-            this.nombreUsuario = !string.IsNullOrWhiteSpace(nombre) ? nombre : "Trabajador";
-            this.rolUsuario = !string.IsNullOrWhiteSpace(rol) ? rol : "Operador";
-
+            this.idTrabajador = id;
+            this.nombreUsuario = nombre;
+            this.rolUsuario = rol;
 
             ConfigurarVentana();
             InicializarTimerSidebar();
             CrearSidebar();
             CrearHeader();
             CrearMainContent();
-
-            // Enlace seguro de eventos del ciclo de vida del formulario
-            this.Load += FormTrabajador_Load;
-            this.FormClosing += FormTrabajador_FormClosing;
         }
 
         private void ConfigurarVentana()
@@ -70,12 +62,13 @@ namespace SUSTENTACION
             this.Font = new Font("Segoe UI", 9f, FontStyle.Regular);
             this.DoubleBuffered = true;
             this.FormBorderStyle = FormBorderStyle.Sizable;
+            this.WindowState = FormWindowState.Maximized;
         }
 
         private void InicializarTimerSidebar()
         {
             timerSidebar = new System.Windows.Forms.Timer();
-            timerSidebar.Interval = 10; // Velocidad de la animación
+            timerSidebar.Interval = 10;
             timerSidebar.Tick += (s, e) =>
             {
                 if (sidebarExpandido)
@@ -185,18 +178,12 @@ namespace SUSTENTACION
 
             AgregarEtiquetaSeccion(menuPanel, "Menú Principal");
             AgregarBotonMenu(menuPanel, "░", "Panel de Control", "Dashboard", true);
-
-            // CAMBIO: Se cambió el nombre de "Mensajes" a "Gestión de Equipos"
             AgregarBotonMenu(menuPanel, "💬", "Gestión de Equipos", "Chat", false);
-
-            // CAMBIO: Se cambió el nombre de "estudiantes" a "Informacion"
             AgregarBotonMenu(menuPanel, "ℹ️", "Información", "Info", false);
-            AgregarBotonMenu(menuPanel, "👥", "Docentes", "Teacher", false);
+            AgregarBotonMenu(menuPanel, "🔔", "Notificaciones y solicitudes", "Notificaciones", false);
             AgregarBotonMenu(menuPanel, "📅", "Eventos", "Event", false);
 
             AgregarEtiquetaSeccion(menuPanel, "Otros");
-            AgregarBotonMenu(menuPanel, "📊", "Finanzas", "Finance", false);
-            AgregarBotonMenu(menuPanel, "🍴", "Servicios", "Food", false);
             AgregarBotonMenu(menuPanel, "⚙️", "Ajustes", "Settings", false);
 
             panelSidebar.Controls.Add(menuPanel);
@@ -238,7 +225,6 @@ namespace SUSTENTACION
 
             btn.Click += (s, e) =>
             {
-                // Gestionar estado visual de botones
                 if (botonActivo != null)
                 {
                     botonActivo.BackColor = Color.Transparent;
@@ -248,9 +234,8 @@ namespace SUSTENTACION
                 btn.BackColor = purpleAccent;
                 btn.ForeColor = textWhite;
 
-                // Lógica de navegación
                 string opcion = btn.Tag?.ToString();
-                panelMainContent.Controls.Clear(); // Limpiar panel principal
+                panelMainContent.Controls.Clear();
 
                 switch (opcion)
                 {
@@ -262,10 +247,36 @@ namespace SUSTENTACION
                         vistaGestion.Dock = DockStyle.Fill;
                         panelMainContent.Controls.Add(vistaGestion);
                         break;
-                    case "Info": // NUEVO CASO
-                        InfoPanel vistaInfo = new InfoPanel();
+                    case "Info":
+                        InfoPanel vistaInfo = new InfoPanel(this.idTrabajador, this.nombreUsuario);
                         vistaInfo.Dock = DockStyle.Fill;
                         panelMainContent.Controls.Add(vistaInfo);
+                        break;
+                    case "Notificaciones":
+                        NotificacionesPanel vistaNotif = new NotificacionesPanel(this.idTrabajador, this.nombreUsuario);
+                        vistaNotif.Dock = DockStyle.Fill;
+                        panelMainContent.Controls.Add(vistaNotif);
+                        break;
+                    case "Event":
+                        EventosPanel vistaEventos = new EventosPanel(this.idTrabajador, this.nombreUsuario);
+                        vistaEventos.Dock = DockStyle.Fill;
+                        panelMainContent.Controls.Add(vistaEventos);
+                        break;
+                    case "Settings":
+                        AjustesPanel vistaAjustes = new AjustesPanel(this.idTrabajador, this.nombreUsuario);
+                        vistaAjustes.Dock = DockStyle.Fill;
+                        vistaAjustes.TemaCambiado += (esOscuro) =>
+                        {
+                            // Demostración visual del cambio de tema
+                            MessageBox.Show(
+                                esOscuro ? "🌙 Tema oscuro activado" : "☀️ Tema claro activado",
+                                "Apariencia",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Information);
+
+                            // TODO: Si decides implementar el tema claro, llama a AplicarTemaGlobal(esOscuro);
+                        };
+                        panelMainContent.Controls.Add(vistaAjustes);
                         break;
                     default:
                         break;
@@ -273,7 +284,6 @@ namespace SUSTENTACION
             };
 
             contenedor.Controls.Add(btn);
-
         }
 
         private void CrearHeader()
@@ -287,7 +297,6 @@ namespace SUSTENTACION
             };
             this.Controls.Add(panelHeader);
 
-            // Botón Hamburguesa de Tres Rayas (Inicia la animación)
             Button btnMenuToggle = new Button
             {
                 Text = "≡",
@@ -313,13 +322,12 @@ namespace SUSTENTACION
             };
             panelHeader.Controls.Add(lblTitle);
 
-            // Botón Cerrar Sesión (Reemplaza a Buscar y + Nuevo)
             Button btnCerrarSesion = new Button
             {
                 Text = "🚪 Cerrar Sesión",
                 Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
                 ForeColor = textWhite,
-                BackColor = Color.FromArgb(220, 53, 69), // Color rojo elegante
+                BackColor = Color.FromArgb(220, 53, 69),
                 FlatStyle = FlatStyle.Flat,
                 Size = new Size(130, 32),
                 Location = new Point(panelHeader.Width - 145, 14),
@@ -331,8 +339,9 @@ namespace SUSTENTACION
 
             btnCerrarSesion.Click += (s, e) =>
             {
-                if (MessageBox.Show("¿Está seguro de que desea cerrar sesión?", "ARTEMISA", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+                if (MessageBox.Show("¿Está seguro de que desea cerrar sesión?", "ARTEMUSA", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
                 {
+                    SesionCerrada = true;
                     this.Close();
                 }
             };
@@ -370,7 +379,7 @@ namespace SUSTENTACION
 
             Label lblEventListTitle = new Label
             {
-                Text = "Lista de Eventos\nActividades programadas",
+                Text = "Lista de Eventos\nProgramados y retornados",
                 Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
                 ForeColor = textWhite,
                 Dock = DockStyle.Top,
@@ -385,9 +394,11 @@ namespace SUSTENTACION
                 WrapContents = false,
                 AutoScroll = true
             };
-            flowEvents.Controls.Add(CrearTarjetaEvento("Septiembre 2026", "Reunión de ARTEMISA", "Gratis", "09:00 - 10:00 AM"));
-            flowEvents.Controls.Add(CrearTarjetaEvento("Septiembre 2026", "Capacitación Trabajadores", "$10.0", "02:00 - 05:00 PM"));
-            flowEvents.Controls.Add(CrearTarjetaEvento("Septiembre 2026", "Sustentación de Proyecto", "Gratis", "08:00 - 12:00 PM"));
+
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                CargarEventosEnLista(flowEvents, fechaSeleccionada);
+            });
 
             panelEventList.Controls.Add(flowEvents);
             lblEventListTitle.SendToBack();
@@ -461,6 +472,32 @@ namespace SUSTENTACION
             }
             calendarArea.Controls.Add(gridDiasHeader);
 
+            // CARGAR DÍAS CON EVENTOS
+            HashSet<int> diasConEventos = new HashSet<int>();
+            Conexion conexionDias = new Conexion();
+            try
+            {
+                NpgsqlConnection conDias = conexionDias.ObtenerConexion();
+                string queryDias = @"
+                    SELECT DISTINCT EXTRACT(DAY FROM fecha_salida)::int AS dia
+                    FROM salidas
+                    WHERE EXTRACT(MONTH FROM fecha_salida) = @mes
+                      AND EXTRACT(YEAR FROM fecha_salida) = @anio
+                      AND (estado IS NULL OR estado <> 'Devuelto')";
+
+                NpgsqlCommand cmdDias = new NpgsqlCommand(queryDias, conDias);
+                cmdDias.Parameters.AddWithValue("@mes", fechaSeleccionada.Month);
+                cmdDias.Parameters.AddWithValue("@anio", fechaSeleccionada.Year);
+
+                NpgsqlDataReader readerDias = cmdDias.ExecuteReader();
+                while (readerDias.Read())
+                {
+                    diasConEventos.Add(Convert.ToInt32(readerDias["dia"]));
+                }
+            }
+            catch { }
+            finally { conexionDias.CerrarConexion(); }
+
             DateTime primerDiaDelMes = new DateTime(fechaSeleccionada.Year, fechaSeleccionada.Month, 1);
             int diasEnMes = DateTime.DaysInMonth(fechaSeleccionada.Year, fechaSeleccionada.Month);
 
@@ -500,17 +537,86 @@ namespace SUSTENTACION
                             pnlDia.BackColor = bgCardSelected;
                         }
 
+                        bool tieneEventos = diasConEventos.Contains(contadorDia);
+                        if (tieneEventos && !esHoy)
+                        {
+                            pnlDia.BackColor = Color.FromArgb(120, 200, 230);
+                        }
+                        else if (tieneEventos && esHoy)
+                        {
+                            pnlDia.BackColor = Color.FromArgb(255, 150, 200);
+                        }
+
                         AplicarBordesRedondeados(pnlDia, 6);
 
                         Label lblNum = new Label
                         {
                             Text = contadorDia.ToString(),
                             Font = new Font("Segoe UI", 8f, FontStyle.Bold),
-                            ForeColor = esHoy ? Color.Black : textWhite,
+                            ForeColor = (esHoy || tieneEventos) ? Color.White : textWhite,
                             Location = new Point(4, 4),
                             AutoSize = true
                         };
                         pnlDia.Controls.Add(lblNum);
+
+                        int diaActual = contadorDia;
+                        DateTime fechaDelPanel = new DateTime(fechaSeleccionada.Year, fechaSeleccionada.Month, diaActual);
+
+                        if (fechaDelPanel >= DateTime.Today)
+                        {
+                            pnlDia.Cursor = Cursors.Hand;
+                            int diaParaEvento = diaActual;
+                            bool tieneEventoEsteDia = tieneEventos;
+
+                            pnlDia.Click += (s, ev) =>
+                            {
+                                if (tieneEventoEsteDia)
+                                {
+                                    using (var formRetorno = new FormRetornoEquipo(
+                                        this.idTrabajador,
+                                        this.nombreUsuario,
+                                        fechaDelPanel))
+                                    {
+                                        if (formRetorno.ShowDialog() == DialogResult.OK)
+                                        {
+                                            ConstruirCalendarioEvents();
+                                        }
+                                    }
+                                }
+                                else
+                                {
+                                    this.Hide();
+                                    using (var formSalida = new FormSalidaEquipo(this.idTrabajador, this.nombreUsuario, fechaDelPanel))
+                                    {
+                                        formSalida.ShowDialog();
+                                        if (formSalida.DialogResult == DialogResult.OK)
+                                        {
+                                            ConstruirCalendarioEvents();
+                                        }
+                                    }
+                                    this.Show();
+                                    this.BringToFront();
+                                }
+                            };
+
+                            pnlDia.MouseEnter += (s, ev) => pnlDia.BackColor = Color.FromArgb(60, 62, 90);
+                            pnlDia.MouseLeave += (s, ev) =>
+                            {
+                                if (esHoy && tieneEventoEsteDia)
+                                    pnlDia.BackColor = Color.FromArgb(255, 150, 200);
+                                else if (esHoy)
+                                    pnlDia.BackColor = bgCardSelected;
+                                else if (tieneEventoEsteDia)
+                                    pnlDia.BackColor = Color.FromArgb(120, 200, 230);
+                                else
+                                    pnlDia.BackColor = bgCard;
+                            };
+                        }
+                        else
+                        {
+                            pnlDia.Cursor = Cursors.No;
+                        }
+
                         contadorDia++;
                     }
                     else
@@ -529,7 +635,126 @@ namespace SUSTENTACION
             panelMainContent.Controls.Add(panelEventList);
         }
 
-        private Panel CrearTarjetaEvento(string fecha, string titulo, string precio, string hora)
+        private void CargarEventosEnLista(FlowLayoutPanel contenedor, DateTime mes)
+        {
+            Conexion conexionDB = new Conexion();
+            try
+            {
+                NpgsqlConnection con = conexionDB.ObtenerConexion();
+
+                string query = @"
+                    SELECT 
+                        s.id_salida,
+                        s.fecha_salida,
+                        s.encargado,
+                        s.ubicacion,
+                        s.detalles,
+                        s.estado,
+                        e.hora_inicio,
+                        e.hora_fin,
+                        e.titulo AS titulo_evento,
+                        STRING_AGG(eq.nombre, ', ') AS equipos,
+                        CASE 
+                            WHEN EXISTS (
+                                SELECT 1 FROM retornos r 
+                                WHERE r.id_salida = s.id_salida
+                            ) THEN 'Retornado'
+                            ELSE 'Activo'
+                        END AS estado_retorno
+                    FROM salidas s
+                    LEFT JOIN eventos e ON e.id = s.id_evento
+                    LEFT JOIN salida_equipos se ON s.id_salida = se.id_salida
+                    LEFT JOIN equipos eq ON se.id_equipo = eq.id
+                    WHERE EXTRACT(MONTH FROM s.fecha_salida) = @mes 
+                      AND EXTRACT(YEAR FROM s.fecha_salida) = @anio
+                    GROUP BY s.id_salida, s.fecha_salida, s.encargado, 
+                             s.ubicacion, s.detalles, s.estado,
+                             e.hora_inicio, e.hora_fin, e.titulo
+                    ORDER BY s.fecha_salida ASC";
+
+                NpgsqlCommand cmd = new NpgsqlCommand(query, con);
+                cmd.Parameters.AddWithValue("@mes", mes.Month);
+                cmd.Parameters.AddWithValue("@anio", mes.Year);
+
+                NpgsqlDataReader reader = cmd.ExecuteReader();
+
+                bool hay = false;
+                while (reader.Read())
+                {
+                    hay = true;
+                    DateTime fecha = Convert.ToDateTime(reader["fecha_salida"]);
+                    string encargado = reader["encargado"].ToString();
+                    string ubicacion = reader["ubicacion"].ToString();
+                    string equipos = reader["equipos"]?.ToString() ?? "";
+                    string estadoRetorno = reader["estado_retorno"].ToString();
+                    string tituloEvento = reader["titulo_evento"]?.ToString() ?? "";
+
+                    string horaTexto = "00:00";
+                    if (reader["hora_inicio"] != DBNull.Value)
+                    {
+                        object valorHora = reader["hora_inicio"];
+
+                        if (valorHora is TimeOnly timeOnly)
+                            horaTexto = timeOnly.ToString("HH:mm");
+                        else if (valorHora is TimeSpan timeSpan)
+                            horaTexto = timeSpan.ToString(@"hh\:mm");
+                        else
+                        {
+                            string str = valorHora.ToString();
+                            if (TimeSpan.TryParse(str, out TimeSpan ts))
+                                horaTexto = ts.ToString(@"hh\:mm");
+                        }
+                    }
+
+                    string fechaTexto = fecha.ToString("dd MMM yyyy", new CultureInfo("es-ES"));
+
+                    string titulo = estadoRetorno == "Retornado"
+                        ? $"✅ Retorno - {encargado}"
+                        : $"📤 Salida - {encargado}";
+
+                    string detalles = $"{equipos} | {ubicacion}";
+
+                    Color colorTitulo = estadoRetorno == "Retornado"
+                        ? Color.FromArgb(100, 220, 160)
+                        : textWhite;
+
+                    Panel tarjeta = CrearTarjetaEvento(fechaTexto, titulo, detalles, horaTexto, colorTitulo);
+
+                    if (contenedor.InvokeRequired)
+                        contenedor.Invoke(new Action(() => contenedor.Controls.Add(tarjeta)));
+                    else
+                        contenedor.Controls.Add(tarjeta);
+                }
+
+                if (!hay)
+                {
+                    Label lblVacio = new Label
+                    {
+                        Text = "No hay salidas programadas este mes.",
+                        Font = new Font("Segoe UI", 8.5f, FontStyle.Italic),
+                        ForeColor = textMuted,
+                        AutoSize = true,
+                        Margin = new Padding(10)
+                    };
+
+                    if (contenedor.InvokeRequired)
+                        contenedor.Invoke(new Action(() => contenedor.Controls.Add(lblVacio)));
+                    else
+                        contenedor.Controls.Add(lblVacio);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Error al cargar eventos:\n" + ex.Message,
+                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                conexionDB.CerrarConexion();
+            }
+        }
+
+        private Panel CrearTarjetaEvento(string fecha, string titulo, string detalles, string hora, Color colorTitulo)
         {
             Panel card = new Panel
             {
@@ -539,32 +764,49 @@ namespace SUSTENTACION
             };
             AplicarBordesRedondeados(card, 8);
 
-            Label lblFecha = new Label { Text = fecha, Font = new Font("Segoe UI", 7f), ForeColor = purpleAccent, Location = new Point(6, 6), AutoSize = true };
-            Label lblTitulo = new Label { Text = titulo, Font = new Font("Segoe UI", 8.5f, FontStyle.Bold), ForeColor = textWhite, Location = new Point(6, 20), AutoSize = true };
-            Label lblHora = new Label { Text = $"🕒 {hora}", Font = new Font("Segoe UI", 7f), ForeColor = textMuted, Location = new Point(6, 44), AutoSize = true };
-            Label lblPrecio = new Label { Text = precio, Font = new Font("Segoe UI", 8.5f, FontStyle.Bold), ForeColor = textWhite, Location = new Point(170, 20), AutoSize = true };
+            Label lblFecha = new Label
+            {
+                Text = fecha,
+                Font = new Font("Segoe UI", 7f),
+                ForeColor = purpleAccent,
+                Location = new Point(6, 6),
+                AutoSize = true
+            };
+
+            Label lblTitulo = new Label
+            {
+                Text = titulo,
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                ForeColor = colorTitulo,
+                Location = new Point(6, 20),
+                AutoSize = true
+            };
+
+            Label lblHora = new Label
+            {
+                Text = $"🕒 {hora}",
+                Font = new Font("Segoe UI", 7f),
+                ForeColor = textMuted,
+                Location = new Point(6, 44),
+                AutoSize = true
+            };
+
+            Label lblDetalles = new Label
+            {
+                Text = detalles,
+                Font = new Font("Segoe UI", 6.5f),
+                ForeColor = textMuted,
+                Location = new Point(6, 57),
+                Size = new Size(200, 15),
+                AutoEllipsis = true
+            };
 
             card.Controls.Add(lblFecha);
             card.Controls.Add(lblTitulo);
             card.Controls.Add(lblHora);
-            card.Controls.Add(lblPrecio);
+            card.Controls.Add(lblDetalles);
 
             return card;
-        }
-
-        private void BtnCerrarSesion_Click(object? sender, EventArgs e)
-        {
-            DialogResult result = MessageBox.Show("¿Estás seguro de que deseas cerrar sesión?",
-                                                "Cerrar Sesión",
-                                                MessageBoxButtons.YesNo,
-                                                MessageBoxIcon.Question);
-
-            if (result == DialogResult.Yes)
-            {
-                LoginForm1 login = new LoginForm1();
-                login.Show();
-                this.Close();
-            }
         }
 
         private void AplicarBordesRedondeados(Control control, int radio)
@@ -588,58 +830,22 @@ namespace SUSTENTACION
             recalcularRegion();
         }
 
-        // ==========================================
-        // CONTROL ASÍNCRONO DEL REPORTE AUTOMÁTICO
-        // ==========================================
-        private async void FormTrabajador_Load(object? sender, EventArgs e)
+        private void FormTrabajador_Load(object sender, EventArgs e)
         {
-            // 1. Envío inicial directo (con await sin Task.Run para permitir alertas visuales sin bloquear la UI)
-            try
-            {
-                await SUSTENTACION.ServicioWhatsApp.ServicioWhatsApp.EnviarReporteInventarioAsync();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Error al enviar reporte inicial: {ex.Message}", "Aviso de Envío", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            }
-
-            // 2. Configurar el timer para cada 3 minutos (180,000 ms)
-            timerReporte = new System.Windows.Forms.Timer();
-            timerReporte.Interval = 180000;
-            timerReporte.Tick += TimerReporte_Tick;
-            timerReporte.Start();
         }
 
-        private async void TimerReporte_Tick(object? sender, EventArgs e)
+        // 🚀 MÉTODO PARA EL TEMA GLOBAL (Preparado para el futuro)
+        private void AplicarTemaGlobal(bool esOscuro)
         {
-            if (timerReporte == null) return;
+            // Si decides implementar el tema claro completo, aquí debes
+            // cambiar los colores de this.BackColor, panelSidebar, etc.
+            // y luego recargar los paneles hijos.
 
-            try
-            {
-                timerReporte.Stop();
-                await SUSTENTACION.ServicioWhatsApp.ServicioWhatsApp.EnviarReporteInventarioAsync();
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Error en reporte automático: {ex.Message}");
-            }
-            finally
-            {
-                if (timerReporte != null)
-                {
-                    timerReporte.Start();
-                }
-            }
-        }
-
-        private void FormTrabajador_FormClosing(object? sender, FormClosingEventArgs e)
-        {
-            if (timerReporte != null)
-            {
-                timerReporte.Stop();
-                timerReporte.Dispose();
-                timerReporte = null;
-            }
+            /*
+            this.BackColor = esOscuro ? bgMain : Color.White;
+            panelSidebar.BackColor = esOscuro ? bgSidebar : Color.FromArgb(240, 240, 240);
+            // etc...
+            */
         }
     }
 }

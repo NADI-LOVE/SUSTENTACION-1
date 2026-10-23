@@ -9,19 +9,35 @@
 		<NoWarn>$(NoWarn);WFO1000</NoWarn>
 	</PropertyGroup>
 
+	<!-- Dependencias de ambas ramas -->
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Data.SqlClient" Version="7.1.1" />
 		<PackageReference Include="MySql.Data" Version="26.7.0" />
 		<PackageReference Include="Npgsql" Version="10.0.3" />
 		<PackageReference Include="Twilio" Version="8.0.0" />
+		<PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" />
 	</ItemGroup>
 
+	<!-- Archivos del mapa del trabajador -->
+	<ItemGroup>
+		<Content Update="PanelTrabajador\Mapas\mapa.html"
+				 CopyToOutputDirectory="PreserveNewest" />
+
+		<None Update="PanelTrabajador\Mapas\css\style.css"
+			  CopyToOutputDirectory="PreserveNewest" />
+
+		<None Update="PanelTrabajador\Mapas\js\script.js"
+			  CopyToOutputDirectory="PreserveNewest" />
+	</ItemGroup>
+
+	<!-- Recursos de Visual Studio -->
 	<ItemGroup>
 		<Compile Update="Properties\Resources.Designer.cs">
 			<DesignTime>True</DesignTime>
 			<AutoGen>True</AutoGen>
 			<DependentUpon>Resources.resx</DependentUpon>
 		</Compile>
+
 		<Compile Update="Properties\Settings.Designer.cs">
 			<DesignTimeSharedInput>True</DesignTimeSharedInput>
 			<AutoGen>True</AutoGen>
