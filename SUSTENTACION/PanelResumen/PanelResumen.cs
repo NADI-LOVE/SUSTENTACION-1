@@ -68,7 +68,7 @@ namespace SUSTENTACION.PanelAdministrador
         private TarjetaKpi kTotal, kDisp, kAsig, kMant, kDev;
         private GraficoTendencias chartTend;
         private GraficoCategorias chartCat;
-        private PanelAlertas panelAlertas;
+        //private PanelAlertas panelAlertas;
         private PanelEstados panelEstados;
         private ListaMovimientos listaMov;
         private DataGridView dgv;
@@ -234,17 +234,18 @@ namespace SUSTENTACION.PanelAdministrador
             var t = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                ColumnCount = 3,
+                ColumnCount = 2, // <-- CAMBIO: Antes era 3, ahora es 2
                 RowCount = 1,
                 BackColor = CFondo,
                 Margin = Padding.Empty,
                 Padding = Padding.Empty
             };
-            t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 44F));
-            t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25F));
-            t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 31F));
 
-            // Tendencias
+            // CAMBIO: Ambas columnas al 50%
+            t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+            t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+
+            // Tendencias (Se queda igual)
             var cTend = new TarjetaOscura("Tendencias de Préstamos y Devoluciones", "↗", CCian) { Margin = new Padding(0, 0, 6, 10) };
             chartTend = new GraficoTendencias { Dock = DockStyle.Fill };
             cTend.Controls.Add(chartTend);
@@ -255,13 +256,14 @@ namespace SUSTENTACION.PanelAdministrador
             selector.Location = new Point(Math.Max(0, cTend.Width - selector.Width - 16), 10);
             t.Controls.Add(cTend, 0, 0);
 
-            // Categorías
-            var cCat = new TarjetaOscura("Distribución por Categoría", "◔", CCian) { Margin = new Padding(6, 0, 6, 10) };
+            // Categorías (Se queda igual, pero cambia su margen derecho para que quede bien)
+            var cCat = new TarjetaOscura("Distribución por Categoría", "◔", CCian) { Margin = new Padding(6, 0, 0, 10) }; // <-- CAMBIO: Margen derecho a 0
             chartCat = new GraficoCategorias { Dock = DockStyle.Fill };
             cCat.Controls.Add(chartCat);
             t.Controls.Add(cCat, 1, 0);
 
-            // WhatsApp
+            // AQUI COMENTAMOS O ELIMINAMOS EL PANEL DE WHATSAPP
+            /*
             var cWa = new TarjetaOscura("Gestión de Alertas de WhatsApp", "✆", CVerde) { Margin = new Padding(6, 0, 0, 10) };
             panelAlertas = new PanelAlertas { Dock = DockStyle.Fill };
             panelAlertas.VerTodas += (s, e) =>
@@ -275,6 +277,7 @@ namespace SUSTENTACION.PanelAdministrador
             cWa.Resize += (s, e) => swPrincipal.Location = new Point(cWa.Width - swPrincipal.Width - 16, 13);
             swPrincipal.Location = new Point(Math.Max(0, cWa.Width - swPrincipal.Width - 16), 13);
             t.Controls.Add(cWa, 2, 0);
+            */
 
             return t;
         }
@@ -284,53 +287,27 @@ namespace SUSTENTACION.PanelAdministrador
             var t = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                ColumnCount = 3,
+                ColumnCount = 2, // <-- CAMBIO 1: Cambiar de 3 a 2 columnas
                 RowCount = 1,
                 BackColor = CFondo,
                 Margin = Padding.Empty,
                 Padding = Padding.Empty
             };
-            t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38F));
-            t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22F));
-            t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40F));
 
-            // Estado general
+            // Ambas columnas al 50%
+            t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+            t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+
+            // Estado general (Columna 0)
             var cEst = new TarjetaOscura("Estado General de Equipos", "▣", CCian) { Margin = new Padding(0, 0, 6, 10) };
             panelEstados = new PanelEstados { Dock = DockStyle.Fill };
             cEst.Controls.Add(panelEstados);
             t.Controls.Add(cEst, 0, 0);
 
-            // Acciones rápidas
-            var cAcc = new TarjetaOscura("Acciones Rápidas", "", CCian) { Margin = new Padding(6, 0, 6, 10) };
-            var botones = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 1,
-                RowCount = 4,
-                BackColor = CTarjeta,
-                Margin = Padding.Empty,
-                Padding = Padding.Empty
-            };
-            for (int i = 0; i < 4; i++) botones.RowStyles.Add(new RowStyle(SizeType.Percent, 25F));
+            // Acciones rápidas (comentado, ya no se usa)
+            // ...
 
-            var b1 = new BotonAccion("Registrar Entrada", "+", Color.FromArgb(22, 163, 74), Color.FromArgb(34, 197, 94));
-            var b2 = new BotonAccion("Registrar Salida", "→", Color.FromArgb(37, 99, 235), Color.FromArgb(59, 130, 246));
-            var b3 = new BotonAccion("Ver Movimientos", "☰", Color.FromArgb(109, 40, 217), Color.FromArgb(139, 92, 246));
-            var b4 = new BotonAccion("Generar Reporte", "▤", Color.FromArgb(18, 32, 60), Color.FromArgb(24, 42, 76));
-            b1.Click += (s, e) => Lanzar(RegistrarEntradaClick);
-            b2.Click += (s, e) => Lanzar(RegistrarSalidaClick);
-            b3.Click += (s, e) => Lanzar(VerMovimientosClick);
-            b4.Click += (s, e) => Lanzar(GenerarReporteClick);
-            var bs = new[] { b1, b2, b3, b4 };
-            for (int i = 0; i < 4; i++)
-            {
-                bs[i].Margin = new Padding(0, 0, 0, i == 3 ? 0 : 6);
-                botones.Controls.Add(bs[i], 0, i);
-            }
-            cAcc.Controls.Add(botones);
-            t.Controls.Add(cAcc, 1, 0);
-
-            // Últimos movimientos
+            // Últimos movimientos (Columna 1)
             var cUlt = new TarjetaOscura("Últimos Movimientos", "⇄", CCian) { Margin = new Padding(6, 0, 0, 10) };
             listaMov = new ListaMovimientos { Dock = DockStyle.Fill };
             cUlt.Controls.Add(listaMov);
@@ -347,7 +324,8 @@ namespace SUSTENTACION.PanelAdministrador
             cUlt.Controls.Add(lnk);
             cUlt.Resize += (s, e) => lnk.Location = new Point(cUlt.Width - lnk.Width - 18, 15);
             lnk.Location = new Point(Math.Max(0, cUlt.Width - lnk.Width - 18), 15);
-            t.Controls.Add(cUlt, 2, 0);
+
+            t.Controls.Add(cUlt, 1, 0); // <-- CAMBIO 2: Agregarlo en la columna 1, no en la 2
 
             return t;
         }
@@ -429,7 +407,7 @@ namespace SUSTENTACION.PanelAdministrador
         private static Rectangle ZonaAccion(Rectangle celda, int i)
         {
             int w = 26;
-            int x = celda.X + (celda.Width - w * 3) / 2 + i * w;
+            int x = celda.X + (celda.Width - w * 2) / 2 + i * w; // Cambia w * 3 por w * 2
             int y = celda.Y + (celda.Height - w) / 2;
             return new Rectangle(x, y, w, w);
         }
@@ -474,11 +452,13 @@ namespace SUSTENTACION.PanelAdministrador
 
             if (col == "Acciones")
             {
-                string[] glifos = { "◉", "✎", "⇪" };
-                Color[] colores = { CCian, CTenue, CTenue };
-                for (int i = 0; i < 3; i++)
+                //string[] glifos = { "◉", "✎", "⇪" };
+                //Color[] colores = { CCian, CTenue, CTenue };
+                string[] glifos = { "◉", "⇪" };
+                Color[] colores = { CCian, CTenue };
+                for (int i = 0; i < 2; i++) // Cambia el 3 por 2
                     DtCentro(g, glifos[i], Sym11, colores[i], ZonaAccion(e.CellBounds, i));
-            }
+            }   
             else
             {
                 string txt = Convert.ToString(e.Value ?? "").Trim();
@@ -505,7 +485,7 @@ namespace SUSTENTACION.PanelAdministrador
             var punto = new Point(celda.X + e.X, celda.Y + e.Y);
             string id = Convert.ToString(dgv.Rows[e.RowIndex].Cells["ID"].Value);
 
-            for (int i = 0; i < 3; i++)
+            for (int i = 0; i < 2; i++) // Cambia el 3 por 2
             {
                 if (!ZonaAccion(celda, i).Contains(punto)) continue;
 
@@ -515,12 +495,8 @@ namespace SUSTENTACION.PanelAdministrador
                     if (h != null) h(this, id);
                     else MostrarDetalle(e.RowIndex);
                 }
-                else if (i == 1)
-                {
-                    var h = EditarEquipo;
-                    if (h != null) h(this, id);
-                }
-                else
+                // Se elimina el "else if (i == 1)" que era Editar
+                else // Ahora i == 1 es Exportar
                 {
                     var h = ExportarEquipo;
                     if (h != null) h(this, id);
@@ -669,17 +645,24 @@ namespace SUSTENTACION.PanelAdministrador
 
             // 1. Salidas (desde salidas)
             using (var cmd = new NpgsqlCommand(@"
-                SELECT fecha_salida::date AS d, COUNT(*)::int AS n
-                FROM public.salidas
-                WHERE fecha_salida::date >= @desde
-                GROUP BY 1;", con))
+    SELECT fecha_salida::date AS d, COUNT(*)::int AS n
+    FROM public.salidas
+    WHERE fecha_salida::date >= @desde
+    GROUP BY 1;", con))
             {
                 cmd.Parameters.Add("desde", NpgsqlDbType.Date).Value = desde;
                 using (var r = cmd.ExecuteReader())
                 {
                     while (r.Read())
                     {
-                        DateTime d = Convert.ToDateTime(r["d"]).Date;
+                        // --- CAMBIO AQUI ---
+                        DateTime d;
+                        if (r["d"] is DateOnly dateOnly)
+                            d = dateOnly.ToDateTime(TimeOnly.MinValue);
+                        else
+                            d = Convert.ToDateTime(r["d"]).Date;
+                        // -------------------
+
                         int idx = (d - desde).Days;
                         if (idx >= 0 && idx < 60) gSalida[idx] += Convert.ToInt32(r["n"]);
                     }
@@ -688,17 +671,24 @@ namespace SUSTENTACION.PanelAdministrador
 
             // 2. Devoluciones (desde retornos)
             using (var cmd = new NpgsqlCommand(@"
-                SELECT fecha_retorno::date AS d, COUNT(*)::int AS n
-                FROM public.retornos
-                WHERE fecha_retorno::date >= @desde
-                GROUP BY 1;", con))
+    SELECT fecha_retorno::date AS d, COUNT(*)::int AS n
+    FROM public.retornos
+    WHERE fecha_retorno::date >= @desde
+    GROUP BY 1;", con))
             {
                 cmd.Parameters.Add("desde", NpgsqlDbType.Date).Value = desde;
                 using (var r = cmd.ExecuteReader())
                 {
                     while (r.Read())
                     {
-                        DateTime d = Convert.ToDateTime(r["d"]).Date;
+                        // --- CAMBIO AQUI ---
+                        DateTime d;
+                        if (r["d"] is DateOnly dateOnly)
+                            d = dateOnly.ToDateTime(TimeOnly.MinValue);
+                        else
+                            d = Convert.ToDateTime(r["d"]).Date;
+                        // -------------------
+
                         int idx = (d - desde).Days;
                         if (idx >= 0 && idx < 60) gDevol[idx] += Convert.ToInt32(r["n"]);
                     }
@@ -795,7 +785,7 @@ namespace SUSTENTACION.PanelAdministrador
             ConfigurarColumnas();
 
             listaMov.SetData(items.Take(5).ToList());
-            panelAlertas.SetData(items.Take(4).ToList());
+            //panelAlertas.SetData(items.Take(4).ToList());
         }
 
         private void ConfigurarColumnas()
@@ -803,7 +793,7 @@ namespace SUSTENTACION.PanelAdministrador
             var pesos = new Dictionary<string, float>
             {
                 { "ID", 55 }, { "Equipo", 130 }, { "Categoría", 85 }, { "Estado", 105 }, { "Condición", 75 },
-                { "Ubicación", 110 }, { "Responsable", 100 }, { "Fecha Movimiento", 115 }, { "Tipo", 95 }, { "Acciones", 95 }
+                { "Ubicación", 110 }, { "Responsable", 100 }, { "Fecha Movimiento", 115 }, { "Tipo", 95 }, { "Acciones",  70 }
             };
             foreach (DataGridViewColumn c in dgv.Columns)
             {
@@ -813,7 +803,7 @@ namespace SUSTENTACION.PanelAdministrador
             }
             if (dgv.Columns.Contains("Acciones"))
             {
-                dgv.Columns["Acciones"].MinimumWidth = 96;
+                dgv.Columns["Acciones"].MinimumWidth = 70;
                 dgv.Columns["Acciones"].HeaderCell.Style.Alignment = DataGridViewContentAlignment.MiddleCenter;
             }
         }

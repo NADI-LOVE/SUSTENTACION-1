@@ -242,18 +242,24 @@ namespace SUSTENTACION
         // =========================================================
         private void CambiarTema()
         {
+            // 1. Cambiar el estado global (esto avisa al panel de Trabajadores y demás)
             TemaApp.EsModoOscuro = !TemaApp.EsModoOscuro;
             bool modoOscuro = TemaApp.EsModoOscuro;
 
-            AplicarTemaRecursivo(this);
+            // 2. Actualizar solo el fondo del contenido principal
+            // (Se comenta/elimina lo del Header, Sidebar y Barra para que se queden oscuros)
+            // this.BackColor = modoOscuro ? TemaApp.BgDark : TemaApp.LightCanvas;
+            // panelHeader.BackColor = modoOscuro ? TemaApp.BgHeader : TemaApp.LightHeader;
+            // panelRightSidebar.BackColor = modoOscuro ? TemaApp.BgSidebar : TemaApp.LightSidebar;
+            // panelRightInner.BackColor = modoOscuro ? TemaApp.BgSidebar : TemaApp.LightSidebar;
+            // barra.Oscuro = modoOscuro;
 
-            this.BackColor = modoOscuro ? TemaApp.BgDark : TemaApp.LightCanvas;
-            panelHeader.BackColor = modoOscuro ? TemaApp.BgHeader : TemaApp.LightHeader;
-            panelRightSidebar.BackColor = modoOscuro ? TemaApp.BgSidebar : TemaApp.LightSidebar;
-            panelRightInner.BackColor = modoOscuro ? TemaApp.BgSidebar : TemaApp.LightSidebar;
             panelMainContent.BackColor = modoOscuro ? TemaApp.BgDark : TemaApp.LightCanvas;
 
-            barra.Oscuro = modoOscuro;
+            // 3. Actualizar otros estilos (grillas del FormAdmin, botón de resumen, etc)
+            // Nota: Si AplicarTemaRecursivo(this) te cambia el header o el menú a blanco, 
+            // bórralo o pásale solo el panelMainContent.
+            AplicarTemaRecursivo(panelMainContent);
 
             ActualizarEstilosGrids(this);
             ActualizarBotonResumen();
@@ -264,8 +270,8 @@ namespace SUSTENTACION
                 panelResumenRef.Invalidate(true);
             }
 
-            panelHeader.Invalidate();
-            panelRightInner.Invalidate();
+            // 4. Refrescar todo el formulario para aplicar los cambios
+            panelMainContent.Invalidate(true);
             this.Invalidate(true);
         }
 
@@ -842,7 +848,9 @@ namespace SUSTENTACION
             ConfigurarVista(false);
 
             LimpiarContenidoActual();
-            var ucMovimientos = new SUSTENTACION.PanelSolicitudes.PanelSolicitudes { Dock = DockStyle.Fill };
+
+            // SOLUCIÓN AL ERROR CS0234: Usar la ruta correcta hacia el namespace y la clase.
+            var ucMovimientos = new global::SUSTENTACION.PanelSolicitudesEquipo.PanelSolicitudesControl { Dock = DockStyle.Fill };
             panelMainContent.Controls.Add(ucMovimientos);
             ucMovimientos.BringToFront();
         }
