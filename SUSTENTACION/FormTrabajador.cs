@@ -39,9 +39,14 @@ namespace SUSTENTACION
         private int idTrabajador;
         public bool SesionCerrada { get; private set; } = false;
 
-        public FormTrabajador(int id = 1, string nombre = "María López", string rol = "Trabajador")
+
+        public FormTrabajador(
+            int id = 1,
+            string nombre = "María López",
+            string rol = "Trabajador")
         {
             InitializeComponent();
+
             this.idTrabajador = id;
             this.nombreUsuario = nombre;
             this.rolUsuario = rol;
@@ -51,6 +56,19 @@ namespace SUSTENTACION
             CrearSidebar();
             CrearHeader();
             CrearMainContent();
+
+            // Establecer el logo de ARTEMUSA
+            string rutaIcono = System.IO.Path.Combine(
+                AppContext.BaseDirectory,
+                "logo_artemusa.ico"
+            );
+
+            if (System.IO.File.Exists(rutaIcono))
+            {
+                this.Icon = new Icon(rutaIcono);
+            }
+
+            this.ShowIcon = true;
         }
 
         private void ConfigurarVentana()
@@ -572,15 +590,26 @@ namespace SUSTENTACION
                             {
                                 if (tieneEventoEsteDia)
                                 {
-                                    using (var formRetorno = new FormRetornoEquipo(
-                                        this.idTrabajador,
-                                        this.nombreUsuario,
-                                        fechaDelPanel))
+                                    this.Hide();
+
+                                    try
                                     {
-                                        if (formRetorno.ShowDialog() == DialogResult.OK)
+                                        using (var formRetorno = new FormRetornoEquipo(
+                                            this.idTrabajador,
+                                            this.nombreUsuario,
+                                            fechaDelPanel))
                                         {
-                                            ConstruirCalendarioEvents();
+                                            if (formRetorno.ShowDialog() == DialogResult.OK)
+                                            {
+                                                ConstruirCalendarioEvents();
+                                            }
                                         }
+                                    }
+                                    finally
+                                    {
+                                        this.Show();
+                                        this.BringToFront();
+                                        this.Activate();
                                     }
                                 }
                                 else

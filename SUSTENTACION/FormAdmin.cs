@@ -70,6 +70,18 @@ namespace SUSTENTACION
             nombreUsuario = string.IsNullOrWhiteSpace(nombre) ? "Juan Pérez" : nombre;
             rolUsuario = string.IsNullOrWhiteSpace(rol) ? "Administrador" : rol;
 
+            string rutaIcono = System.IO.Path.Combine(
+                AppContext.BaseDirectory,
+                "logo_artemusa.ico"
+            );
+
+            if (System.IO.File.Exists(rutaIcono))
+            {
+                this.Icon = new Icon(rutaIcono);
+            }
+
+            this.ShowIcon = true;
+
             ConstruirInterfaz();
         }
 
