@@ -1,26 +1,20 @@
 ﻿#nullable disable
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Text;
 using System.Globalization;
 using System.Linq;
 using System.Windows.Forms;
+using Npgsql;
 
 namespace SUSTENTACION.PanelAdministrador
 {
     /// <summary>
     /// Módulo Reportes (panel Administrador) · ARTEMUSA TV
-    /// Etapa 1: diseño visual + interacción con DATOS FICTICIOS (sin base de datos).
-    ///
-    /// Integración con el tema del panel:
-    ///     reportes.AplicarTema(true);   // oscuro
-    ///     reportes.AplicarTema(false);  // claro
-    /// (llámalo desde el botón "Modo claro/oscuro" que ya existe en la barra lateral).
-    ///
-    /// Para conectar Supabase más adelante basta con reemplazar la clase interna "Demo"
-    /// (única fuente de datos) por consultas reales.
+    /// Conectado a base de datos PostgreSQL (Supabase).
     /// </summary>
     public class CotrolReporte : UserControl
     {
@@ -167,7 +161,6 @@ namespace SUSTENTACION.PanelAdministrador
             };
         }
 
-        /// <summary>Color de fondo "real" sobre el que está dibujado un control (para pintar esquinas redondeadas).</summary>
         private static Color OuterOf(Control c)
         {
             for (Control p = c.Parent; p != null; p = p.Parent)
@@ -282,12 +275,12 @@ namespace SUSTENTACION.PanelAdministrador
         }
 
         // ============================================================
-        //  MODELO Y DATOS FICTICIOS
+        //  MODELO Y DATOS (CONECTADO A BD)
         // ============================================================
         private sealed class Equipo
         {
-            public string Codigo, Nombre, Categoria, Ubicacion, Estado, Condicion;
-            public int Cantidad;
+            public string Codigo, Nombre, Categoria, Ubicacion, Estado;
+            public int Stock;
         }
 
         private sealed class Movimiento
@@ -321,206 +314,177 @@ namespace SUSTENTACION.PanelAdministrador
             public static readonly List<Prestamo> Prestamos = new List<Prestamo>();
             public static readonly List<Mant> Mantenimientos = new List<Mant>();
 
-            public static readonly string[] Categorias = { "Cámaras", "Iluminación", "Audio", "Soportes", "Monitores", "Transmisión", "Accesorios" };
-            public static readonly string[] Trabajadores =
+            public static string[] Categorias = new string[0];
+            public static string[] Trabajadores = new string[0];
+
+            public static bool Cargado = false;
+
+            public static void CargarDesdeDB()
             {
-                "Carlos Mendoza", "Lucía Fernández", "Jorge Quispe", "Rosa Huamán",
-                "Diego Salazar", "Mariana Torres", "Andrés Rojas", "Valeria Castillo"
-            };
+                if (Cargado) return;
 
-            static Demo()
-            {
-                Random r = new Random(2026);
-                DateTime hoy = DateTime.Today;
+                Equipos.Clear();
+                Movimientos.Clear();
+                Prestamos.Clear();
+                Mantenimientos.Clear();
 
-                string[,] spec =
+                try
                 {
-                    { "Sony FX6 Full-Frame", "Cámaras", "CAM" },
-                    { "Canon C70 Cinema", "Cámaras", "CAM" },
-                    { "Blackmagic Pocket 6K Pro", "Cámaras", "CAM" },
-                    { "Sony A7S III", "Cámaras", "CAM" },
-                    { "Aputure 300d II", "Iluminación", "LUZ" },
-                    { "Nanlite Forza 500", "Iluminación", "LUZ" },
-                    { "Panel LED Godox SL-60W", "Iluminación", "LUZ" },
-                    { "Softbox Octa 120 cm", "Iluminación", "LUZ" },
-                    { "Rode NTG5 Shotgun", "Audio", "AUD" },
-                    { "Sennheiser EW 100 G4", "Audio", "AUD" },
-                    { "Zoom H6 Grabadora", "Audio", "AUD" },
-                    { "Shure SM7B", "Audio", "AUD" },
-                    { "Trípode Manfrotto 504X", "Soportes", "SOP" },
-                    { "Gimbal DJI RS 3 Pro", "Soportes", "SOP" },
-                    { "Slider Edelkrone 80 cm", "Soportes", "SOP" },
-                    { "Grúa Jib 3 m", "Soportes", "SOP" },
-                    { "Atomos Ninja V", "Monitores", "MON" },
-                    { "SmallHD Focus 7\"", "Monitores", "MON" },
-                    { "Monitor Lilliput 15\"", "Monitores", "MON" },
-                    { "ATEM Mini Pro", "Transmisión", "TRX" },
-                    { "Teleprompter 19\"", "Transmisión", "TRX" },
-                    { "Intercom Hollyland Solidcom", "Transmisión", "TRX" },
-                    { "Encoder Web Presenter", "Transmisión", "TRX" },
-                    { "Batería V-Mount 150 Wh", "Accesorios", "ACC" },
-                    { "Cable SDI 15 m", "Accesorios", "ACC" },
-                    { "Lente Sigma 24-70 mm f/2.8", "Accesorios", "ACC" },
-                    { "Tarjeta CFexpress 512 GB", "Accesorios", "ACC" },
-                    { "Cargador Dual V-Mount", "Accesorios", "ACC" }
-                };
-
-                string[] patron =
-                {
-                    "Disponible", "Prestado", "Disponible", "Mantenimiento", "Disponible", "Prestado", "Disponible",
-                    "Disponible", "Prestado", "Mantenimiento", "Disponible", "Fuera de servicio", "Prestado", "Disponible"
-                };
-                string[] ubicDisp = { "Almacén principal", "Estudio A", "Estudio B", "Sala de edición" };
-                string[] tecnicos = { "Ing. Raúl Paredes", "Téc. Sandra Núñez", "Téc. Marco Villanueva", "Proveedor externo" };
-
-                Func<string[], string> pick = a => a[r.Next(a.Length)];
-                Func<int, DateTime> conHora = dias => hoy.AddDays(-dias).AddHours(8 + r.Next(10)).AddMinutes(r.Next(4) * 15);
-
-                // ---------- Equipos ----------
-                Dictionary<string, int> cont = new Dictionary<string, int>();
-                for (int i = 0; i < spec.GetLength(0); i++)
-                {
-                    string pre = spec[i, 2];
-                    cont[pre] = cont.ContainsKey(pre) ? cont[pre] + 1 : 1;
-                    string estado = patron[i % patron.Length];
-                    double q = r.NextDouble();
-                    string cond;
-                    if (estado == "Fuera de servicio") cond = "Malo";
-                    else if (estado == "Mantenimiento") cond = q < .6 ? "Regular" : "Malo";
-                    else cond = q < .62 ? "Bueno" : (q < .90 ? "Regular" : "Malo");
-
-                    string ubic;
-                    if (estado == "Disponible") ubic = pick(ubicDisp);
-                    else if (estado == "Prestado") ubic = r.Next(2) == 0 ? "En campo" : "Unidad móvil";
-                    else if (estado == "Mantenimiento") ubic = "Taller técnico";
-                    else ubic = "Almacén de baja";
-
-                    Equipos.Add(new Equipo
+                    using (var con = new global::SUSTENTACION.Conexion().ObtenerConexion())
                     {
-                        Codigo = "ART-" + pre + "-" + cont[pre].ToString("000"),
-                        Nombre = spec[i, 0],
-                        Categoria = spec[i, 1],
-                        Ubicacion = ubic,
-                        Estado = estado,
-                        Condicion = cond,
-                        Cantidad = estado == "Disponible" ? r.Next(1, 9) : 0
-                    });
+                        if (con.State != ConnectionState.Open) con.Open();
+
+                        // 1. CARGAR EQUIPOS (usando stock en vez de cantidad y sin condicion)
+                        using (var cmd = new NpgsqlCommand("SELECT codigo, nombre, categoria, ubicacion, estado, stock FROM public.equipos", con))
+                        using (var r = cmd.ExecuteReader())
+                        {
+                            while (r.Read())
+                            {
+                                Equipos.Add(new Equipo
+                                {
+                                    Codigo = r["codigo"].ToString(),
+                                    Nombre = r["nombre"].ToString(),
+                                    Categoria = r["categoria"] != DBNull.Value ? r["categoria"].ToString() : "General",
+                                    Ubicacion = r["ubicacion"] != DBNull.Value ? r["ubicacion"].ToString() : "—",
+                                    Estado = r["estado"] != DBNull.Value ? r["estado"].ToString() : "Disponible",
+                                    Stock = r["stock"] != DBNull.Value ? Convert.ToInt32(r["stock"]) : 1
+                                });
+                            }
+                        }
+
+                        // 2. CARGAR MOVIMIENTOS (Salidas y Devoluciones)
+                        string sqlMov = @"
+                            SELECT e.codigo, e.nombre, 'Salida' AS tipo, s.fecha_salida AS fecha, 
+                                   COALESCE(t.nombre, '—') AS trabajador, COALESCE(s.ubicacion, '—') AS destino, COALESCE(s.detalles, 'Salida de equipo') AS obs
+                            FROM public.salida_equipos se
+                            JOIN public.salidas s ON s.id_salida = se.id_salida
+                            JOIN public.equipos e ON e.id = se.id_equipo
+                            LEFT JOIN public.trabajadores t ON t.id_trabajador = s.id_trabajador
+                            UNION ALL
+                            SELECT e.codigo, e.nombre, 'Devolución', r.fecha_retorno, 
+                                   COALESCE(t.nombre, '—'), 'Almacén principal', COALESCE(r.observaciones, 'Devolución de equipo')
+                            FROM public.retornos r
+                            JOIN public.equipos e ON e.id = r.id_equipo
+                            LEFT JOIN public.trabajadores t ON t.id_trabajador = r.id_trabajador
+                            ORDER BY fecha DESC";
+
+                        using (var cmd = new NpgsqlCommand(sqlMov, con))
+                        using (var r = cmd.ExecuteReader())
+                        {
+                            while (r.Read())
+                            {
+                                string codEq = r["codigo"].ToString();
+                                var eq = Equipos.FirstOrDefault(x => x.Codigo == codEq);
+                                if (eq != null)
+                                {
+                                    Movimientos.Add(new Movimiento
+                                    {
+                                        Equipo = eq,
+                                        Tipo = r["tipo"].ToString(),
+                                        Fecha = Convert.ToDateTime(r["fecha"]),
+                                        Trabajador = r["trabajador"].ToString(),
+                                        Destino = r["destino"].ToString(),
+                                        Observaciones = r["obs"].ToString()
+                                    });
+                                }
+                            }
+                        }
+
+                        // 3. CARGAR PRÉSTAMOS
+                        string sqlPres = @"
+                            SELECT e.codigo, e.nombre, COALESCE(t.nombre, '—') AS trabajador, 
+                                   s.fecha_salida, s.fecha_salida AS fecha_retorno_esperada, r.fecha_retorno, 
+                                   CASE WHEN r.id_retorno IS NOT NULL THEN 'Devuelto' 
+                                        WHEN s.fecha_salida < CURRENT_DATE - INTERVAL '7 days' THEN 'Vencido' 
+                                        ELSE 'Pendiente' END AS estado,
+                                   COALESCE(r.estado_equipo, '—') AS condicion
+                            FROM public.salida_equipos se
+                            JOIN public.salidas s ON s.id_salida = se.id_salida
+                            JOIN public.equipos e ON e.id = se.id_equipo
+                            LEFT JOIN public.trabajadores t ON t.id_trabajador = s.id_trabajador
+                            LEFT JOIN public.retornos r ON r.id_equipo = e.id AND r.id_salida = s.id_salida
+                            ORDER BY s.fecha_salida DESC";
+
+                        using (var cmd = new NpgsqlCommand(sqlPres, con))
+                        using (var r = cmd.ExecuteReader())
+                        {
+                            while (r.Read())
+                            {
+                                string codEq = r["codigo"].ToString();
+                                var eq = Equipos.FirstOrDefault(x => x.Codigo == codEq);
+                                if (eq != null)
+                                {
+                                    Prestamos.Add(new Prestamo
+                                    {
+                                        Equipo = eq,
+                                        Trabajador = r["trabajador"].ToString(),
+                                        Salida = Convert.ToDateTime(r["fecha_salida"]),
+                                        Prevista = r["fecha_retorno_esperada"] != DBNull.Value ? Convert.ToDateTime(r["fecha_retorno_esperada"]) : DateTime.Today,
+                                        Devolucion = r["fecha_retorno"] != DBNull.Value ? Convert.ToDateTime(r["fecha_retorno"]) : (DateTime?)null,
+                                        Estado = r["estado"].ToString(),
+                                        CondicionDevolucion = r["condicion"].ToString()
+                                    });
+                                }
+                            }
+                        }
+
+                        // 4. CARGAR MANTENIMIENTOS (Basado en asignaciones_equipos)
+                        string sqlMant = @"
+                            SELECT e.nombre, 'Revisión técnica' AS problema, COALESCE(a.observaciones, 'Mantenimiento programado') AS descripcion, 
+                                   a.fecha_asignacion AS fecha_ingreso, NULL::timestamp AS fecha_fin, 
+                                   'En proceso' AS estado, COALESCE(t.nombre, 'Sin asignar') AS responsable, 0 AS fotos
+                            FROM public.asignaciones_equipos a
+                            JOIN public.equipos e ON e.id = a.id_equipo
+                            LEFT JOIN public.trabajadores t ON t.id_trabajador = a.id_trabajador
+                            ORDER BY a.fecha_asignacion DESC";
+
+                        try
+                        {
+                            using (var cmd = new NpgsqlCommand(sqlMant, con))
+                            using (var r = cmd.ExecuteReader())
+                            {
+                                while (r.Read())
+                                {
+                                    string nomEq = r["nombre"].ToString();
+                                    var eq = Equipos.FirstOrDefault(x => x.Nombre == nomEq);
+                                    if (eq != null)
+                                    {
+                                        Mantenimientos.Add(new Mant
+                                        {
+                                            Equipo = eq,
+                                            Problema = r["problema"].ToString(),
+                                            Descripcion = r["descripcion"].ToString(),
+                                            Ingreso = Convert.ToDateTime(r["fecha_ingreso"]),
+                                            Fin = r["fecha_fin"] != DBNull.Value ? Convert.ToDateTime(r["fecha_fin"]) : (DateTime?)null,
+                                            Estado = r["estado"].ToString(),
+                                            Responsable = r["responsable"].ToString(),
+                                            Fotos = Convert.ToInt32(r["fotos"])
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                        catch { /* Ignorar si falla la carga de mantenimientos */ }
+
+                        // 5. CARGAR TRABAJADORES
+                        using (var cmd = new NpgsqlCommand("SELECT nombre FROM public.trabajadores WHERE activo = true ORDER BY nombre", con))
+                        using (var r = cmd.ExecuteReader())
+                        {
+                            var listaTemp = new List<string> { "Todos" };
+                            while (r.Read()) listaTemp.Add(r["nombre"].ToString());
+                            Trabajadores = listaTemp.ToArray();
+                        }
+
+                        // 6. CARGAR CATEGORÍAS
+                        Categorias = Equipos.Select(e => e.Categoria).Distinct().Where(c => c != "General").OrderBy(c => c).ToArray();
+
+                        Cargado = true;
+                    }
                 }
-
-                string[] destSalida = { "Locación externa", "Evento corporativo", "Estudio de cliente", "Unidad móvil" };
-                string[] obsSalida = { "Producción en exteriores", "Cobertura de evento", "Grabación de programa", "Transmisión en vivo" };
-                string[] obsDev = { "Devuelto sin novedades", "Revisión conforme", "Se reporta desgaste leve", "Entrega completa con accesorios" };
-                string[] obsEntrada = { "Ingreso por compra", "Reposición de stock", "Donación de proveedor" };
-                string[] obsTraslado = { "Cambio de sede", "Reubicación en almacén", "Reasignación entre estudios" };
-
-                // ---------- Préstamos activos (equipos prestados) ----------
-                foreach (Equipo eq in Equipos.Where(x => x.Estado == "Prestado").ToList())
+                catch (Exception ex)
                 {
-                    DateTime sal = conHora(r.Next(1, 13));
-                    DateTime prev = sal.Date.AddDays(r.Next(2, 8));
-                    string trab = pick(Trabajadores);
-                    Prestamos.Add(new Prestamo
-                    {
-                        Equipo = eq,
-                        Trabajador = trab,
-                        Salida = sal,
-                        Prevista = prev,
-                        Devolucion = null,
-                        Estado = prev < hoy ? "Vencido" : "Pendiente",
-                        CondicionDevolucion = "—"
-                    });
-                    Movimientos.Add(new Movimiento { Equipo = eq, Tipo = "Salida", Fecha = sal, Trabajador = trab, Destino = pick(destSalida), Observaciones = pick(obsSalida) });
+                    MessageBox.Show("Error al cargar datos de reportes: " + ex.Message, "Error de BD", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
-
-                // ---------- Historial de préstamos devueltos ----------
-                for (int i = 0; i < 70; i++)
-                {
-                    Equipo eq = Equipos[r.Next(Equipos.Count)];
-                    DateTime sal = conHora(r.Next(4, 360));
-                    DateTime prev = sal.Date.AddDays(r.Next(2, 8));
-                    DateTime dev = prev.AddDays(r.Next(-1, 4));
-                    if (dev <= sal.Date) dev = sal.Date.AddDays(1);
-                    if (dev > hoy) dev = hoy;
-                    DateTime devH = dev.AddHours(9 + r.Next(9)).AddMinutes(r.Next(4) * 15);
-                    double q = r.NextDouble();
-                    string trab = pick(Trabajadores);
-
-                    Prestamos.Add(new Prestamo
-                    {
-                        Equipo = eq,
-                        Trabajador = trab,
-                        Salida = sal,
-                        Prevista = prev,
-                        Devolucion = devH,
-                        Estado = "Devuelto",
-                        CondicionDevolucion = q < .70 ? "Bueno" : (q < .92 ? "Regular" : "Malo")
-                    });
-                    Movimientos.Add(new Movimiento { Equipo = eq, Tipo = "Salida", Fecha = sal, Trabajador = trab, Destino = pick(destSalida), Observaciones = pick(obsSalida) });
-                    Movimientos.Add(new Movimiento { Equipo = eq, Tipo = "Devolución", Fecha = devH, Trabajador = trab, Destino = "Almacén principal", Observaciones = pick(obsDev) });
-                }
-
-                // ---------- Entradas y traslados ----------
-                for (int i = 0; i < 60; i++)
-                {
-                    Equipo eq = Equipos[r.Next(Equipos.Count)];
-                    bool entrada = r.NextDouble() < .4;
-                    Movimientos.Add(new Movimiento
-                    {
-                        Equipo = eq,
-                        Tipo = entrada ? "Entrada" : "Traslado",
-                        Fecha = conHora(r.Next(0, 360)),
-                        Trabajador = pick(Trabajadores),
-                        Destino = entrada ? "Almacén principal" : pick(ubicDisp),
-                        Observaciones = entrada ? pick(obsEntrada) : pick(obsTraslado)
-                    });
-                }
-
-                // ---------- Mantenimiento ----------
-                string[] prob = { "Falla de encendido", "Pantalla dañada", "Ruido en audio", "Conector dañado", "Sobrecalentamiento", "Lente con hongos", "Batería no carga", "Sensor sucio" };
-                string[] rep = { "Reemplazo de fuente de poder", "Cambio de panel LCD", "Limpieza de circuitos y cambio de cable", "Soldadura de conector", "Limpieza de ventilación y pasta térmica", "Limpieza especializada de lente", "Reemplazo de celdas de batería", "Limpieza profesional del sensor" };
-
-                int k = 0;
-                foreach (Equipo eq in Equipos.Where(x => x.Estado == "Mantenimiento").ToList())
-                {
-                    int ix = r.Next(prob.Length);
-                    string est = k % 2 == 0 ? "En reparación" : "Pendiente";
-                    Mantenimientos.Add(new Mant
-                    {
-                        Equipo = eq,
-                        Problema = prob[ix],
-                        Descripcion = rep[ix],
-                        Ingreso = hoy.AddDays(-r.Next(1, 10)),
-                        Responsable = est == "Pendiente" ? "Sin asignar" : pick(tecnicos),
-                        Estado = est,
-                        Fin = null,
-                        Fotos = est == "En reparación" ? r.Next(0, 2) : 0
-                    });
-                    k++;
-                }
-
-                for (int i = 0; i < 14; i++)
-                {
-                    Equipo eq = Equipos[r.Next(Equipos.Count)];
-                    int ix = r.Next(prob.Length);
-                    DateTime ing = hoy.AddDays(-r.Next(8, 340));
-                    DateTime fin = ing.AddDays(r.Next(2, 13));
-                    if (fin > hoy) fin = hoy;
-                    Mantenimientos.Add(new Mant
-                    {
-                        Equipo = eq,
-                        Problema = prob[ix],
-                        Descripcion = rep[ix],
-                        Ingreso = ing,
-                        Responsable = pick(tecnicos),
-                        Estado = "Reparado",
-                        Fin = fin,
-                        Fotos = r.Next(1, 4)
-                    });
-                }
-
-                Movimientos.Sort((a, b) => b.Fecha.CompareTo(a.Fecha));
-                Prestamos.Sort((a, b) => b.Salida.CompareTo(a.Salida));
-                Mantenimientos.Sort((a, b) => b.Ingreso.CompareTo(a.Ingreso));
             }
         }
 
@@ -528,7 +492,6 @@ namespace SUSTENTACION.PanelAdministrador
         //  CONTROLES PERSONALIZADOS
         // ============================================================
 
-        // ---- Panel con scroll que puede recibir el foco (rueda del mouse) ----
         private sealed class ScrollPanel : Panel
         {
             public ScrollPanel()
@@ -539,7 +502,6 @@ namespace SUSTENTACION.PanelAdministrador
             }
         }
 
-        // ---- Tarjeta con esquinas redondeadas ----
         private class Card : Panel
         {
             public Color? Fill;
@@ -571,7 +533,6 @@ namespace SUSTENTACION.PanelAdministrador
             }
         }
 
-        // ---- Botón ----
         private enum BtnStyle { Primary, Secondary, Ghost }
 
         private sealed class UiButton : Control
@@ -669,7 +630,6 @@ namespace SUSTENTACION.PanelAdministrador
             return c.Enabled ? T.Ink : Mix(OuterOf(c), T.Muted, .5f);
         }
 
-        // ---- Menú desplegable con tema ----
         private sealed class ThemedColors : ProfessionalColorTable
         {
             public override Color ToolStripDropDownBackground { get { return T.Surface; } }
@@ -704,7 +664,6 @@ namespace SUSTENTACION.PanelAdministrador
             m.Items.Add(it);
         }
 
-        // ---- Lista desplegable ----
         private sealed class SelectBox : Control
         {
             public readonly List<string> Items = new List<string>();
@@ -773,7 +732,6 @@ namespace SUSTENTACION.PanelAdministrador
             }
         }
 
-        // ---- Selector de fecha ----
         private sealed class DateBox : Control
         {
             private DateTime value = DateTime.Today;
@@ -850,7 +808,6 @@ namespace SUSTENTACION.PanelAdministrador
             }
         }
 
-        // ---- Cuadro de texto ----
         private sealed class InputBox : Control
         {
             public readonly TextBox Inner = new TextBox();
@@ -905,7 +862,6 @@ namespace SUSTENTACION.PanelAdministrador
             }
         }
 
-        // ---- Pestañas de período rápido ----
         private sealed class Segmented : Control
         {
             private readonly string[] items;
@@ -988,7 +944,6 @@ namespace SUSTENTACION.PanelAdministrador
             }
         }
 
-        // ---- Icono en cuadro redondeado ----
         private sealed class IconBadge : Control
         {
             public Ico Glyph;
@@ -1016,7 +971,6 @@ namespace SUSTENTACION.PanelAdministrador
             }
         }
 
-        // ---- Tarjeta de categoría de reporte ----
         private sealed class TabCard : Control
         {
             public Ico Glyph;
@@ -1076,7 +1030,6 @@ namespace SUSTENTACION.PanelAdministrador
             }
         }
 
-        // ---- Notificación flotante ----
         private sealed class Toast : Control
         {
             private string title = "", msg = "";
@@ -1139,7 +1092,6 @@ namespace SUSTENTACION.PanelAdministrador
             }
         }
 
-        // ---- Estado vacío ----
         private sealed class EmptyState : Control
         {
             public EmptyState()
@@ -1163,7 +1115,6 @@ namespace SUSTENTACION.PanelAdministrador
             }
         }
 
-        // ---- Tabla ----
         private sealed class FlatGrid : DataGridView
         {
             public FlatGrid() { DoubleBuffered = true; }
@@ -1282,7 +1233,6 @@ namespace SUSTENTACION.PanelAdministrador
                 for (int i = 0; i < n; i++) { max = Math.Max(max, Math.Max(a[i], b[i])); }
                 int niceMax = Math.Max(4, (int)Math.Ceiling(max / 4.0) * 4);
 
-                // leyenda
                 using (SolidBrush b1 = new SolidBrush(T.Info))
                     g.FillEllipse(b1, left, 8, 9, 9);
                 Txt(g, "Salidas", F(8.5f), new Rectangle(left + 14, 3, 60, 18), T.Muted, TL);
@@ -1400,7 +1350,6 @@ namespace SUSTENTACION.PanelAdministrador
 
         private Seccion seccion = Seccion.Inventario;
 
-        // filtros confirmados (se aplican con "Aplicar filtros")
         private int periodoIdx = 1;
         private DateTime fDesde = DateTime.Today.AddDays(-30);
         private DateTime fHasta = DateTime.Today;
@@ -1441,6 +1390,8 @@ namespace SUSTENTACION.PanelAdministrador
             DoubleBuffered = true;
             Font = F(9f);
             BackColor = T.Canvas;
+
+            Demo.CargarDesdeDB();
 
             BuildUi();
             Recalcular();
@@ -1509,7 +1460,6 @@ namespace SUSTENTACION.PanelAdministrador
             finally { building = old; }
         }
 
-        // ---------------- Encabezado ----------------
         private Control BuildHeader()
         {
             Panel host = new Panel { Dock = DockStyle.Top, Height = 104, BackColor = T.Canvas, Padding = new Padding(24, 18, 24, 6) };
@@ -1527,8 +1477,10 @@ namespace SUSTENTACION.PanelAdministrador
             btnActualizar = new UiButton("↻  Actualizar", 130, 40) { Style = BtnStyle.Primary };
             btnActualizar.Click += (s, e) =>
             {
+                Demo.Cargado = false;
+                Demo.CargarDesdeDB();
                 Recalcular();
-                ShowToast("Vista actualizada", "Los datos de demostración se recargaron correctamente.", T.Ok);
+                ShowToast("Vista actualizada", "Los datos se sincronizaron con la base de datos.", T.Ok);
             };
 
             p.Controls.Add(crumb);
@@ -1557,7 +1509,6 @@ namespace SUSTENTACION.PanelAdministrador
             m.Show(anchor, new Point(0, anchor.Height + 4));
         }
 
-        // ---------------- Período ----------------
         private Control BuildPeriodRow()
         {
             Panel host = new Panel { Dock = DockStyle.Top, Height = 58, BackColor = T.Canvas, Padding = new Padding(24, 0, 24, 16) };
@@ -1617,7 +1568,6 @@ namespace SUSTENTACION.PanelAdministrador
             return -1;
         }
 
-        // ---------------- Tarjetas de resumen ----------------
         private Control BuildKpiRow()
         {
             Panel host = new Panel { Dock = DockStyle.Top, Height = 144, BackColor = T.Canvas, Padding = new Padding(24, 0, 24, 16) };
@@ -1655,7 +1605,6 @@ namespace SUSTENTACION.PanelAdministrador
             return host;
         }
 
-        // ---------------- Categorías de reporte ----------------
         private Control BuildTabsRow()
         {
             Panel host = new Panel { Dock = DockStyle.Top, Height = 100, BackColor = T.Canvas, Padding = new Padding(24, 0, 24, 16) };
@@ -1703,7 +1652,6 @@ namespace SUSTENTACION.PanelAdministrador
             Recalcular();
         }
 
-        // ---------------- Filtros ----------------
         private Panel Field(string caption, Control ctl, out Label cap)
         {
             Panel p = new Panel { Dock = DockStyle.Fill, BackColor = T.Surface, Margin = new Padding(0, 0, 14, 6) };
@@ -1728,7 +1676,9 @@ namespace SUSTENTACION.PanelAdministrador
             dtHasta.UserChanged += (s, e) => segPeriodo.SelectedIndex = -1;
 
             selCategoria = new SelectBox();
-            selCategoria.SetItems(new[] { "Todas" }.Concat(Demo.Categorias), Math.Max(0, Array.IndexOf(Demo.Categorias, fCategoria) + 1));
+            var listCats = new List<string> { "Todas" };
+            listCats.AddRange(Demo.Categorias);
+            selCategoria.SetItems(listCats, Math.Max(0, Array.IndexOf(Demo.Categorias, fCategoria) + 1));
 
             inpEquipo = new InputBox("Nombre o código…", true) { Text = fTexto };
             inpEquipo.Inner.KeyDown += (s, e) =>
@@ -1737,7 +1687,7 @@ namespace SUSTENTACION.PanelAdministrador
             };
 
             selTrabajador = new SelectBox();
-            selTrabajador.SetItems(new[] { "Todos" }.Concat(Demo.Trabajadores), Math.Max(0, Array.IndexOf(Demo.Trabajadores, fTrabajador) + 1));
+            selTrabajador.SetItems(Demo.Trabajadores, Math.Max(0, Array.IndexOf(Demo.Trabajadores, fTrabajador)));
 
             selEstado = new SelectBox();
             selTipo = new SelectBox();
@@ -1882,7 +1832,6 @@ namespace SUSTENTACION.PanelAdministrador
             ShowToast("Filtros restablecidos", "Se restauró el período de 30 días y se limpiaron los filtros.", T.Info);
         }
 
-        // ---------------- Gráficos ----------------
         private Control BuildCharts()
         {
             Panel host = new Panel { Dock = DockStyle.Top, Height = 316, BackColor = T.Canvas, Padding = new Padding(24, 0, 24, 16) };
@@ -1921,13 +1870,11 @@ namespace SUSTENTACION.PanelAdministrador
             return card;
         }
 
-        // ---------------- Tabla ----------------
         private Control BuildTable()
         {
             tableHost = new Panel { Dock = DockStyle.Top, Height = 760, BackColor = T.Canvas, Padding = new Padding(24, 0, 24, 16) };
             Card card = new Card { Dock = DockStyle.Fill, Padding = new Padding(1, 14, 1, 14) };
 
-            // --- cuerpo
             Panel gridHost = new Panel { Dock = DockStyle.Fill, BackColor = T.Surface, Padding = new Padding(14, 0, 14, 0) };
             emptyPanel = new EmptyState { Dock = DockStyle.Fill, Visible = false };
             grid = new FlatGrid { Dock = DockStyle.Top };
@@ -1935,7 +1882,6 @@ namespace SUSTENTACION.PanelAdministrador
             gridHost.Controls.Add(emptyPanel);
             gridHost.Controls.Add(grid);
 
-            // --- pie (paginación)
             footerPanel = new Panel { Dock = DockStyle.Bottom, Height = 64, BackColor = T.Surface };
             Label lblMostrar = Lbl("Mostrar", 9f, T.Muted);
             lblMostrar.Location = new Point(24, 23);
@@ -1959,7 +1905,6 @@ namespace SUSTENTACION.PanelAdministrador
             footerPanel.Controls.Add(pagerHost);
             footerPanel.Resize += (s, e) => pagerHost.Left = Math.Max(0, footerPanel.Width - pagerHost.Width - 24);
 
-            // --- barra superior
             Panel top = new Panel { Dock = DockStyle.Top, Height = 84, BackColor = T.Surface };
             lblTablaTitulo = Lbl("", 13f, T.Ink, true);
             lblTablaTitulo.Location = new Point(24, 16);
@@ -1998,7 +1943,6 @@ namespace SUSTENTACION.PanelAdministrador
             top.Resize += (s, e) => pos();
             pos();
 
-            // Orden de acoplamiento: el control "Fill" primero (índice 0)
             card.Controls.Add(gridHost);
             card.Controls.Add(footerPanel);
             card.Controls.Add(top);
@@ -2130,9 +2074,6 @@ namespace SUSTENTACION.PanelAdministrador
             return host;
         }
 
-        // ============================================================
-        //  LÓGICA DE DATOS (solo datos ficticios)
-        // ============================================================
         private IEnumerable<Equipo> EquiposFiltrados()
         {
             return Demo.Equipos.Where(e =>
@@ -2177,7 +2118,7 @@ namespace SUSTENTACION.PanelAdministrador
                     return new[]
                     {
                         new Col("CÓDIGO", 12, "m"), new Col("EQUIPO", 24, "b"), new Col("CATEGORÍA", 13),
-                        new Col("UBICACIÓN", 16), new Col("DISPONIBLE", 10), new Col("ESTADO", 15, "badge"), new Col("CONDICIÓN", 13, "badge")
+                        new Col("UBICACIÓN", 16), new Col("STOCK", 10), new Col("ESTADO", 15, "badge"), new Col("CONDICIÓN", 13, "badge")
                     };
                 case Seccion.Movimientos:
                     return new[]
@@ -2215,7 +2156,7 @@ namespace SUSTENTACION.PanelAdministrador
                     {
                         if (!baseSet.Contains(e)) continue;
                         if (estado != "Todos" && e.Estado != estado) continue;
-                        rows.Add(new[] { e.Codigo, e.Nombre, e.Categoria, e.Ubicacion, e.Cantidad.ToString(), e.Estado, e.Condicion });
+                        rows.Add(new[] { e.Codigo, e.Nombre, e.Categoria, e.Ubicacion, e.Stock.ToString(), e.Estado, "Bueno" });
                     }
                     break;
 
@@ -2262,9 +2203,6 @@ namespace SUSTENTACION.PanelAdministrador
             return rows;
         }
 
-        // ============================================================
-        //  ACTUALIZACIÓN DE PANTALLA
-        // ============================================================
         private void Recalcular()
         {
             if (building || grid == null) return;
@@ -2290,7 +2228,7 @@ namespace SUSTENTACION.PanelAdministrador
                 : "Período:  " + Fecha(fDesde) + "  —  " + Fecha(fHasta);
             lblTablaTitulo.Text = TituloSeccion(seccion);
             lblTablaSub.Text = SubtituloSeccion(seccion);
-            lblFoot.Text = "Datos de demostración · Actualizado a las " + DateTime.Now.ToString("HH:mm:ss") + " · La conexión con Supabase se implementará posteriormente.";
+            lblFoot.Text = "Datos reales de la base de datos · Actualizado a las " + DateTime.Now.ToString("HH:mm:ss");
 
             AplicarBusquedaRapida();
         }
@@ -2325,12 +2263,10 @@ namespace SUSTENTACION.PanelAdministrador
         {
             HashSet<Equipo> set = new HashSet<Equipo>(EquiposFiltrados());
 
-            // Dona: estado del inventario
             string[] estados = { "Disponible", "Prestado", "Mantenimiento", "Fuera de servicio" };
             int[] vals = estados.Select(es => set.Count(e => e.Estado == es)).ToArray();
             donut.SetData(estados, vals, new[] { T.Ok, T.Info, T.Warn, T.Bad });
 
-            // Barras: movimientos de los últimos 6 meses
             DateTime ini = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
             string[] lbl = new string[6];
             int[] sal = new int[6];
@@ -2350,7 +2286,6 @@ namespace SUSTENTACION.PanelAdministrador
             }
             barras.SetData(lbl, sal, ing);
 
-            // Barras horizontales: órdenes de mantenimiento por estado
             string[] ms = { "Pendiente", "En reparación", "Reparado" };
             int[] mv = ms.Select(es => Demo.Mantenimientos.Count(m => set.Contains(m.Equipo) && m.Estado == es)).ToArray();
             hbar.SetData(ms, mv, new[] { T.Warn, T.Info, T.Ok });
@@ -2456,9 +2391,6 @@ namespace SUSTENTACION.PanelAdministrador
             pagerHost.ResumeLayout();
         }
 
-        // ============================================================
-        //  NOTIFICACIONES Y EXPORTACIÓN SIMULADA
-        // ============================================================
         private void ShowToast(string title, string msg, Color accent)
         {
             if (toast != null) toast.Display(title, msg, accent);

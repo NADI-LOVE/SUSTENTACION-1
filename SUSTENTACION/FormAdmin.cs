@@ -205,7 +205,7 @@ namespace SUSTENTACION
 
             barra.AgregarItem("Panel", "◉", false);
             barra.AgregarItem("Inventario", "▣", false);
-            barra.AgregarItem("Movimientos", "⇄", false);
+            barra.AgregarItem("Eventos", "📅", true); // <-- NUEVO ITEM
             barra.AgregarItem("Trabajadores", "👥", true);
             barra.AgregarItem("Reportes", "▧", false);
 
@@ -220,9 +220,9 @@ namespace SUSTENTACION
                 {
                     case 0: MostrarOverview(); break;
                     case 1: MostrarInventario(); break;
-                    case 2: MostrarMovimientos(); break;
-                    case 3: MostrarTrabajadores(); break;
-                    case 4: MostrarReportes(); break;
+                    case 2: MostrarEventos(); break; // Eventos ahora es 2
+                    case 3: MostrarTrabajadores(); break; // Trabajadores es 3
+                    case 4: MostrarReportes(); break; // Reportes es 4
                 }
             };
 
@@ -243,25 +243,11 @@ namespace SUSTENTACION
         // =========================================================
         private void CambiarTema()
         {
-            // 1. Cambiar el estado global (esto avisa al panel de Trabajadores y demás)
             TemaApp.EsModoOscuro = !TemaApp.EsModoOscuro;
             bool modoOscuro = TemaApp.EsModoOscuro;
 
-            // 2. Actualizar solo el fondo del contenido principal
-            // (Se comenta/elimina lo del Header, Sidebar y Barra para que se queden oscuros)
-            // this.BackColor = modoOscuro ? TemaApp.BgDark : TemaApp.LightCanvas;
-            // panelHeader.BackColor = modoOscuro ? TemaApp.BgHeader : TemaApp.LightHeader;
-            // panelRightSidebar.BackColor = modoOscuro ? TemaApp.BgSidebar : TemaApp.LightSidebar;
-            // panelRightInner.BackColor = modoOscuro ? TemaApp.BgSidebar : TemaApp.LightSidebar;
-            // barra.Oscuro = modoOscuro;
-
             panelMainContent.BackColor = modoOscuro ? TemaApp.BgDark : TemaApp.LightCanvas;
-
-            // 3. Actualizar otros estilos (grillas del FormAdmin, botón de resumen, etc)
-            // Nota: Si AplicarTemaRecursivo(this) te cambia el header o el menú a blanco, 
-            // bórralo o pásale solo el panelMainContent.
             AplicarTemaRecursivo(panelMainContent);
-
             ActualizarEstilosGrids(this);
             ActualizarBotonResumen();
 
@@ -271,7 +257,6 @@ namespace SUSTENTACION
                 panelResumenRef.Invalidate(true);
             }
 
-            // 4. Refrescar todo el formulario para aplicar los cambios
             panelMainContent.Invalidate(true);
             this.Invalidate(true);
         }
@@ -817,9 +802,12 @@ namespace SUSTENTACION
                 BackColor = TemaApp.DashFondo
             };
 
-            panelResumenRef.RegistrarEntradaClick += (s, e) => BeginInvoke(new Action(MostrarMovimientos));
-            panelResumenRef.RegistrarSalidaClick += (s, e) => BeginInvoke(new Action(MostrarMovimientos));
-            panelResumenRef.VerMovimientosClick += (s, e) => BeginInvoke(new Action(MostrarMovimientos));
+            // CORREGIDO: Ahora los botones de movimientos abren el panel de Eventos
+            panelResumenRef.RegistrarEntradaClick += (s, e) => BeginInvoke(new Action(MostrarEventos));
+            panelResumenRef.RegistrarSalidaClick += (s, e) => BeginInvoke(new Action(MostrarEventos));
+            panelResumenRef.VerMovimientosClick += (s, e) => BeginInvoke(new Action(MostrarEventos));
+
+            // Estos se quedan igual
             panelResumenRef.GenerarReporteClick += (s, e) => BeginInvoke(new Action(MostrarReportes));
             panelResumenRef.VerNotificacionesClick += (s, e) => BeginInvoke(new Action(AbrirDrawer));
 
@@ -841,28 +829,35 @@ namespace SUSTENTACION
             ucInventario.BringToFront();
         }
 
-        private void MostrarMovimientos()
+
+
+        // =========================================================
+        // NUEVO MÉTODO PARA MOSTRAR EVENTOS
+        // =========================================================
+        private void MostrarEventos()
         {
-            lblBreadcrumb.Text = "Inicio / Movimientos";
-            lblHeaderTitle.Text = "Movimientos";
-            barra.Seleccionar(2);
+            lblBreadcrumb.Text = "Inicio / Eventos";
+            lblHeaderTitle.Text = "Gestión de Eventos";
+            barra.Seleccionar(2); // Ajustado al índice correcto
             ConfigurarVista(false);
 
             LimpiarContenidoActual();
 
-            // SOLUCIÓN AL ERROR CS0234: Usar la ruta correcta hacia el namespace y la clase.
-            var ucMovimientos = new global::SUSTENTACION.PanelSolicitudesEquipo.PanelSolicitudesControl { Dock = DockStyle.Fill };
-            panelMainContent.Controls.Add(ucMovimientos);
-            ucMovimientos.BringToFront();
+            // CORREGIDO: PanelEventos (con "s")
+            var ucEventos = new global::SUSTENTACION.PanelEventos.PanelEventosControl { Dock = DockStyle.Fill };
+            panelMainContent.Controls.Add(ucEventos);
+            ucEventos.BringToFront();
         }
 
         private void MostrarTrabajadores()
         {
             lblBreadcrumb.Text = "Inicio / Trabajadores";
             lblHeaderTitle.Text = "Trabajadores";
-            barra.Seleccionar(3);
+            barra.Seleccionar(3); // <-- Corregido a 3
             ConfigurarVista(false);
+
             LimpiarContenidoActual();
+
             var trabajadores = new global::SUSTENTACION.PanelTrabajador.Trabajador { Dock = DockStyle.Fill };
             panelMainContent.Controls.Add(trabajadores);
             trabajadores.BringToFront();
@@ -872,9 +867,11 @@ namespace SUSTENTACION
         {
             lblBreadcrumb.Text = "Inicio / Reportes";
             lblHeaderTitle.Text = "Reportes";
-            barra.Seleccionar(4);
+            barra.Seleccionar(4); // <-- Corregido a 4
             ConfigurarVista(false);
+
             LimpiarContenidoActual();
+
             var reportes = new global::SUSTENTACION.PanelAdministrador.CotrolReporte { Dock = DockStyle.Fill };
             panelMainContent.Controls.Add(reportes);
             reportes.BringToFront();
