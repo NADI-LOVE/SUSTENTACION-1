@@ -166,6 +166,24 @@ namespace SUSTENTACION.PanelTrabajador
             datosEvento.FechaInicio = fecha;
             datosEvento.FechaFin = fecha;
 
+            // ==========================================
+            // ÍCONO PERSONALIZADO DE ARTEMUSA
+            // ==========================================
+            string rutaIcono = System.IO.Path.Combine(
+                AppContext.BaseDirectory,
+                "logo_artemusa.ico"
+            );
+
+            if (System.IO.File.Exists(rutaIcono))
+            {
+                this.Icon = new Icon(rutaIcono);
+            }
+
+            this.ShowIcon = true;
+
+            // ==========================================
+            // AJUSTAR EL MAPA AL REDIMENSIONAR
+            // ==========================================
             this.Resize += (s, e) =>
             {
                 try

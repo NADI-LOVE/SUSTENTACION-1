@@ -34,11 +34,16 @@
 
 	<!-- RECURSOS DEL MAPA DEL TRABAJADOR -->
 	<ItemGroup>
-		<Content Update="PanelTrabajador\Mapas\mapa.html" CopyToOutputDirectory="PreserveNewest" />
+		<None Remove="PanelTrabajador\Mapas\mapa.html" />
 
-		<None Update="PanelTrabajador\Mapas\css\style.css" CopyToOutputDirectory="PreserveNewest" />
+		<Content Include="PanelTrabajador\Mapas\mapa.html"
+				 CopyToOutputDirectory="PreserveNewest" />
 
-		<None Update="PanelTrabajador\Mapas\js\script.js" CopyToOutputDirectory="PreserveNewest" />
+		<None Update="PanelTrabajador\Mapas\css\style.css"
+			  CopyToOutputDirectory="PreserveNewest" />
+
+		<None Update="PanelTrabajador\Mapas\js\script.js"
+			  CopyToOutputDirectory="PreserveNewest" />
 	</ItemGroup>
 
 	<!-- CONFIGURACIÓN DE RECURSOS DE VISUAL STUDIO -->

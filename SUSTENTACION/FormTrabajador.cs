@@ -590,15 +590,26 @@ namespace SUSTENTACION
                             {
                                 if (tieneEventoEsteDia)
                                 {
-                                    using (var formRetorno = new FormRetornoEquipo(
-                                        this.idTrabajador,
-                                        this.nombreUsuario,
-                                        fechaDelPanel))
+                                    this.Hide();
+
+                                    try
                                     {
-                                        if (formRetorno.ShowDialog() == DialogResult.OK)
+                                        using (var formRetorno = new FormRetornoEquipo(
+                                            this.idTrabajador,
+                                            this.nombreUsuario,
+                                            fechaDelPanel))
                                         {
-                                            ConstruirCalendarioEvents();
+                                            if (formRetorno.ShowDialog() == DialogResult.OK)
+                                            {
+                                                ConstruirCalendarioEvents();
+                                            }
                                         }
+                                    }
+                                    finally
+                                    {
+                                        this.Show();
+                                        this.BringToFront();
+                                        this.Activate();
                                     }
                                 }
                                 else
