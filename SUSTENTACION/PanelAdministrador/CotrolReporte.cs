@@ -1,3144 +1,2473 @@
 ﻿#nullable disable
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Drawing.Text;
 using System.Globalization;
-using System.IO;
-using System.Text;
-using System.Threading.Tasks;
+using System.Linq;
 using System.Windows.Forms;
-using MySql.Data.MySqlClient;
 
 namespace SUSTENTACION.PanelAdministrador
 {
+    /// <summary>
+    /// Módulo Reportes (panel Administrador) · ARTEMUSA TV
+    /// Etapa 1: diseño visual + interacción con DATOS FICTICIOS (sin base de datos).
+    ///
+    /// Integración con el tema del panel:
+    ///     reportes.AplicarTema(true);   // oscuro
+    ///     reportes.AplicarTema(false);  // claro
+    /// (llámalo desde el botón "Modo claro/oscuro" que ya existe en la barra lateral).
+    ///
+    /// Para conectar Supabase más adelante basta con reemplazar la clase interna "Demo"
+    /// (única fuente de datos) por consultas reales.
+    /// </summary>
     public class CotrolReporte : UserControl
     {
         // ============================================================
-        // ARTEMUSA AV - DISEÑO DE REPORTES PROFESIONAL
-        // SOLO SE CAMBIA PRESENTACIÓN VISUAL.
-        // LA LÓGICA DE DATOS, MYSQL, FILTROS, EXPORTACIÓN Y WHATSAPP
-        // SE MANTIENE.
+        //  TEMA
         // ============================================================
-        // Paleta visual estilo dashboard oscuro profesional
-        private readonly Color canvas = Color.FromArgb(6, 12, 22);
-        private readonly Color surface = Color.FromArgb(15, 29, 47);
-        private readonly Color card = Color.FromArgb(21, 38, 59);
-        private readonly Color card2 = Color.FromArgb(26, 45, 68);
-        private readonly Color header = Color.FromArgb(12, 25, 42);
-
-        private readonly Color ink = Color.FromArgb(250, 252, 255);
-        private readonly Color muted = Color.FromArgb(190, 205, 224);
-
-        private readonly Color green = Color.FromArgb(63, 207, 113);
-        private readonly Color greenBright = Color.FromArgb(74, 230, 206);
-        private readonly Color blue = Color.FromArgb(94, 178, 255);
-        private readonly Color amber = Color.FromArgb(242, 190, 84);
-        private readonly Color violet = Color.FromArgb(150, 118, 255);
-        private readonly Color red = Color.FromArgb(247, 99, 99);
-
-        private readonly Color border = Color.FromArgb(61, 82, 109);
-        private readonly Color grid = Color.FromArgb(49, 68, 93);
-
-        private readonly List<Font> fonts = new List<Font>();
-
-        private TextBox search;
-        private DateTimePicker fromDate, toDate;
-        private ComboBox typeFilter, responsibleFilter;
-        private Button applyButton;
-        private Label[] values = new Label[4];
-        private Label state, resultCount;
-        private DataGridView detailGrid;
-        private DataTable reportData;
-        private bool loading;
-
-        // Estado de los controles visuales de WhatsApp
-        private bool whatsappGeneralEnabled = true;
-        private bool whatsappDelayEnabled = false;
-
-        private const string HistoryTable = "artemusa_movimientos_v1";
-
-        public CotrolReporte()
+        private sealed class Tema
         {
-            Dock = DockStyle.Fill;
-            BackColor = canvas;
-            DoubleBuffered = true;
-            Font = FontOf(9);
+            public bool Oscuro;
+            public Color Canvas, Surface, SurfaceAlt, Border, Ink, Muted;
+            public Color Accent, AccentInk, AccentText;
+            public Color Ok, Info, Warn, Bad, Violet, Teal;
 
-            BuildInterface();
-
-            Load += (s, e) => LoadReport();
-        }
-
-        // ============================================================
-        // HELPERS VISUALES
-        // ============================================================
-
-        private Font FontOf(float size, bool bold = false)
-        {
-            Font f = new Font(
-                "Segoe UI",
-                size,
-                bold ? FontStyle.Bold : FontStyle.Regular
-            );
-
-            fonts.Add(f);
-            return f;
-        }
-
-        protected override void Dispose(bool disposing)
-        {
-            base.Dispose(disposing);
-
-            if (disposing)
+            public static Tema Dark()
             {
-                if (reportData != null)
-                    reportData.Dispose();
+                return new Tema
+                {
+                    Oscuro = true,
+                    Canvas = Color.FromArgb(10, 14, 20),
+                    Surface = Color.FromArgb(22, 28, 36),
+                    SurfaceAlt = Color.FromArgb(15, 20, 28),
+                    Border = Color.FromArgb(42, 51, 64),
+                    Ink = Color.FromArgb(232, 236, 242),
+                    Muted = Color.FromArgb(140, 153, 170),
+                    Accent = Color.FromArgb(163, 230, 53),
+                    AccentInk = Color.FromArgb(14, 22, 4),
+                    AccentText = Color.FromArgb(163, 230, 53),
+                    Ok = Color.FromArgb(163, 230, 53),
+                    Info = Color.FromArgb(56, 189, 248),
+                    Warn = Color.FromArgb(251, 146, 60),
+                    Bad = Color.FromArgb(248, 113, 113),
+                    Violet = Color.FromArgb(167, 139, 250),
+                    Teal = Color.FromArgb(45, 212, 191)
+                };
+            }
 
-                foreach (Font f in fonts)
-                    f.Dispose();
+            public static Tema Light()
+            {
+                return new Tema
+                {
+                    Oscuro = false,
+                    Canvas = Color.FromArgb(244, 247, 250),
+                    Surface = Color.White,
+                    SurfaceAlt = Color.FromArgb(241, 245, 249),
+                    Border = Color.FromArgb(226, 232, 240),
+                    Ink = Color.FromArgb(15, 23, 42),
+                    Muted = Color.FromArgb(100, 116, 139),
+                    Accent = Color.FromArgb(163, 230, 53),
+                    AccentInk = Color.FromArgb(20, 30, 6),
+                    AccentText = Color.FromArgb(63, 98, 18),
+                    Ok = Color.FromArgb(88, 150, 18),
+                    Info = Color.FromArgb(2, 132, 199),
+                    Warn = Color.FromArgb(234, 88, 12),
+                    Bad = Color.FromArgb(220, 38, 38),
+                    Violet = Color.FromArgb(124, 58, 237),
+                    Teal = Color.FromArgb(13, 148, 136)
+                };
             }
         }
 
-        private Label LabelOf(
-            string text,
-            float size,
-            Color color,
-            bool bold = false)
+        private static Tema T = Tema.Dark();
+
+        public bool ModoOscuro
+        {
+            get { return T.Oscuro; }
+            set { AplicarTema(value); }
+        }
+
+        public void AplicarTema(bool oscuro)
+        {
+            T = oscuro ? Tema.Dark() : Tema.Light();
+            BuildUi();
+            Recalcular();
+        }
+
+        // ============================================================
+        //  HELPERS GENERALES
+        // ============================================================
+        private const TextFormatFlags TL = TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine | TextFormatFlags.NoPadding;
+        private const TextFormatFlags TC = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine | TextFormatFlags.NoPadding;
+        private const TextFormatFlags TR = TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPadding;
+
+        private static readonly Dictionary<string, Font> FontCache = new Dictionary<string, Font>();
+
+        private static Font F(float size, bool bold = false)
+        {
+            string key = size.ToString(CultureInfo.InvariantCulture) + (bold ? "b" : "r");
+            Font f;
+            if (!FontCache.TryGetValue(key, out f))
+            {
+                f = new Font("Segoe UI", size, bold ? FontStyle.Bold : FontStyle.Regular, GraphicsUnit.Point);
+                FontCache[key] = f;
+            }
+            return f;
+        }
+
+        private static readonly CultureInfo ES = CrearCultura();
+
+        private static CultureInfo CrearCultura()
+        {
+            try { return new CultureInfo("es-PE"); }
+            catch { return CultureInfo.CurrentCulture; }
+        }
+
+        private static string Fecha(DateTime d) { return d.ToString("dd MMM yyyy", ES); }
+        private static string FechaHora(DateTime d) { return d.ToString("dd MMM yyyy · HH:mm", ES); }
+
+        private static Color Mix(Color bg, Color fg, float a)
+        {
+            a = Math.Max(0f, Math.Min(1f, a));
+            return Color.FromArgb(
+                (int)(bg.R + (fg.R - bg.R) * a),
+                (int)(bg.G + (fg.G - bg.G) * a),
+                (int)(bg.B + (fg.B - bg.B) * a));
+        }
+
+        private static GraphicsPath Round(RectangleF r, float radius)
+        {
+            GraphicsPath p = new GraphicsPath();
+            float d = Math.Min(radius * 2f, Math.Min(r.Width, r.Height));
+            if (d <= 1f) { p.AddRectangle(r); return p; }
+            p.AddArc(r.X, r.Y, d, d, 180, 90);
+            p.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+            p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+            p.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+            p.CloseFigure();
+            return p;
+        }
+
+        private static void Txt(Graphics g, string s, Font f, Rectangle r, Color c, TextFormatFlags fl)
+        {
+            TextRenderer.DrawText(g, s, f, r, c, fl);
+        }
+
+        private static Label Lbl(string text, float size, Color color, bool bold = false)
         {
             return new Label
             {
                 Text = text,
                 AutoSize = true,
-                Font = FontOf(size, bold),
+                Font = F(size, bold),
                 ForeColor = color,
                 BackColor = Color.Transparent
             };
         }
 
-        private Button ButtonOf(
-            string text,
-            EventHandler click,
-            bool primary = false,
-            int width = 128)
+        /// <summary>Color de fondo "real" sobre el que está dibujado un control (para pintar esquinas redondeadas).</summary>
+        private static Color OuterOf(Control c)
         {
-            Button b = new Button
+            for (Control p = c.Parent; p != null; p = p.Parent)
             {
-                Text = text,
-                Width = width,
-                Height = 38,
-                FlatStyle = FlatStyle.Flat,
-                BackColor = primary
-                    ? green
-                    : Color.FromArgb(35, 52, 73),
-                ForeColor = primary
-                    ? Color.FromArgb(5, 22, 28)
-                    : ink,
-                Font = FontOf(8.8f, true),
-                Cursor = Cursors.Hand,
-                UseVisualStyleBackColor = false,
-                Margin = new Padding(0, 0, 10, 0)
-            };
-
-            b.FlatAppearance.BorderSize = primary ? 0 : 1;
-            b.FlatAppearance.BorderColor = border;
-
-            b.FlatAppearance.MouseOverBackColor = primary
-                ? greenBright
-                : Color.FromArgb(44, 63, 86);
-
-            b.Click += click;
-
-            Rounded(b, 9);
-
-            return b;
+                Card card = p as Card;
+                if (card != null) return card.Fill.HasValue ? card.Fill.Value : T.Surface;
+                if (p is ScrollPanel) return T.Canvas;
+                if (p.BackColor.A == 255 && p.BackColor != Color.Empty) return p.BackColor;
+            }
+            return T.Canvas;
         }
 
-        private ComboBox ComboOf(params string[] items)
+        private static bool TryKind(string text, out Color c)
         {
-            ComboBox c = new ComboBox
+            switch (text)
             {
-                DropDownStyle = ComboBoxStyle.DropDownList,
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(30, 45, 65),
-                ForeColor = ink,
-                Font = FontOf(9),
-                Width = 160
-            };
-
-            c.Items.AddRange(items);
-
-            if (items.Length > 0)
-                c.SelectedIndex = 0;
-
-            return c;
+                case "Disponible":
+                case "Devuelto":
+                case "Reparado":
+                case "Bueno":
+                case "Entrada":
+                    c = T.Ok; return true;
+                case "Prestado":
+                case "Salida":
+                case "En reparación":
+                    c = T.Info; return true;
+                case "Mantenimiento":
+                case "Regular":
+                case "Pendiente":
+                    c = T.Warn; return true;
+                case "Fuera de servicio":
+                case "Malo":
+                case "Vencido":
+                    c = T.Bad; return true;
+                case "Traslado":
+                    c = T.Violet; return true;
+                case "Devolución":
+                    c = T.Teal; return true;
+            }
+            c = Color.Empty;
+            return false;
         }
 
-        private void Rounded(Control control, int radius)
+        private enum Ico { Box, Check, Out, Cog, Clock, Swap, List, Person, Search }
+
+        private static void DrawIcon(Graphics g, Ico ico, RectangleF r, Color c)
         {
-            Action apply = () =>
+            SmoothingMode old = g.SmoothingMode;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            using (Pen pen = new Pen(c, Math.Max(1.5f, r.Width / 11f)))
+            using (SolidBrush br = new SolidBrush(c))
             {
-                if (control.Width <= 2 || control.Height <= 2)
-                    return;
+                pen.StartCap = LineCap.Round;
+                pen.EndCap = LineCap.Round;
+                pen.LineJoin = LineJoin.Round;
+                Func<float, float, PointF> P = (x, y) => new PointF(r.X + r.Width * x, r.Y + r.Height * y);
 
-                Rectangle rect = new Rectangle(
-                    0,
-                    0,
-                    control.Width - 1,
-                    control.Height - 1
-                );
-
-                using (GraphicsPath path = RoundPath(rect, radius))
+                switch (ico)
                 {
-                    control.Region?.Dispose();
-                    control.Region = new Region(path);
+                    case Ico.Box:
+                        g.DrawPolygon(pen, new[] { P(.5f, .06f), P(.92f, .28f), P(.92f, .72f), P(.5f, .94f), P(.08f, .72f), P(.08f, .28f) });
+                        g.DrawLine(pen, P(.08f, .28f), P(.5f, .5f));
+                        g.DrawLine(pen, P(.92f, .28f), P(.5f, .5f));
+                        g.DrawLine(pen, P(.5f, .5f), P(.5f, .94f));
+                        break;
+                    case Ico.Check:
+                        g.DrawEllipse(pen, r.X + r.Width * .06f, r.Y + r.Height * .06f, r.Width * .88f, r.Height * .88f);
+                        g.DrawLines(pen, new[] { P(.30f, .52f), P(.45f, .67f), P(.72f, .36f) });
+                        break;
+                    case Ico.Out:
+                        g.DrawLine(pen, P(.22f, .78f), P(.78f, .22f));
+                        g.DrawLines(pen, new[] { P(.40f, .22f), P(.78f, .22f), P(.78f, .60f) });
+                        break;
+                    case Ico.Cog:
+                        g.DrawEllipse(pen, r.X + r.Width * .30f, r.Y + r.Height * .30f, r.Width * .40f, r.Height * .40f);
+                        for (int k = 0; k < 8; k++)
+                        {
+                            double a = k * Math.PI / 4.0;
+                            float cs = (float)Math.Cos(a), sn = (float)Math.Sin(a);
+                            g.DrawLine(pen, P(.5f + .30f * cs, .5f + .30f * sn), P(.5f + .46f * cs, .5f + .46f * sn));
+                        }
+                        break;
+                    case Ico.Clock:
+                        g.DrawEllipse(pen, r.X + r.Width * .06f, r.Y + r.Height * .06f, r.Width * .88f, r.Height * .88f);
+                        g.DrawLines(pen, new[] { P(.5f, .26f), P(.5f, .5f), P(.68f, .62f) });
+                        break;
+                    case Ico.Swap:
+                        g.DrawLine(pen, P(.14f, .34f), P(.86f, .34f));
+                        g.DrawLines(pen, new[] { P(.68f, .16f), P(.86f, .34f), P(.68f, .52f) });
+                        g.DrawLine(pen, P(.86f, .68f), P(.14f, .68f));
+                        g.DrawLines(pen, new[] { P(.32f, .50f), P(.14f, .68f), P(.32f, .86f) });
+                        break;
+                    case Ico.List:
+                        for (int k = 0; k < 3; k++)
+                        {
+                            float y = .26f + k * .24f;
+                            g.FillEllipse(br, P(.14f, y).X - 1.6f, P(.14f, y).Y - 1.6f, 3.2f, 3.2f);
+                            g.DrawLine(pen, P(.36f, y), P(.88f, y));
+                        }
+                        break;
+                    case Ico.Person:
+                        g.DrawEllipse(pen, r.X + r.Width * .34f, r.Y + r.Height * .10f, r.Width * .32f, r.Height * .32f);
+                        g.DrawArc(pen, r.X + r.Width * .16f, r.Y + r.Height * .52f, r.Width * .68f, r.Height * .70f, 180, 180);
+                        break;
+                    case Ico.Search:
+                        g.DrawEllipse(pen, r.X + r.Width * .10f, r.Y + r.Height * .10f, r.Width * .56f, r.Height * .56f);
+                        g.DrawLine(pen, P(.58f, .58f), P(.90f, .90f));
+                        break;
                 }
-            };
-
-            control.Resize += (s, e) => apply();
-            apply();
+            }
+            g.SmoothingMode = old;
         }
 
-        private static GraphicsPath RoundPath(
-            Rectangle rect,
-            int radius)
+        // ============================================================
+        //  MODELO Y DATOS FICTICIOS
+        // ============================================================
+        private sealed class Equipo
         {
-            GraphicsPath path = new GraphicsPath();
+            public string Codigo, Nombre, Categoria, Ubicacion, Estado, Condicion;
+            public int Cantidad;
+        }
 
-            if (rect.Width < 4 || rect.Height < 4)
+        private sealed class Movimiento
+        {
+            public Equipo Equipo;
+            public string Tipo, Trabajador, Destino, Observaciones;
+            public DateTime Fecha;
+        }
+
+        private sealed class Prestamo
+        {
+            public Equipo Equipo;
+            public string Trabajador, Estado, CondicionDevolucion;
+            public DateTime Salida, Prevista;
+            public DateTime? Devolucion;
+        }
+
+        private sealed class Mant
+        {
+            public Equipo Equipo;
+            public string Problema, Descripcion, Responsable, Estado;
+            public DateTime Ingreso;
+            public DateTime? Fin;
+            public int Fotos;
+        }
+
+        private static class Demo
+        {
+            public static readonly List<Equipo> Equipos = new List<Equipo>();
+            public static readonly List<Movimiento> Movimientos = new List<Movimiento>();
+            public static readonly List<Prestamo> Prestamos = new List<Prestamo>();
+            public static readonly List<Mant> Mantenimientos = new List<Mant>();
+
+            public static readonly string[] Categorias = { "Cámaras", "Iluminación", "Audio", "Soportes", "Monitores", "Transmisión", "Accesorios" };
+            public static readonly string[] Trabajadores =
             {
-                path.AddRectangle(rect);
-                return path;
+                "Carlos Mendoza", "Lucía Fernández", "Jorge Quispe", "Rosa Huamán",
+                "Diego Salazar", "Mariana Torres", "Andrés Rojas", "Valeria Castillo"
+            };
+
+            static Demo()
+            {
+                Random r = new Random(2026);
+                DateTime hoy = DateTime.Today;
+
+                string[,] spec =
+                {
+                    { "Sony FX6 Full-Frame", "Cámaras", "CAM" },
+                    { "Canon C70 Cinema", "Cámaras", "CAM" },
+                    { "Blackmagic Pocket 6K Pro", "Cámaras", "CAM" },
+                    { "Sony A7S III", "Cámaras", "CAM" },
+                    { "Aputure 300d II", "Iluminación", "LUZ" },
+                    { "Nanlite Forza 500", "Iluminación", "LUZ" },
+                    { "Panel LED Godox SL-60W", "Iluminación", "LUZ" },
+                    { "Softbox Octa 120 cm", "Iluminación", "LUZ" },
+                    { "Rode NTG5 Shotgun", "Audio", "AUD" },
+                    { "Sennheiser EW 100 G4", "Audio", "AUD" },
+                    { "Zoom H6 Grabadora", "Audio", "AUD" },
+                    { "Shure SM7B", "Audio", "AUD" },
+                    { "Trípode Manfrotto 504X", "Soportes", "SOP" },
+                    { "Gimbal DJI RS 3 Pro", "Soportes", "SOP" },
+                    { "Slider Edelkrone 80 cm", "Soportes", "SOP" },
+                    { "Grúa Jib 3 m", "Soportes", "SOP" },
+                    { "Atomos Ninja V", "Monitores", "MON" },
+                    { "SmallHD Focus 7\"", "Monitores", "MON" },
+                    { "Monitor Lilliput 15\"", "Monitores", "MON" },
+                    { "ATEM Mini Pro", "Transmisión", "TRX" },
+                    { "Teleprompter 19\"", "Transmisión", "TRX" },
+                    { "Intercom Hollyland Solidcom", "Transmisión", "TRX" },
+                    { "Encoder Web Presenter", "Transmisión", "TRX" },
+                    { "Batería V-Mount 150 Wh", "Accesorios", "ACC" },
+                    { "Cable SDI 15 m", "Accesorios", "ACC" },
+                    { "Lente Sigma 24-70 mm f/2.8", "Accesorios", "ACC" },
+                    { "Tarjeta CFexpress 512 GB", "Accesorios", "ACC" },
+                    { "Cargador Dual V-Mount", "Accesorios", "ACC" }
+                };
+
+                string[] patron =
+                {
+                    "Disponible", "Prestado", "Disponible", "Mantenimiento", "Disponible", "Prestado", "Disponible",
+                    "Disponible", "Prestado", "Mantenimiento", "Disponible", "Fuera de servicio", "Prestado", "Disponible"
+                };
+                string[] ubicDisp = { "Almacén principal", "Estudio A", "Estudio B", "Sala de edición" };
+                string[] tecnicos = { "Ing. Raúl Paredes", "Téc. Sandra Núñez", "Téc. Marco Villanueva", "Proveedor externo" };
+
+                Func<string[], string> pick = a => a[r.Next(a.Length)];
+                Func<int, DateTime> conHora = dias => hoy.AddDays(-dias).AddHours(8 + r.Next(10)).AddMinutes(r.Next(4) * 15);
+
+                // ---------- Equipos ----------
+                Dictionary<string, int> cont = new Dictionary<string, int>();
+                for (int i = 0; i < spec.GetLength(0); i++)
+                {
+                    string pre = spec[i, 2];
+                    cont[pre] = cont.ContainsKey(pre) ? cont[pre] + 1 : 1;
+                    string estado = patron[i % patron.Length];
+                    double q = r.NextDouble();
+                    string cond;
+                    if (estado == "Fuera de servicio") cond = "Malo";
+                    else if (estado == "Mantenimiento") cond = q < .6 ? "Regular" : "Malo";
+                    else cond = q < .62 ? "Bueno" : (q < .90 ? "Regular" : "Malo");
+
+                    string ubic;
+                    if (estado == "Disponible") ubic = pick(ubicDisp);
+                    else if (estado == "Prestado") ubic = r.Next(2) == 0 ? "En campo" : "Unidad móvil";
+                    else if (estado == "Mantenimiento") ubic = "Taller técnico";
+                    else ubic = "Almacén de baja";
+
+                    Equipos.Add(new Equipo
+                    {
+                        Codigo = "ART-" + pre + "-" + cont[pre].ToString("000"),
+                        Nombre = spec[i, 0],
+                        Categoria = spec[i, 1],
+                        Ubicacion = ubic,
+                        Estado = estado,
+                        Condicion = cond,
+                        Cantidad = estado == "Disponible" ? r.Next(1, 9) : 0
+                    });
+                }
+
+                string[] destSalida = { "Locación externa", "Evento corporativo", "Estudio de cliente", "Unidad móvil" };
+                string[] obsSalida = { "Producción en exteriores", "Cobertura de evento", "Grabación de programa", "Transmisión en vivo" };
+                string[] obsDev = { "Devuelto sin novedades", "Revisión conforme", "Se reporta desgaste leve", "Entrega completa con accesorios" };
+                string[] obsEntrada = { "Ingreso por compra", "Reposición de stock", "Donación de proveedor" };
+                string[] obsTraslado = { "Cambio de sede", "Reubicación en almacén", "Reasignación entre estudios" };
+
+                // ---------- Préstamos activos (equipos prestados) ----------
+                foreach (Equipo eq in Equipos.Where(x => x.Estado == "Prestado").ToList())
+                {
+                    DateTime sal = conHora(r.Next(1, 13));
+                    DateTime prev = sal.Date.AddDays(r.Next(2, 8));
+                    string trab = pick(Trabajadores);
+                    Prestamos.Add(new Prestamo
+                    {
+                        Equipo = eq,
+                        Trabajador = trab,
+                        Salida = sal,
+                        Prevista = prev,
+                        Devolucion = null,
+                        Estado = prev < hoy ? "Vencido" : "Pendiente",
+                        CondicionDevolucion = "—"
+                    });
+                    Movimientos.Add(new Movimiento { Equipo = eq, Tipo = "Salida", Fecha = sal, Trabajador = trab, Destino = pick(destSalida), Observaciones = pick(obsSalida) });
+                }
+
+                // ---------- Historial de préstamos devueltos ----------
+                for (int i = 0; i < 70; i++)
+                {
+                    Equipo eq = Equipos[r.Next(Equipos.Count)];
+                    DateTime sal = conHora(r.Next(4, 360));
+                    DateTime prev = sal.Date.AddDays(r.Next(2, 8));
+                    DateTime dev = prev.AddDays(r.Next(-1, 4));
+                    if (dev <= sal.Date) dev = sal.Date.AddDays(1);
+                    if (dev > hoy) dev = hoy;
+                    DateTime devH = dev.AddHours(9 + r.Next(9)).AddMinutes(r.Next(4) * 15);
+                    double q = r.NextDouble();
+                    string trab = pick(Trabajadores);
+
+                    Prestamos.Add(new Prestamo
+                    {
+                        Equipo = eq,
+                        Trabajador = trab,
+                        Salida = sal,
+                        Prevista = prev,
+                        Devolucion = devH,
+                        Estado = "Devuelto",
+                        CondicionDevolucion = q < .70 ? "Bueno" : (q < .92 ? "Regular" : "Malo")
+                    });
+                    Movimientos.Add(new Movimiento { Equipo = eq, Tipo = "Salida", Fecha = sal, Trabajador = trab, Destino = pick(destSalida), Observaciones = pick(obsSalida) });
+                    Movimientos.Add(new Movimiento { Equipo = eq, Tipo = "Devolución", Fecha = devH, Trabajador = trab, Destino = "Almacén principal", Observaciones = pick(obsDev) });
+                }
+
+                // ---------- Entradas y traslados ----------
+                for (int i = 0; i < 60; i++)
+                {
+                    Equipo eq = Equipos[r.Next(Equipos.Count)];
+                    bool entrada = r.NextDouble() < .4;
+                    Movimientos.Add(new Movimiento
+                    {
+                        Equipo = eq,
+                        Tipo = entrada ? "Entrada" : "Traslado",
+                        Fecha = conHora(r.Next(0, 360)),
+                        Trabajador = pick(Trabajadores),
+                        Destino = entrada ? "Almacén principal" : pick(ubicDisp),
+                        Observaciones = entrada ? pick(obsEntrada) : pick(obsTraslado)
+                    });
+                }
+
+                // ---------- Mantenimiento ----------
+                string[] prob = { "Falla de encendido", "Pantalla dañada", "Ruido en audio", "Conector dañado", "Sobrecalentamiento", "Lente con hongos", "Batería no carga", "Sensor sucio" };
+                string[] rep = { "Reemplazo de fuente de poder", "Cambio de panel LCD", "Limpieza de circuitos y cambio de cable", "Soldadura de conector", "Limpieza de ventilación y pasta térmica", "Limpieza especializada de lente", "Reemplazo de celdas de batería", "Limpieza profesional del sensor" };
+
+                int k = 0;
+                foreach (Equipo eq in Equipos.Where(x => x.Estado == "Mantenimiento").ToList())
+                {
+                    int ix = r.Next(prob.Length);
+                    string est = k % 2 == 0 ? "En reparación" : "Pendiente";
+                    Mantenimientos.Add(new Mant
+                    {
+                        Equipo = eq,
+                        Problema = prob[ix],
+                        Descripcion = rep[ix],
+                        Ingreso = hoy.AddDays(-r.Next(1, 10)),
+                        Responsable = est == "Pendiente" ? "Sin asignar" : pick(tecnicos),
+                        Estado = est,
+                        Fin = null,
+                        Fotos = est == "En reparación" ? r.Next(0, 2) : 0
+                    });
+                    k++;
+                }
+
+                for (int i = 0; i < 14; i++)
+                {
+                    Equipo eq = Equipos[r.Next(Equipos.Count)];
+                    int ix = r.Next(prob.Length);
+                    DateTime ing = hoy.AddDays(-r.Next(8, 340));
+                    DateTime fin = ing.AddDays(r.Next(2, 13));
+                    if (fin > hoy) fin = hoy;
+                    Mantenimientos.Add(new Mant
+                    {
+                        Equipo = eq,
+                        Problema = prob[ix],
+                        Descripcion = rep[ix],
+                        Ingreso = ing,
+                        Responsable = pick(tecnicos),
+                        Estado = "Reparado",
+                        Fin = fin,
+                        Fotos = r.Next(1, 4)
+                    });
+                }
+
+                Movimientos.Sort((a, b) => b.Fecha.CompareTo(a.Fecha));
+                Prestamos.Sort((a, b) => b.Salida.CompareTo(a.Salida));
+                Mantenimientos.Sort((a, b) => b.Ingreso.CompareTo(a.Ingreso));
+            }
+        }
+
+        // ============================================================
+        //  CONTROLES PERSONALIZADOS
+        // ============================================================
+
+        // ---- Panel con scroll que puede recibir el foco (rueda del mouse) ----
+        private sealed class ScrollPanel : Panel
+        {
+            public ScrollPanel()
+            {
+                DoubleBuffered = true;
+                SetStyle(ControlStyles.Selectable, true);
+                TabStop = true;
+            }
+        }
+
+        // ---- Tarjeta con esquinas redondeadas ----
+        private class Card : Panel
+        {
+            public Color? Fill;
+            public int Radius = 14;
+
+            public Card()
+            {
+                SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
             }
 
-            int r = Math.Max(
-                1,
-                Math.Min(
-                    radius,
-                    Math.Min(rect.Width / 2, rect.Height / 2)
-                )
-            );
+            protected override void OnPaintBackground(PaintEventArgs e)
+            {
+                e.Graphics.Clear(Parent != null ? Parent.BackColor : T.Canvas);
+            }
 
-            int d = r * 2;
-
-            path.AddArc(rect.X, rect.Y, d, d, 180, 90);
-            path.AddArc(rect.Right - d, rect.Y, d, d, 270, 90);
-            path.AddArc(rect.Right - d, rect.Bottom - d, d, d, 0, 90);
-            path.AddArc(rect.X, rect.Bottom - d, d, d, 90, 90);
-            path.CloseFigure();
-
-            return path;
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                base.OnPaint(e);
+                if (Width < 6 || Height < 6) return;
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                RectangleF rect = new RectangleF(.5f, .5f, Width - 1.5f, Height - 1.5f);
+                using (GraphicsPath path = Round(rect, Radius))
+                using (SolidBrush b = new SolidBrush(Fill.HasValue ? Fill.Value : T.Surface))
+                using (Pen pen = new Pen(T.Border, 1f))
+                {
+                    e.Graphics.FillPath(b, path);
+                    e.Graphics.DrawPath(pen, path);
+                }
+            }
         }
 
-        // ============================================================
-        // INTERFAZ GENERAL
-        // ============================================================
+        // ---- Botón ----
+        private enum BtnStyle { Primary, Secondary, Ghost }
 
-        private void BuildInterface()
+        private sealed class UiButton : Control
         {
-            SuspendLayout();
-            AutoScroll = true;
+            public BtnStyle Style = BtnStyle.Secondary;
+            public bool Active;
+            private bool hover, down;
 
-            Panel page = new Panel
+            public UiButton(string text, int w, int h)
             {
-                BackColor = canvas,
-                Padding = new Padding(18)
-            };
+                Text = text;
+                Size = new Size(w, h);
+                Cursor = Cursors.Hand;
+                Font = F(9f, true);
+                SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+            }
 
-            Controls.Add(page);
+            protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
+            protected override void OnMouseLeave(EventArgs e) { hover = false; down = false; Invalidate(); base.OnMouseLeave(e); }
+            protected override void OnMouseDown(MouseEventArgs e) { down = true; Invalidate(); base.OnMouseDown(e); }
+            protected override void OnMouseUp(MouseEventArgs e) { down = false; Invalidate(); base.OnMouseUp(e); }
+            protected override void OnEnabledChanged(EventArgs e) { Invalidate(); base.OnEnabledChanged(e); }
 
-            TableLayoutPanel main = new TableLayoutPanel
+            protected override void OnPaint(PaintEventArgs e)
             {
-                Dock = DockStyle.Fill,
-                ColumnCount = 1,
-                RowCount = 6,
-                Margin = new Padding(0),
-                Padding = new Padding(0),
-                BackColor = Color.Transparent
-            };
+                Graphics g = e.Graphics;
+                Color outer = OuterOf(this);
+                g.Clear(outer);
+                g.SmoothingMode = SmoothingMode.AntiAlias;
 
-            main.ColumnStyles.Add(
-                new ColumnStyle(SizeType.Percent, 100)
-            );
+                Color fill, stroke, fg;
+                if (Style == BtnStyle.Primary || Active)
+                {
+                    fill = Mix(T.Accent, Color.White, hover ? .15f : 0f);
+                    if (down) fill = Mix(T.Accent, Color.Black, .12f);
+                    stroke = fill;
+                    fg = T.AccentInk;
+                }
+                else if (Style == BtnStyle.Secondary)
+                {
+                    fill = Mix(T.SurfaceAlt, T.Ink, hover ? .08f : 0f);
+                    stroke = hover ? Mix(T.Border, T.Accent, .5f) : T.Border;
+                    fg = T.Ink;
+                }
+                else
+                {
+                    fill = hover ? Mix(outer, T.Ink, .08f) : outer;
+                    stroke = fill;
+                    fg = hover ? T.Ink : T.Muted;
+                }
 
-            main.RowStyles.Add(new RowStyle(SizeType.Absolute, 86));
-            main.RowStyles.Add(new RowStyle(SizeType.Absolute, 74));
-            main.RowStyles.Add(new RowStyle(SizeType.Absolute, 118));
-            main.RowStyles.Add(new RowStyle(SizeType.Absolute, 338));
-            main.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            main.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+                if (!Enabled)
+                {
+                    fill = Mix(outer, fill, .5f);
+                    stroke = Mix(outer, stroke, .5f);
+                    fg = Mix(outer, fg, .4f);
+                }
 
-            page.Controls.Add(main);
+                RectangleF rect = new RectangleF(.5f, .5f, Width - 1.5f, Height - 1.5f);
+                using (GraphicsPath path = Round(rect, 10))
+                using (SolidBrush br = new SolidBrush(fill))
+                using (Pen pen = new Pen(stroke))
+                {
+                    g.FillPath(br, path);
+                    g.DrawPath(pen, path);
+                }
+                Txt(g, Text, Font, ClientRectangle, fg, TC);
+            }
+        }
 
-            main.Controls.Add(BuildHeader(), 0, 0);
-            main.Controls.Add(BuildFilters(), 0, 1);
-            main.Controls.Add(BuildKpis(), 0, 2);
-            main.Controls.Add(BuildCharts(), 0, 3);
-            main.Controls.Add(BuildTable(), 0, 4);
-
-            state = LabelOf(
-                "Conectando con el servidor…",
-                8.5f,
-                muted
-            );
-
-            state.AutoSize = false;
-            state.Dock = DockStyle.Fill;
-            state.TextAlign = ContentAlignment.MiddleLeft;
-
-            main.Controls.Add(state, 0, 5);
-
-            Action resize = () =>
+        private static void PaintField(Graphics g, Control c, bool hover, bool focused)
+        {
+            Color outer = OuterOf(c);
+            g.Clear(outer);
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            Color fill = T.SurfaceAlt;
+            Color stroke = (hover || focused) ? Mix(T.Border, T.Accent, focused ? .9f : .55f) : T.Border;
+            if (!c.Enabled)
             {
-                page.Size = new Size(
-                    Math.Max(
-                        1140,
-                        ClientSize.Width
-                        - SystemInformation.VerticalScrollBarWidth
-                        - 2
-                    ),
-                    Math.Max(
-                        900,
-                        ClientSize.Height - 2
-                    )
-                );
-            };
+                fill = Mix(outer, T.SurfaceAlt, .45f);
+                stroke = Mix(outer, T.Border, .6f);
+            }
+            RectangleF rect = new RectangleF(.5f, .5f, c.Width - 1.5f, c.Height - 1.5f);
+            using (GraphicsPath path = Round(rect, 10))
+            using (SolidBrush br = new SolidBrush(fill))
+            using (Pen pen = new Pen(stroke))
+            {
+                g.FillPath(br, path);
+                g.DrawPath(pen, path);
+            }
+        }
 
-            Resize += (s, e) => resize();
-            resize();
+        private static Color FieldFg(Control c)
+        {
+            return c.Enabled ? T.Ink : Mix(OuterOf(c), T.Muted, .5f);
+        }
 
-            ResumeLayout(true);
+        // ---- Menú desplegable con tema ----
+        private sealed class ThemedColors : ProfessionalColorTable
+        {
+            public override Color ToolStripDropDownBackground { get { return T.Surface; } }
+            public override Color MenuBorder { get { return T.Border; } }
+            public override Color MenuItemBorder { get { return Mix(T.Surface, T.Accent, .16f); } }
+            public override Color MenuItemSelected { get { return Mix(T.Surface, T.Accent, .16f); } }
+            public override Color MenuItemSelectedGradientBegin { get { return Mix(T.Surface, T.Accent, .16f); } }
+            public override Color MenuItemSelectedGradientEnd { get { return Mix(T.Surface, T.Accent, .16f); } }
+            public override Color ImageMarginGradientBegin { get { return T.Surface; } }
+            public override Color ImageMarginGradientMiddle { get { return T.Surface; } }
+            public override Color ImageMarginGradientEnd { get { return T.Surface; } }
+        }
+
+        private static ContextMenuStrip NewMenu(int minWidth)
+        {
+            ContextMenuStrip m = new ContextMenuStrip();
+            m.Font = F(9.5f);
+            m.BackColor = T.Surface;
+            m.ForeColor = T.Ink;
+            m.ShowImageMargin = false;
+            m.MinimumSize = new Size(minWidth, 0);
+            m.Renderer = new ToolStripProfessionalRenderer(new ThemedColors()) { RoundedEdges = false };
+            return m;
+        }
+
+        private static void AddMenuItem(ContextMenuStrip m, string text, Action action)
+        {
+            ToolStripMenuItem it = new ToolStripMenuItem(text);
+            it.ForeColor = T.Ink;
+            it.Padding = new Padding(6, 6, 6, 6);
+            it.Click += (s, e) => action();
+            m.Items.Add(it);
+        }
+
+        // ---- Lista desplegable ----
+        private sealed class SelectBox : Control
+        {
+            public readonly List<string> Items = new List<string>();
+            private int index;
+            private bool hover;
+            public event EventHandler Picked;
+
+            public SelectBox()
+            {
+                Height = 40;
+                Cursor = Cursors.Hand;
+                Font = F(9.5f);
+                SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+            }
+
+            public int SelectedIndex { get { return index; } set { index = value; Invalidate(); } }
+            public string Current { get { return index >= 0 && index < Items.Count ? Items[index] : ""; } }
+
+            public void SetItems(IEnumerable<string> items, int selected)
+            {
+                Items.Clear();
+                Items.AddRange(items);
+                index = Math.Min(Math.Max(selected, 0), Math.Max(Items.Count - 1, 0));
+                Invalidate();
+            }
+
+            protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
+            protected override void OnMouseLeave(EventArgs e) { hover = false; Invalidate(); base.OnMouseLeave(e); }
+            protected override void OnEnabledChanged(EventArgs e) { Invalidate(); base.OnEnabledChanged(e); }
+
+            protected override void OnClick(EventArgs e)
+            {
+                base.OnClick(e);
+                if (!Enabled || Items.Count == 0) return;
+                ContextMenuStrip m = NewMenu(Width);
+                for (int i = 0; i < Items.Count; i++)
+                {
+                    int idx = i;
+                    ToolStripMenuItem it = new ToolStripMenuItem(Items[i]);
+                    it.ForeColor = idx == index ? T.AccentText : T.Ink;
+                    if (idx == index) it.Font = F(9.5f, true);
+                    it.Padding = new Padding(6, 6, 6, 6);
+                    it.Click += (s, a) =>
+                    {
+                        index = idx;
+                        Invalidate();
+                        EventHandler h = Picked;
+                        if (h != null) h(this, EventArgs.Empty);
+                    };
+                    m.Items.Add(it);
+                }
+                m.Show(this, new Point(0, Height + 4));
+            }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                Graphics g = e.Graphics;
+                PaintField(g, this, hover, false);
+                Txt(g, Current, Font, new Rectangle(14, 0, Width - 44, Height), FieldFg(this), TL);
+                using (Pen pen = new Pen(Enabled ? T.Muted : Mix(OuterOf(this), T.Muted, .5f), 1.8f))
+                {
+                    pen.StartCap = LineCap.Round; pen.EndCap = LineCap.Round;
+                    float x = Width - 20, y = Height / 2f;
+                    g.DrawLines(pen, new[] { new PointF(x - 4, y - 2), new PointF(x, y + 2), new PointF(x + 4, y - 2) });
+                }
+            }
+        }
+
+        // ---- Selector de fecha ----
+        private sealed class DateBox : Control
+        {
+            private DateTime value = DateTime.Today;
+            private bool hover;
+            public event EventHandler UserChanged;
+
+            public DateBox()
+            {
+                Height = 40;
+                Cursor = Cursors.Hand;
+                Font = F(9.5f);
+                SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+            }
+
+            public DateTime Value { get { return value; } set { this.value = value.Date; Invalidate(); } }
+
+            protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
+            protected override void OnMouseLeave(EventArgs e) { hover = false; Invalidate(); base.OnMouseLeave(e); }
+            protected override void OnEnabledChanged(EventArgs e) { Invalidate(); base.OnEnabledChanged(e); }
+
+            protected override void OnClick(EventArgs e)
+            {
+                base.OnClick(e);
+                if (!Enabled) return;
+
+                MonthCalendar cal = new MonthCalendar();
+                cal.MaxSelectionCount = 1;
+                cal.ShowToday = false;
+                cal.ShowTodayCircle = true;
+                cal.FirstDayOfWeek = Day.Monday;
+                cal.BackColor = T.Surface;
+                cal.ForeColor = T.Ink;
+                cal.TitleBackColor = T.SurfaceAlt;
+                cal.TitleForeColor = T.Ink;
+                cal.TrailingForeColor = T.Muted;
+                cal.SetDate(value);
+
+                ToolStripControlHost host = new ToolStripControlHost(cal);
+                host.Margin = Padding.Empty;
+                host.Padding = Padding.Empty;
+
+                ToolStripDropDown dd = new ToolStripDropDown();
+                dd.Padding = Padding.Empty;
+                dd.BackColor = T.Surface;
+                dd.AutoClose = true;
+                dd.Items.Add(host);
+
+                cal.DateSelected += (s, a) =>
+                {
+                    value = a.Start.Date;
+                    Invalidate();
+                    dd.Close();
+                    EventHandler h = UserChanged;
+                    if (h != null) h(this, EventArgs.Empty);
+                };
+                dd.Show(this, new Point(0, Height + 4));
+            }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                Graphics g = e.Graphics;
+                PaintField(g, this, hover, false);
+                Txt(g, Fecha(value), Font, new Rectangle(14, 0, Width - 48, Height), FieldFg(this), TL);
+
+                Color ic = Enabled ? T.Muted : Mix(OuterOf(this), T.Muted, .5f);
+                using (Pen pen = new Pen(ic, 1.5f))
+                {
+                    float x = Width - 32, y = Height / 2f - 7;
+                    g.DrawRectangle(pen, x, y + 2, 15, 13);
+                    g.DrawLine(pen, x, y + 6, x + 15, y + 6);
+                    g.DrawLine(pen, x + 4, y, x + 4, y + 4);
+                    g.DrawLine(pen, x + 11, y, x + 11, y + 4);
+                }
+            }
+        }
+
+        // ---- Cuadro de texto ----
+        private sealed class InputBox : Control
+        {
+            public readonly TextBox Inner = new TextBox();
+            private readonly bool searchIcon;
+            public event EventHandler Changed;
+
+            public InputBox(string placeholder, bool icon)
+            {
+                searchIcon = icon;
+                Height = 40;
+                Font = F(9.5f);
+                SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+
+                Inner.BorderStyle = BorderStyle.None;
+                Inner.Font = F(9.5f);
+                Inner.PlaceholderText = placeholder;
+                Inner.BackColor = T.SurfaceAlt;
+                Inner.ForeColor = T.Ink;
+                Inner.GotFocus += (s, e) => Invalidate();
+                Inner.LostFocus += (s, e) => Invalidate();
+                Inner.TextChanged += (s, e) =>
+                {
+                    EventHandler h = Changed;
+                    if (h != null) h(this, EventArgs.Empty);
+                };
+                Controls.Add(Inner);
+                PositionInner();
+            }
+
+            public override string Text
+            {
+                get { return Inner.Text; }
+                set { Inner.Text = value; }
+            }
+
+            private void PositionInner()
+            {
+                int left = searchIcon ? 38 : 14;
+                Inner.Left = left;
+                Inner.Width = Math.Max(20, Width - left - 14);
+                Inner.Top = Math.Max(0, (Height - Inner.Height) / 2);
+            }
+
+            protected override void OnResize(EventArgs e) { base.OnResize(e); PositionInner(); }
+            protected override void OnMouseDown(MouseEventArgs e) { Inner.Focus(); base.OnMouseDown(e); }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                Graphics g = e.Graphics;
+                PaintField(g, this, false, Inner.Focused);
+                if (searchIcon) DrawIcon(g, Ico.Search, new RectangleF(13, Height / 2f - 9, 18, 18), T.Muted);
+            }
+        }
+
+        // ---- Pestañas de período rápido ----
+        private sealed class Segmented : Control
+        {
+            private readonly string[] items;
+            private int sel;
+            private int hover = -1;
+            public event EventHandler SelectedChanged;
+
+            public Segmented(string[] it, int selected)
+            {
+                items = it;
+                sel = selected;
+                Cursor = Cursors.Hand;
+                SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+            }
+
+            public int SelectedIndex { get { return sel; } set { sel = value; Invalidate(); } }
+
+            private int IndexAt(int x)
+            {
+                if (items.Length == 0) return -1;
+                float w = (Width - 8f) / items.Length;
+                int i = (int)((x - 4) / w);
+                return Math.Max(0, Math.Min(items.Length - 1, i));
+            }
+
+            protected override void OnMouseMove(MouseEventArgs e)
+            {
+                int i = IndexAt(e.X);
+                if (i != hover) { hover = i; Invalidate(); }
+                base.OnMouseMove(e);
+            }
+
+            protected override void OnMouseLeave(EventArgs e) { hover = -1; Invalidate(); base.OnMouseLeave(e); }
+
+            protected override void OnMouseUp(MouseEventArgs e)
+            {
+                base.OnMouseUp(e);
+                if (e.Button != MouseButtons.Left) return;
+                int i = IndexAt(e.X);
+                if (i < 0) return;
+                sel = i;
+                Invalidate();
+                EventHandler h = SelectedChanged;
+                if (h != null) h(this, EventArgs.Empty);
+            }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                Graphics g = e.Graphics;
+                g.Clear(OuterOf(this));
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                RectangleF rect = new RectangleF(.5f, .5f, Width - 1.5f, Height - 1.5f);
+                using (GraphicsPath path = Round(rect, 12))
+                using (SolidBrush br = new SolidBrush(T.Surface))
+                using (Pen pen = new Pen(T.Border))
+                {
+                    g.FillPath(br, path);
+                    g.DrawPath(pen, path);
+                }
+                if (items.Length == 0) return;
+
+                float w = (Width - 8f) / items.Length;
+                for (int i = 0; i < items.Length; i++)
+                {
+                    RectangleF r = new RectangleF(4 + w * i, 4, w, Height - 8f);
+                    bool on = i == sel;
+                    if (on)
+                    {
+                        using (GraphicsPath path = Round(r, 9))
+                        using (SolidBrush br = new SolidBrush(Mix(T.Surface, T.Accent, .18f)))
+                        using (Pen pen = new Pen(Mix(T.Surface, T.Accent, .55f)))
+                        {
+                            g.FillPath(br, path);
+                            g.DrawPath(pen, path);
+                        }
+                    }
+                    Color fg = on ? T.AccentText : (i == hover ? T.Ink : T.Muted);
+                    Txt(g, items[i], F(9f, on), Rectangle.Round(r), fg, TC);
+                }
+            }
+        }
+
+        // ---- Icono en cuadro redondeado ----
+        private sealed class IconBadge : Control
+        {
+            public Ico Glyph;
+            public Color Tint;
+
+            public IconBadge(Ico glyph, Color tint, int size)
+            {
+                Glyph = glyph;
+                Tint = tint;
+                Size = new Size(size, size);
+                SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+            }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                Graphics g = e.Graphics;
+                Color outer = OuterOf(this);
+                g.Clear(outer);
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                using (GraphicsPath path = Round(new RectangleF(0, 0, Width - 1, Height - 1), 10))
+                using (SolidBrush br = new SolidBrush(Mix(outer, Tint, .16f)))
+                    g.FillPath(br, path);
+                float s = Width * .5f;
+                DrawIcon(g, Glyph, new RectangleF((Width - s) / 2f, (Height - s) / 2f, s, s), Tint);
+            }
+        }
+
+        // ---- Tarjeta de categoría de reporte ----
+        private sealed class TabCard : Control
+        {
+            public Ico Glyph;
+            public string Title, Desc;
+            public int Count;
+            public bool Selected;
+            private bool hover;
+
+            public TabCard(Ico glyph, string title, string desc)
+            {
+                Glyph = glyph;
+                Title = title;
+                Desc = desc;
+                Cursor = Cursors.Hand;
+                SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+            }
+
+            protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
+            protected override void OnMouseLeave(EventArgs e) { hover = false; Invalidate(); base.OnMouseLeave(e); }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                Graphics g = e.Graphics;
+                g.Clear(OuterOf(this));
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+
+                Color fill = Selected ? Mix(T.Surface, T.Accent, .10f) : T.Surface;
+                Color stroke = Selected ? T.Accent : (hover ? Mix(T.Border, T.Accent, .5f) : T.Border);
+                RectangleF rect = new RectangleF(.5f, .5f, Width - 1.5f, Height - 1.5f);
+                using (GraphicsPath path = Round(rect, 14))
+                using (SolidBrush br = new SolidBrush(fill))
+                using (Pen pen = new Pen(stroke, Selected ? 1.6f : 1f))
+                {
+                    g.FillPath(br, path);
+                    g.DrawPath(pen, path);
+                }
+
+                Color tint = Selected ? T.AccentText : T.Muted;
+                RectangleF ib = new RectangleF(16, (Height - 44) / 2f, 44, 44);
+                using (GraphicsPath path = Round(ib, 11))
+                using (SolidBrush br = new SolidBrush(Mix(fill, tint, .16f)))
+                    g.FillPath(br, path);
+                DrawIcon(g, Glyph, new RectangleF(ib.X + 12, ib.Y + 12, 20, 20), tint);
+
+                Txt(g, Title, F(9.5f, true), new Rectangle(72, 17, Width - 72 - 14, 22), T.Ink, TL);
+
+                string c = Count.ToString();
+                Size ts = TextRenderer.MeasureText(c, F(8.5f, true), new Size(int.MaxValue, int.MaxValue), TextFormatFlags.NoPadding);
+                int pw = Math.Max(30, ts.Width + 18);
+                Rectangle pill = new Rectangle(Width - 16 - pw, 45, pw, 22);
+                using (GraphicsPath path = Round(pill, 11))
+                using (SolidBrush br = new SolidBrush(Selected ? T.Accent : T.SurfaceAlt))
+                    g.FillPath(br, path);
+                Txt(g, c, F(8.5f, true), pill, Selected ? T.AccentInk : T.Muted, TC);
+
+                Txt(g, Desc, F(8.5f), new Rectangle(72, 45, Math.Max(10, Width - 72 - pw - 28), 22), T.Muted, TL);
+            }
+        }
+
+        // ---- Notificación flotante ----
+        private sealed class Toast : Control
+        {
+            private string title = "", msg = "";
+            private Color accent = Color.Gray;
+            private readonly System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer();
+
+            public Toast()
+            {
+                Size = new Size(400, 84);
+                Visible = false;
+                Cursor = Cursors.Hand;
+                Anchor = AnchorStyles.Top | AnchorStyles.Right;
+                SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+                timer.Interval = 3800;
+                timer.Tick += (s, e) => { timer.Stop(); Visible = false; };
+                Click += (s, e) => { timer.Stop(); Visible = false; };
+            }
+
+            public void Display(string t, string m, Color c)
+            {
+                title = t; msg = m; accent = c;
+                if (Parent != null) Location = new Point(Math.Max(8, Parent.ClientSize.Width - Width - 28), 20);
+                Visible = true;
+                BringToFront();
+                timer.Stop();
+                timer.Start();
+                Invalidate();
+            }
+
+            protected override void OnResize(EventArgs e)
+            {
+                base.OnResize(e);
+                if (Width > 4 && Height > 4)
+                {
+                    using (GraphicsPath p = Round(new RectangleF(0, 0, Width, Height), 12))
+                    {
+                        if (Region != null) Region.Dispose();
+                        Region = new Region(p);
+                    }
+                }
+            }
+
+            protected override void Dispose(bool disposing)
+            {
+                if (disposing) timer.Dispose();
+                base.Dispose(disposing);
+            }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                Graphics g = e.Graphics;
+                g.Clear(T.Surface);
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                using (Pen pen = new Pen(T.Border, 2f))
+                    g.DrawRectangle(pen, 0, 0, Width - 1, Height - 1);
+                using (SolidBrush br = new SolidBrush(accent))
+                    g.FillRectangle(br, 0, 0, 5, Height);
+                Txt(g, title, F(10f, true), new Rectangle(22, 12, Width - 40, 22), T.Ink, TL);
+                Txt(g, msg, F(9f), new Rectangle(22, 36, Width - 40, 40), T.Muted, TextFormatFlags.Left | TextFormatFlags.WordBreak | TextFormatFlags.NoPadding);
+            }
+        }
+
+        // ---- Estado vacío ----
+        private sealed class EmptyState : Control
+        {
+            public EmptyState()
+            {
+                SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+            }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                Graphics g = e.Graphics;
+                g.Clear(T.Surface);
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                int cx = Width / 2;
+                Rectangle ib = new Rectangle(cx - 28, 24, 56, 56);
+                using (GraphicsPath p = Round(ib, 16))
+                using (SolidBrush br = new SolidBrush(Mix(T.Surface, T.Muted, .14f)))
+                    g.FillPath(br, p);
+                DrawIcon(g, Ico.Search, new RectangleF(ib.X + 15, ib.Y + 15, 26, 26), T.Muted);
+                Txt(g, "No se encontraron resultados", F(11.5f, true), new Rectangle(0, 94, Width, 26), T.Ink, TC);
+                Txt(g, "Prueba ajustando los filtros, el rango de fechas o la búsqueda rápida.", F(9f), new Rectangle(0, 122, Width, 22), T.Muted, TC);
+            }
+        }
+
+        // ---- Tabla ----
+        private sealed class FlatGrid : DataGridView
+        {
+            public FlatGrid() { DoubleBuffered = true; }
+
+            protected override void OnMouseWheel(MouseEventArgs e)
+            {
+                for (Control p = Parent; p != null; p = p.Parent)
+                {
+                    ScrollableControl sc = p as ScrollableControl;
+                    if (sc != null && sc.AutoScroll)
+                    {
+                        sc.AutoScrollPosition = new Point(-sc.AutoScrollPosition.X, -sc.AutoScrollPosition.Y - e.Delta);
+                        return;
+                    }
+                }
+                base.OnMouseWheel(e);
+            }
         }
 
         // ============================================================
-        // CABECERA
+        //  GRÁFICOS
         // ============================================================
+        private sealed class DonutChart : Control
+        {
+            private string[] labels = new string[0];
+            private int[] values = new int[0];
+            private Color[] colors = new Color[0];
 
+            public DonutChart()
+            {
+                SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+            }
+
+            public void SetData(string[] l, int[] v, Color[] c)
+            {
+                labels = l; values = v; colors = c;
+                Invalidate();
+            }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                Graphics g = e.Graphics;
+                g.Clear(T.Surface);
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                if (Width < 120 || Height < 80) return;
+
+                int total = values.Sum();
+                int size = Math.Max(90, Math.Min(Height - 10, (int)(Width * .46f)));
+                Rectangle ring = new Rectangle(4, (Height - size) / 2, size, size);
+                float pw = size * .15f;
+                Rectangle arc = Rectangle.Inflate(ring, -(int)(pw / 2), -(int)(pw / 2));
+
+                using (Pen track = new Pen(Mix(T.Surface, T.Muted, .16f), pw))
+                    g.DrawEllipse(track, arc);
+
+                float start = -90f;
+                for (int i = 0; i < values.Length; i++)
+                {
+                    if (values[i] <= 0 || total <= 0) continue;
+                    float sweep = values[i] / (float)total * 360f;
+                    float gap = sweep > 8f ? 3f : 0f;
+                    using (Pen p = new Pen(colors[i], pw))
+                        g.DrawArc(p, arc, start + gap / 2f, sweep - gap);
+                    start += sweep;
+                }
+
+                Txt(g, total.ToString(), F(20f, true), new Rectangle(ring.X, ring.Y + size / 2 - 26, ring.Width, 30), T.Ink, TC);
+                Txt(g, "Equipos", F(8.5f), new Rectangle(ring.X, ring.Y + size / 2 + 4, ring.Width, 18), T.Muted, TC);
+
+                int x0 = ring.Right + 28;
+                int n = labels.Length;
+                int rowH = 40;
+                int y0 = Math.Max(0, (Height - n * rowH) / 2);
+                int right = Width - 6;
+                for (int i = 0; i < n; i++)
+                {
+                    int y = y0 + i * rowH;
+                    using (SolidBrush b = new SolidBrush(colors[i]))
+                        g.FillEllipse(b, x0, y + 7, 9, 9);
+                    Txt(g, labels[i], F(9.5f), new Rectangle(x0 + 18, y, Math.Max(10, right - x0 - 70), 22), T.Ink, TL);
+                    Txt(g, values[i].ToString(), F(10f, true), new Rectangle(right - 50, y, 50, 22), T.Ink, TR);
+                    string pct = total > 0 ? (values[i] * 100.0 / total).ToString("0.#", CultureInfo.InvariantCulture) + "%" : "0%";
+                    Txt(g, pct + " del total", F(8f), new Rectangle(x0 + 18, y + 19, Math.Max(10, right - x0 - 20), 16), T.Muted, TL);
+                }
+            }
+        }
+
+        private sealed class BarChart : Control
+        {
+            private string[] labels = new string[0];
+            private int[] a = new int[0];
+            private int[] b = new int[0];
+
+            public BarChart()
+            {
+                SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+            }
+
+            public void SetData(string[] l, int[] salidas, int[] ingresos)
+            {
+                labels = l; a = salidas; b = ingresos;
+                Invalidate();
+            }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                Graphics g = e.Graphics;
+                g.Clear(T.Surface);
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+
+                int n = labels.Length;
+                int left = 32, right = Width - 4, top = 32, bottom = Height - 26;
+                if (n == 0 || right - left < 60 || bottom - top < 40) return;
+
+                int max = 0;
+                for (int i = 0; i < n; i++) { max = Math.Max(max, Math.Max(a[i], b[i])); }
+                int niceMax = Math.Max(4, (int)Math.Ceiling(max / 4.0) * 4);
+
+                // leyenda
+                using (SolidBrush b1 = new SolidBrush(T.Info))
+                    g.FillEllipse(b1, left, 8, 9, 9);
+                Txt(g, "Salidas", F(8.5f), new Rectangle(left + 14, 3, 60, 18), T.Muted, TL);
+                using (SolidBrush b2 = new SolidBrush(T.Ok))
+                    g.FillEllipse(b2, left + 84, 8, 9, 9);
+                Txt(g, "Ingresos", F(8.5f), new Rectangle(left + 98, 3, 70, 18), T.Muted, TL);
+
+                using (Pen gridPen = new Pen(Mix(T.Surface, T.Muted, .14f), 1f))
+                {
+                    for (int k = 0; k <= 4; k++)
+                    {
+                        int y = bottom - (bottom - top) * k / 4;
+                        g.DrawLine(gridPen, left, y, right, y);
+                        Txt(g, (niceMax * k / 4).ToString(), F(7.5f), new Rectangle(0, y - 8, left - 6, 16), T.Muted, TR);
+                    }
+                }
+
+                float groupW = (right - left) / (float)n;
+                float barW = Math.Min(20f, groupW / 3.2f);
+                float gap = 4f;
+                float span = bottom - top;
+
+                for (int i = 0; i < n; i++)
+                {
+                    float cx = left + groupW * (i + .5f);
+                    float hA = a[i] / (float)niceMax * span;
+                    float hB = b[i] / (float)niceMax * span;
+
+                    if (hA > 0.5f)
+                    {
+                        RectangleF ra = new RectangleF(cx - gap / 2f - barW, bottom - hA, barW, hA);
+                        using (GraphicsPath p = Round(ra, 4))
+                        using (SolidBrush br = new SolidBrush(T.Info))
+                            g.FillPath(br, p);
+                        Txt(g, a[i].ToString(), F(7.5f), new Rectangle((int)ra.X - 6, (int)ra.Y - 15, (int)barW + 12, 14), T.Muted, TC);
+                    }
+                    if (hB > 0.5f)
+                    {
+                        RectangleF rb = new RectangleF(cx + gap / 2f, bottom - hB, barW, hB);
+                        using (GraphicsPath p = Round(rb, 4))
+                        using (SolidBrush br = new SolidBrush(T.Ok))
+                            g.FillPath(br, p);
+                        Txt(g, b[i].ToString(), F(7.5f), new Rectangle((int)rb.X - 6, (int)rb.Y - 15, (int)barW + 12, 14), T.Muted, TC);
+                    }
+                    Txt(g, labels[i], F(8f), new Rectangle((int)(cx - groupW / 2f), bottom + 5, (int)groupW, 18), T.Muted, TC);
+                }
+            }
+        }
+
+        private sealed class HBarChart : Control
+        {
+            private string[] labels = new string[0];
+            private int[] values = new int[0];
+            private Color[] colors = new Color[0];
+
+            public HBarChart()
+            {
+                SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+            }
+
+            public void SetData(string[] l, int[] v, Color[] c)
+            {
+                labels = l; values = v; colors = c;
+                Invalidate();
+            }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                Graphics g = e.Graphics;
+                g.Clear(T.Surface);
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                int n = labels.Length;
+                if (n == 0 || Width < 80) return;
+
+                int max = Math.Max(1, values.Max());
+                int rowH = Math.Min(64, Height / n);
+                int y0 = Math.Max(0, (Height - rowH * n) / 2);
+
+                for (int i = 0; i < n; i++)
+                {
+                    int y = y0 + i * rowH;
+                    Txt(g, labels[i], F(9.5f), new Rectangle(0, y, Width - 60, 22), T.Ink, TL);
+                    Txt(g, values[i].ToString(), F(11f, true), new Rectangle(Width - 56, y - 1, 56, 24), T.Ink, TR);
+
+                    RectangleF track = new RectangleF(0, y + 28, Width - 2, 8);
+                    using (GraphicsPath p = Round(track, 4))
+                    using (SolidBrush br = new SolidBrush(Mix(T.Surface, T.Muted, .16f)))
+                        g.FillPath(br, p);
+
+                    if (values[i] > 0)
+                    {
+                        float w = Math.Max(10f, track.Width * values[i] / max);
+                        using (GraphicsPath p = Round(new RectangleF(track.X, track.Y, w, track.Height), 4))
+                        using (SolidBrush br = new SolidBrush(colors[i]))
+                            g.FillPath(br, p);
+                    }
+                }
+            }
+        }
+
+        // ============================================================
+        //  ESTADO DE LA PANTALLA
+        // ============================================================
+        private enum Seccion { Inventario = 0, Movimientos = 1, Prestamos = 2, Mantenimiento = 3 }
+
+        private sealed class Col
+        {
+            public string H; public float W; public string K;
+            public Col(string h, float w, string k = null) { H = h; W = w; K = k; }
+        }
+
+        private const int HeaderH = 46;
+        private const int RowH = 50;
+        private static readonly string[] TiposMov = { "Todos", "Entrada", "Salida", "Traslado", "Devolución" };
+
+        private Seccion seccion = Seccion.Inventario;
+
+        // filtros confirmados (se aplican con "Aplicar filtros")
+        private int periodoIdx = 1;
+        private DateTime fDesde = DateTime.Today.AddDays(-30);
+        private DateTime fHasta = DateTime.Today;
+        private string fCategoria = "Todas", fTexto = "", fTrabajador = "Todos", fEstado = "Todos", fTipo = "Todos";
+        private string busquedaRapida = "";
+        private int pageSize = 10, pagina = 1;
+        private bool building;
+
+        private ScrollPanel scroll;
+        private Toast toast;
+        private UiButton btnActualizar, btnExportar, btnPdf, btnExcel, btnPrint, btnAplicar, btnLimpiar;
+        private Segmented segPeriodo;
+        private Label lblRango;
+        private readonly Label[] kpiValue = new Label[5];
+        private readonly Label[] kpiSub = new Label[5];
+        private TabCard[] tabCards;
+        private DateBox dtDesde, dtHasta;
+        private SelectBox selCategoria, selTrabajador, selEstado, selTipo, selPagina;
+        private InputBox inpEquipo, inpBusqueda;
+        private Label[] caps;
+        private Control[] filterCtrls;
+        private Label lblHint;
+        private DonutChart donut;
+        private BarChart barras;
+        private HBarChart hbar;
+        private Panel tableHost, pagerHost, footerPanel;
+        private FlatGrid grid;
+        private EmptyState emptyPanel;
+        private Label lblTablaTitulo, lblTablaSub, lblInfo, lblFoot;
+        private int columnsFor = -1;
+        private int hoverRow = -1;
+        private List<string[]> baseRows = new List<string[]>();
+        private List<string[]> viewRows = new List<string[]>();
+
+        public CotrolReporte()
+        {
+            Dock = DockStyle.Fill;
+            DoubleBuffered = true;
+            Font = F(9f);
+            BackColor = T.Canvas;
+
+            BuildUi();
+            Recalcular();
+        }
+
+        // ============================================================
+        //  CONSTRUCCIÓN DE LA INTERFAZ
+        // ============================================================
+        private void BuildUi()
+        {
+            building = true;
+            SuspendLayout();
+
+            if (scroll != null) { Controls.Remove(scroll); scroll.Dispose(); }
+            if (toast != null) { Controls.Remove(toast); toast.Dispose(); }
+            columnsFor = -1;
+            hoverRow = -1;
+            BackColor = T.Canvas;
+
+            scroll = new ScrollPanel { Dock = DockStyle.Fill, BackColor = T.Canvas, AutoScroll = true };
+            scroll.AutoScrollMinSize = new Size(1100, 0);
+
+            List<Control> secciones = new List<Control>
+            {
+                BuildHeader(),
+                BuildPeriodRow(),
+                BuildKpiRow(),
+                BuildTabsRow(),
+                BuildFilters(),
+                BuildCharts(),
+                BuildTable(),
+                BuildFootnote()
+            };
+            for (int i = secciones.Count - 1; i >= 0; i--) scroll.Controls.Add(secciones[i]);
+
+            Controls.Add(scroll);
+            toast = new Toast();
+            Controls.Add(toast);
+            toast.BringToFront();
+
+            HookWheel(scroll);
+            ResumeLayout(true);
+            building = false;
+        }
+
+        private void HookWheel(Control root)
+        {
+            foreach (Control c in root.Controls)
+            {
+                if (c is InputBox || c is FlatGrid) continue;
+                c.MouseEnter += (s, e) =>
+                {
+                    bool escribiendo = (inpEquipo != null && inpEquipo.Inner.Focused) || (inpBusqueda != null && inpBusqueda.Inner.Focused);
+                    if (scroll != null && !escribiendo) scroll.Focus();
+                };
+                c.MouseDown += (s, e) => { if (scroll != null) scroll.Focus(); };
+                HookWheel(c);
+            }
+        }
+
+        private void RunSilent(Action a)
+        {
+            bool old = building;
+            building = true;
+            try { a(); }
+            finally { building = old; }
+        }
+
+        // ---------------- Encabezado ----------------
         private Control BuildHeader()
         {
-            Panel p = new Panel
-            {
-                Dock = DockStyle.Fill,
-                BackColor = canvas,
-                Margin = new Padding(0)
-            };
+            Panel host = new Panel { Dock = DockStyle.Top, Height = 104, BackColor = T.Canvas, Padding = new Padding(24, 18, 24, 6) };
+            Panel p = new Panel { Dock = DockStyle.Fill, BackColor = T.Canvas };
 
-            Label crumb = LabelOf(
-                "ARTEMUSA TV  /  REPORTES",
-                7.6f,
-                Color.FromArgb(116, 143, 176),
-                true
-            );
-
-            crumb.Location = new Point(2, 1);
-
-            Label title = LabelOf(
-                "Panel de Reportes",
-                20.5f,
-                Color.White,
-                true
-            );
-
-            title.Location = new Point(0, 18);
-
-            Label sub = LabelOf(
-                "Resumen visual de equipos, movimientos, retornos y alertas.",
-                8.5f,
-                muted
-            );
-
+            Label crumb = Lbl("GESTIÓN Y ANÁLISIS", 8f, T.AccentText, true);
+            crumb.Location = new Point(2, 0);
+            Label title = Lbl("Reportes audiovisuales", 22f, T.Ink, true);
+            title.Location = new Point(0, 16);
+            Label sub = Lbl("Consulta, seguimiento y control de equipos audiovisuales", 9.5f, T.Muted);
             sub.Location = new Point(2, 58);
 
-            Panel badge = new Panel
+            btnExportar = new UiButton("Exportar reporte  ▾", 160, 40);
+            btnExportar.Click += (s, e) => MostrarMenuExportar(btnExportar);
+            btnActualizar = new UiButton("↻  Actualizar", 130, 40) { Style = BtnStyle.Primary };
+            btnActualizar.Click += (s, e) =>
             {
-                Size = new Size(156, 34),
-                BackColor = Color.FromArgb(75, 57, 35)
+                Recalcular();
+                ShowToast("Vista actualizada", "Los datos de demostración se recargaron correctamente.", T.Ok);
             };
 
-            Rounded(badge, 9);
+            p.Controls.Add(crumb);
+            p.Controls.Add(title);
+            p.Controls.Add(sub);
+            p.Controls.Add(btnExportar);
+            p.Controls.Add(btnActualizar);
 
-            Label badgeText = new Label
+            Action pos = () =>
             {
-                Text = "🔔  Alertas activas",
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleCenter,
-                Font = FontOf(8.1f, true),
-                ForeColor = Color.FromArgb(245, 203, 127),
-                BackColor = Color.Transparent
+                btnActualizar.Location = new Point(Math.Max(0, p.Width - btnActualizar.Width), 14);
+                btnExportar.Location = new Point(Math.Max(0, btnActualizar.Left - btnExportar.Width - 10), 14);
             };
-
-            badge.Controls.Add(badgeText);
-            p.Controls.Add(badge);
-
-            p.Controls.AddRange(
-                new Control[]
-                {
-                    crumb,
-                    title,
-                    sub
-                }
-            );
-
-            p.Resize += (s, e) =>
-            {
-                badge.Location = new Point(
-                    p.Width - badge.Width - 2,
-                    19
-                );
-            };
-
-            return p;
+            p.Resize += (s, e) => pos();
+            host.Controls.Add(p);
+            pos();
+            return host;
         }
 
-        // ============================================================
-        // FILTROS
-        // ============================================================
+        private void MostrarMenuExportar(Control anchor)
+        {
+            ContextMenuStrip m = NewMenu(anchor.Width);
+            AddMenuItem(m, "Exportar a PDF", () => SimularExportacion("PDF"));
+            AddMenuItem(m, "Exportar a Excel", () => SimularExportacion("Excel"));
+            AddMenuItem(m, "Imprimir reporte", () => SimularExportacion("impresión"));
+            m.Show(anchor, new Point(0, anchor.Height + 4));
+        }
+
+        // ---------------- Período ----------------
+        private Control BuildPeriodRow()
+        {
+            Panel host = new Panel { Dock = DockStyle.Top, Height = 58, BackColor = T.Canvas, Padding = new Padding(24, 0, 24, 16) };
+            Panel p = new Panel { Dock = DockStyle.Fill, BackColor = T.Canvas };
+
+            segPeriodo = new Segmented(new[] { "7 días", "30 días", "3 meses", "Este año" }, periodoIdx)
+            {
+                Size = new Size(420, 42),
+                Location = new Point(0, 0)
+            };
+            segPeriodo.SelectedChanged += (s, e) =>
+            {
+                if (building) return;
+                AplicarPeriodoRapido(segPeriodo.SelectedIndex);
+            };
+
+            Card chip = new Card { Size = new Size(320, 42), Radius = 12 };
+            lblRango = Lbl("", 9.5f, T.Ink, true);
+            lblRango.AutoSize = false;
+            lblRango.Dock = DockStyle.Fill;
+            lblRango.TextAlign = ContentAlignment.MiddleCenter;
+            chip.Controls.Add(lblRango);
+
+            p.Controls.Add(segPeriodo);
+            p.Controls.Add(chip);
+            p.Resize += (s, e) => chip.Location = new Point(Math.Max(0, p.Width - chip.Width), 0);
+            host.Controls.Add(p);
+            chip.Location = new Point(Math.Max(0, p.Width - chip.Width), 0);
+            return host;
+        }
+
+        private void AplicarPeriodoRapido(int idx)
+        {
+            DateTime hoy = DateTime.Today;
+            DateTime d;
+            switch (idx)
+            {
+                case 0: d = hoy.AddDays(-7); break;
+                case 1: d = hoy.AddDays(-30); break;
+                case 2: d = hoy.AddMonths(-3); break;
+                default: d = new DateTime(hoy.Year, 1, 1); break;
+            }
+            dtDesde.Value = d;
+            dtHasta.Value = hoy;
+            AplicarFiltros();
+        }
+
+        private int DetectarPeriodo()
+        {
+            DateTime hoy = DateTime.Today;
+            if (fHasta.Date != hoy) return -1;
+            DateTime d = fDesde.Date;
+            if (d == hoy.AddDays(-7)) return 0;
+            if (d == hoy.AddDays(-30)) return 1;
+            if (d == hoy.AddMonths(-3)) return 2;
+            if (d == new DateTime(hoy.Year, 1, 1)) return 3;
+            return -1;
+        }
+
+        // ---------------- Tarjetas de resumen ----------------
+        private Control BuildKpiRow()
+        {
+            Panel host = new Panel { Dock = DockStyle.Top, Height = 144, BackColor = T.Canvas, Padding = new Padding(24, 0, 24, 16) };
+            TableLayoutPanel t = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 5, RowCount = 1, BackColor = T.Canvas, Margin = Padding.Empty };
+            for (int i = 0; i < 5; i++) t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20f));
+            t.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+
+            string[] titles = { "Total de equipos", "Disponibles", "Prestados", "En mantenimiento", "Devol. pendientes" };
+            Ico[] icons = { Ico.Box, Ico.Check, Ico.Out, Ico.Cog, Ico.Clock };
+            Color[] colors = { T.AccentText, T.Teal, T.Info, T.Warn, T.Bad };
+
+            for (int i = 0; i < 5; i++)
+            {
+                Card card = new Card { Dock = DockStyle.Fill, Margin = new Padding(i == 0 ? 0 : 6, 0, i == 4 ? 0 : 6, 0) };
+
+                Label title = Lbl(titles[i], 9f, T.Muted, true);
+                title.Location = new Point(18, 18);
+                kpiValue[i] = Lbl("0", 26f, T.Ink, true);
+                kpiValue[i].Location = new Point(14, 44);
+                kpiSub[i] = Lbl("", 8.5f, T.Muted);
+                kpiSub[i].Location = new Point(18, 94);
+
+                IconBadge badge = new IconBadge(icons[i], colors[i], 36);
+                card.Controls.Add(title);
+                card.Controls.Add(kpiValue[i]);
+                card.Controls.Add(kpiSub[i]);
+                card.Controls.Add(badge);
+                card.Resize += (s, e) => badge.Location = new Point(card.Width - 18 - badge.Width, 14);
+                badge.Location = new Point(Math.Max(0, card.Width - 18 - badge.Width), 14);
+
+                t.Controls.Add(card, i, 0);
+            }
+
+            host.Controls.Add(t);
+            return host;
+        }
+
+        // ---------------- Categorías de reporte ----------------
+        private Control BuildTabsRow()
+        {
+            Panel host = new Panel { Dock = DockStyle.Top, Height = 100, BackColor = T.Canvas, Padding = new Padding(24, 0, 24, 16) };
+            TableLayoutPanel t = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 1, BackColor = T.Canvas, Margin = Padding.Empty };
+            for (int i = 0; i < 4; i++) t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25f));
+            t.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+
+            string[] titles = { "Inventario", "Movimientos", "Préstamos y devoluciones", "Mantenimiento" };
+            string[] descs = { "Stock y condición", "Entradas y salidas", "Control de préstamos", "Averías y reparaciones" };
+            Ico[] icons = { Ico.List, Ico.Swap, Ico.Person, Ico.Cog };
+
+            tabCards = new TabCard[4];
+            for (int i = 0; i < 4; i++)
+            {
+                Seccion destino = (Seccion)i;
+                TabCard tc = new TabCard(icons[i], titles[i], descs[i])
+                {
+                    Dock = DockStyle.Fill,
+                    Margin = new Padding(i == 0 ? 0 : 6, 0, i == 3 ? 0 : 6, 0),
+                    Selected = i == (int)seccion
+                };
+                tc.Click += (s, e) => CambiarSeccion(destino);
+                tabCards[i] = tc;
+                t.Controls.Add(tc, i, 0);
+            }
+
+            host.Controls.Add(t);
+            return host;
+        }
+
+        private void CambiarSeccion(Seccion s)
+        {
+            if (s == seccion) return;
+            seccion = s;
+            fEstado = "Todos";
+            busquedaRapida = "";
+            RunSilent(() => inpBusqueda.Text = "");
+            for (int i = 0; i < tabCards.Length; i++)
+            {
+                tabCards[i].Selected = i == (int)seccion;
+                tabCards[i].Invalidate();
+            }
+            ConfigurarFiltros();
+            pagina = 1;
+            Recalcular();
+        }
+
+        // ---------------- Filtros ----------------
+        private Panel Field(string caption, Control ctl, out Label cap)
+        {
+            Panel p = new Panel { Dock = DockStyle.Fill, BackColor = T.Surface, Margin = new Padding(0, 0, 14, 6) };
+            cap = Lbl(caption.ToUpperInvariant(), 7.5f, T.Muted, true);
+            cap.Location = new Point(0, 2);
+            ctl.Location = new Point(0, 24);
+            ctl.Size = new Size(Math.Max(40, p.Width), 40);
+            p.Controls.Add(cap);
+            p.Controls.Add(ctl);
+            p.Resize += (s, e) => ctl.Width = Math.Max(40, p.Width);
+            return p;
+        }
 
         private Control BuildFilters()
         {
-            Panel p = new Card
+            Panel host = new Panel { Dock = DockStyle.Top, Height = 232, BackColor = T.Canvas, Padding = new Padding(24, 0, 24, 16) };
+            Card card = new Card { Dock = DockStyle.Fill, Padding = new Padding(1, 10, 1, 10) };
+
+            dtDesde = new DateBox { Value = fDesde };
+            dtHasta = new DateBox { Value = fHasta };
+            dtDesde.UserChanged += (s, e) => segPeriodo.SelectedIndex = -1;
+            dtHasta.UserChanged += (s, e) => segPeriodo.SelectedIndex = -1;
+
+            selCategoria = new SelectBox();
+            selCategoria.SetItems(new[] { "Todas" }.Concat(Demo.Categorias), Math.Max(0, Array.IndexOf(Demo.Categorias, fCategoria) + 1));
+
+            inpEquipo = new InputBox("Nombre o código…", true) { Text = fTexto };
+            inpEquipo.Inner.KeyDown += (s, e) =>
             {
-                Dock = DockStyle.Fill,
-                BackColor = surface,
-                Padding = new Padding(14, 9, 14, 8),
-                Margin = new Padding(0, 0, 0, 10)
+                if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; AplicarFiltros(); }
             };
 
-            TableLayoutPanel row = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 6,
-                RowCount = 2,
-                Margin = new Padding(0),
-                Padding = new Padding(0)
-            };
+            selTrabajador = new SelectBox();
+            selTrabajador.SetItems(new[] { "Todos" }.Concat(Demo.Trabajadores), Math.Max(0, Array.IndexOf(Demo.Trabajadores, fTrabajador) + 1));
 
-            row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 145));
-            row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 145));
-            row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 175));
-            row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 175));
-            row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 118));
+            selEstado = new SelectBox();
+            selTipo = new SelectBox();
+            selTipo.SetItems(TiposMov, Math.Max(0, Array.IndexOf(TiposMov, fTipo)));
 
-            row.RowStyles.Add(new RowStyle(SizeType.Absolute, 18));
-            row.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            Control[] cs = { dtDesde, dtHasta, selCategoria, inpEquipo, selTrabajador, selEstado, selTipo };
+            string[] names = { "Fecha inicial", "Fecha final", "Categoría", "Equipo (nombre o código)", "Trabajador responsable", "Estado", "Tipo de movimiento" };
 
-            row.Controls.Add(LabelOf("DESDE", 7.2f, muted, true), 0, 0);
-            row.Controls.Add(LabelOf("HASTA", 7.2f, muted, true), 1, 0);
-            row.Controls.Add(LabelOf("TIPO", 7.2f, muted, true), 2, 0);
-            row.Controls.Add(LabelOf("RESPONSABLE", 7.2f, muted, true), 3, 0);
-            row.Controls.Add(LabelOf("BUSCAR", 7.2f, muted, true), 4, 0);
-
-            fromDate = new DateTimePicker
-            {
-                Format = DateTimePickerFormat.Short,
-                Width = 130,
-                Value = DateTime.Today.AddDays(-30),
-                CalendarForeColor = ink,
-                CalendarMonthBackground = surface
-            };
-
-            toDate = new DateTimePicker
-            {
-                Format = DateTimePickerFormat.Short,
-                Width = 130,
-                Value = DateTime.Today,
-                CalendarForeColor = ink,
-                CalendarMonthBackground = surface
-            };
-
-            typeFilter = ComboOf(
-                "Todos",
-                "Entrada",
-                "Salida"
-            );
-
-            responsibleFilter = ComboOf("Todos");
-            responsibleFilter.Width = 160;
-
-            applyButton = ButtonOf(
-                "Aplicar",
-                (s, e) => LoadReport(),
-                true,
-                100
-            );
-
-            applyButton.Height = 30;
-
-            search = new TextBox
-            {
-                PlaceholderText = "Buscar equipo o responsable…",
-                Dock = DockStyle.Top,
-                Font = FontOf(9),
-                Margin = new Padding(0, 2, 12, 0),
-                BackColor = Color.FromArgb(24, 38, 57),
-                ForeColor = ink,
-                BorderStyle = BorderStyle.FixedSingle
-            };
-
-            row.Controls.Add(fromDate, 0, 1);
-            row.Controls.Add(toDate, 1, 1);
-            row.Controls.Add(typeFilter, 2, 1);
-            row.Controls.Add(responsibleFilter, 3, 1);
-            row.Controls.Add(search, 4, 1);
-            row.Controls.Add(applyButton, 5, 1);
-
-            p.Controls.Add(row);
-
-            return p;
-        }
-
-        // ============================================================
-        // KPI
-        // ============================================================
-
-        private Control BuildKpis()
-        {
-            TableLayoutPanel row = new TableLayoutPanel
+            TableLayoutPanel tlp = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 4,
-                RowCount = 1,
-                Margin = new Padding(0),
-                Padding = new Padding(0)
+                RowCount = 2,
+                BackColor = T.Surface,
+                Padding = new Padding(20, 0, 6, 0),
+                Margin = Padding.Empty
             };
+            for (int i = 0; i < 4; i++) tlp.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25f));
+            tlp.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
+            tlp.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
 
-            string[] names =
+            caps = new Label[cs.Length];
+            for (int i = 0; i < cs.Length; i++)
             {
-        "1. ENTRADAS",
-        "2. SALIDAS",
-        "3. EN MANTENIMIENTO",
-        "4. DEVOLUCIONES PENDIENTES"
-    };
-
-            string[] notesText =
-            {
-        "Equipos ingresados",
-        "Equipos retirados",
-        "Equipos en revisión/mantenimiento",
-        "Equipos aún no devueltos"
-    };
-            string[] icons =
-{
-    "◫",   // Entradas
-    "⇄",   // Salidas
-    "!",   // Mantenimiento
-    "↩"    // Devoluciones pendientes
-};
-
-
-
-            Color[] colors =
-            {
-        amber,
-        greenBright,
-        red,
-        greenBright
-    };
-
-            // Las 4 tarjetas ocupan el mismo espacio
-            for (int i = 0; i < 4; i++)
-            {
-                row.ColumnStyles.Add(
-                    new ColumnStyle(SizeType.Percent, 25F)
-                );
+                Label cap;
+                Panel f = Field(names[i], cs[i], out cap);
+                caps[i] = cap;
+                tlp.Controls.Add(f, i % 4, i / 4);
             }
+            filterCtrls = cs;
 
-            row.RowStyles.Add(
-                new RowStyle(SizeType.Percent, 100F)
-            );
-
-            for (int i = 0; i < 4; i++)
+            btnAplicar = new UiButton("Aplicar filtros", 140, 40) { Style = BtnStyle.Primary, Location = new Point(0, 24) };
+            btnAplicar.Click += (s, e) =>
             {
-                Panel p = new Card
-                {
-                    Dock = DockStyle.Fill,
-
-                    BackColor = i == 2
-                        ? Color.FromArgb(69, 34, 39)
-                        : card,
-
-                    Margin = new Padding(
-                        i == 0 ? 0 : 5,
-                        0,
-                        i == 3 ? 0 : 5,
-                        10
-                    ),
-
-                    Padding = new Padding(0)
-                };
-
-                // =========================
-                // TÍTULO
-                // =========================
-                Label t = LabelOf(
-                    names[i],
-                    7.9f,
-                    Color.White,
-                    true
-                );
-
-                t.AutoSize = false;
-                t.Location = new Point(18, 10);
-                t.Size = new Size(220, 24);
-                t.TextAlign = ContentAlignment.MiddleLeft;
-
-                // =========================
-                // VALOR
-                // =========================
-                values[i] = LabelOf(
-                    "—",
-                    22,
-                    Color.White,
-                    true
-                );
-
-                values[i].AutoSize = false;
-                values[i].Location = new Point(18, 37);
-                values[i].Size = new Size(120, 35);
-                values[i].TextAlign = ContentAlignment.MiddleLeft;
-
-                // =========================
-                // DESCRIPCIÓN
-                // =========================
-                Label n = LabelOf(
-                    notesText[i],
-                    7.8f,
-                    colors[i],
-                    true
-                );
-
-                // Evita que se corte la E de "Equipos"
-                n.AutoSize = false;
-                n.Location = new Point(18, 73);
-                n.Size = new Size(235, 26);
-                n.TextAlign = ContentAlignment.MiddleLeft;
-                n.Padding = new Padding(2, 0, 0, 0);
-
-                // =========================
-                // ICONO
-                // =========================
-                Label icon = LabelOf(
-                    icons[i],
-                    18f,
-                    colors[i],
-                    true
-                );
-
-                icon.AutoSize = false;
-                icon.Size = new Size(38, 38);
-                icon.TextAlign = ContentAlignment.MiddleCenter;
-
-                p.Controls.Add(t);
-                p.Controls.Add(values[i]);
-                p.Controls.Add(n);
-                p.Controls.Add(icon);
-
-                int index = i;
-
-                // =========================
-                // AJUSTE RESPONSIVO
-                // =========================
-                p.Resize += (s, e) =>
-                {
-                    // Icono siempre a la derecha
-                    icon.Location = new Point(
-                        Math.Max(145, p.Width - 50),
-                        17
-                    );
-
-                    // Ajustar ancho del título
-                    t.Width = Math.Max(
-                        100,
-                        p.Width - 75
-                    );
-
-                    // Ajustar descripción al ancho de la tarjeta
-                    n.Width = Math.Max(
-                        100,
-                        p.Width - 32
-                    );
-                };
-
-                // =========================
-                // MINI GRÁFICA
-                // =========================
-                p.Paint += (s, e) =>
-                {
-                    // No dibujar gráfica en devoluciones pendientes
-                    if (index == 3)
-                        return;
-
-                    e.Graphics.SmoothingMode =
-                        SmoothingMode.AntiAlias;
-
-                    int baseY = p.Height - 18;
-
-                    int x = Math.Max(
-                        135,
-                        p.Width - 118
-                    );
-
-                    Point[] points =
-                    {
-                new Point(x, baseY - 2),
-                new Point(x + 18, baseY - 10),
-                new Point(x + 36, baseY - 7),
-                new Point(x + 54, baseY - 15),
-                new Point(x + 74, baseY - 9)
+                AplicarFiltros();
+                ShowToast("Filtros aplicados", "Las tablas, tarjetas y gráficos se actualizaron.", T.Ok);
             };
+            btnLimpiar = new UiButton("Limpiar", 110, 40) { Location = new Point(150, 24) };
+            btnLimpiar.Click += (s, e) => LimpiarFiltros();
 
-                    using (Pen pen = new Pen(
-                        Color.FromArgb(
-                            145,
-                            colors[index]
-                        ),
-                        2.1f
-                    ))
-                    {
-                        pen.LineJoin = LineJoin.Round;
+            Panel btns = new Panel { Dock = DockStyle.Fill, BackColor = T.Surface, Margin = new Padding(0, 0, 0, 6) };
+            btns.Controls.Add(btnAplicar);
+            btns.Controls.Add(btnLimpiar);
+            tlp.Controls.Add(btns, 3, 1);
 
-                        e.Graphics.DrawLines(
-                            pen,
-                            points
-                        );
-                    }
-                };
+            Panel head = new Panel { Dock = DockStyle.Top, Height = 46, BackColor = T.Surface };
+            Label title = Lbl("Filtros", 11.5f, T.Ink, true);
+            title.Location = new Point(20, 12);
+            lblHint = Lbl("", 8.5f, T.Muted);
+            lblHint.AutoSize = false;
+            lblHint.Dock = DockStyle.Right;
+            lblHint.Width = 660;
+            lblHint.TextAlign = ContentAlignment.MiddleRight;
+            lblHint.Padding = new Padding(0, 0, 20, 0);
+            head.Controls.Add(lblHint);
+            head.Controls.Add(title);
 
-                row.Controls.Add(
-                    p,
-                    i,
-                    0
-                );
-            }
+            card.Controls.Add(tlp);
+            card.Controls.Add(head);
+            host.Controls.Add(card);
 
-            return row;
+            ConfigurarFiltros();
+            return host;
         }
-        // ============================================================
-        // GRÁFICOS + ACCIONES
-        // ============================================================
 
+        private void ConfigurarFiltros()
+        {
+            bool inv = seccion == Seccion.Inventario;
+            bool mov = seccion == Seccion.Movimientos;
+            bool pre = seccion == Seccion.Prestamos;
+
+            dtDesde.Enabled = !inv;
+            dtHasta.Enabled = !inv;
+            selTrabajador.Enabled = mov || pre;
+            selEstado.Enabled = !mov;
+            selTipo.Enabled = mov;
+
+            string[] est;
+            switch (seccion)
+            {
+                case Seccion.Inventario: est = new[] { "Todos", "Disponible", "Prestado", "Mantenimiento", "Fuera de servicio" }; break;
+                case Seccion.Prestamos: est = new[] { "Todos", "Pendiente", "Devuelto", "Vencido" }; break;
+                case Seccion.Mantenimiento: est = new[] { "Todos", "Pendiente", "En reparación", "Reparado" }; break;
+                default: est = new[] { "Todos" }; break;
+            }
+            int ix = Array.IndexOf(est, fEstado);
+            selEstado.SetItems(est, ix < 0 ? 0 : ix);
+            if (ix < 0) fEstado = "Todos";
+
+            for (int i = 0; i < caps.Length; i++)
+                caps[i].ForeColor = filterCtrls[i].Enabled ? T.Muted : Mix(T.Surface, T.Muted, .45f);
+
+            switch (seccion)
+            {
+                case Seccion.Inventario: lblHint.Text = "El inventario refleja el estado actual: el rango de fechas y el trabajador no aplican."; break;
+                case Seccion.Movimientos: lblHint.Text = "Consulta de solo lectura: este reporte no permite registrar movimientos."; break;
+                case Seccion.Prestamos: lblHint.Text = "Los préstamos activos (pendientes o vencidos) se muestran siempre."; break;
+                default: lblHint.Text = "Incluye las órdenes abiertas y las cerradas dentro del rango de fechas."; break;
+            }
+        }
+
+        private void AplicarFiltros()
+        {
+            if (dtDesde.Value.Date > dtHasta.Value.Date)
+            {
+                DateTime tmp = dtDesde.Value;
+                dtDesde.Value = dtHasta.Value;
+                dtHasta.Value = tmp;
+                ShowToast("Rango corregido", "La fecha inicial era posterior a la final; se intercambiaron.", T.Warn);
+            }
+
+            fDesde = dtDesde.Value.Date;
+            fHasta = dtHasta.Value.Date;
+            fCategoria = selCategoria.Current;
+            fTexto = inpEquipo.Text.Trim();
+            fTrabajador = selTrabajador.Current;
+            fEstado = selEstado.Current;
+            fTipo = selTipo.Current;
+
+            periodoIdx = DetectarPeriodo();
+            segPeriodo.SelectedIndex = periodoIdx;
+
+            pagina = 1;
+            Recalcular();
+        }
+
+        private void LimpiarFiltros()
+        {
+            RunSilent(() =>
+            {
+                dtDesde.Value = DateTime.Today.AddDays(-30);
+                dtHasta.Value = DateTime.Today;
+                selCategoria.SelectedIndex = 0;
+                inpEquipo.Text = "";
+                selTrabajador.SelectedIndex = 0;
+                selEstado.SelectedIndex = 0;
+                selTipo.SelectedIndex = 0;
+                inpBusqueda.Text = "";
+            });
+            busquedaRapida = "";
+            AplicarFiltros();
+            ShowToast("Filtros restablecidos", "Se restauró el período de 30 días y se limpiaron los filtros.", T.Info);
+        }
+
+        // ---------------- Gráficos ----------------
         private Control BuildCharts()
         {
-            TableLayoutPanel row = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 2,
-                RowCount = 1,
-                Margin = new Padding(0)
-            };
+            Panel host = new Panel { Dock = DockStyle.Top, Height = 316, BackColor = T.Canvas, Padding = new Padding(24, 0, 24, 16) };
+            TableLayoutPanel t = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1, BackColor = T.Canvas, Margin = Padding.Empty };
+            t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34f));
+            t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40f));
+            t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 26f));
+            t.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
 
-            row.ColumnStyles.Add(
-                new ColumnStyle(
-                    SizeType.Percent,
-                    68
-                )
-            );
+            donut = new DonutChart();
+            barras = new BarChart();
+            hbar = new HBarChart();
 
-            row.ColumnStyles.Add(
-                new ColumnStyle(
-                    SizeType.Percent,
-                    32
-                )
-            );
+            t.Controls.Add(ChartCard("Estado del inventario", "Distribución actual por estado", donut, new Padding(0, 0, 6, 0)), 0, 0);
+            t.Controls.Add(ChartCard("Movimientos por período", "Salidas e ingresos de los últimos 6 meses", barras, new Padding(6, 0, 6, 0)), 1, 0);
+            t.Controls.Add(ChartCard("Equipos en mantenimiento", "Órdenes por estado de reparación", hbar, new Padding(6, 0, 0, 0)), 2, 0);
 
-            TableLayoutPanel left = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 1,
-                RowCount = 2,
-                Margin = new Padding(0, 0, 10, 10),
-                Padding = new Padding(0)
-            };
-
-            left.RowStyles.Add(
-                new RowStyle(
-                    SizeType.Percent,
-                    64
-                )
-            );
-
-            left.RowStyles.Add(
-                new RowStyle(
-                    SizeType.Percent,
-                    36
-                )
-            );
-
-            ChartPanel trend = new ChartPanel
-            {
-                Dock = DockStyle.Fill,
-                BackColor = card,
-                Margin = new Padding(0, 0, 0, 10)
-            };
-
-            trend.Title = "TENDENCIAS DE ACTIVIDAD Y RETORNOS (SEMANAL)";
-            trend.Subtitle = "";
-            trend.Paint += PaintBars;
-
-            Panel statusCard = BuildEquipmentStatusCard();
-
-            left.Controls.Add(trend, 0, 0);
-            left.Controls.Add(statusCard, 0, 1);
-
-            Panel alerts = BuildWhatsAppAlertCard();
-
-            row.Controls.Add(left, 0, 0);
-            row.Controls.Add(alerts, 1, 0);
-
-            return row;
+            host.Controls.Add(t);
+            return host;
         }
 
-        // ============================================================
-        // TABLA DETALLE
-        // ============================================================
-
-
-        private Panel BuildEquipmentStatusCard()
+        private Card ChartCard(string title, string sub, Control chart, Padding margin)
         {
-            Card cardStatus = new Card
-            {
-                Dock = DockStyle.Fill,
-                BackColor = card,
-                Margin = new Padding(0)
-            };
-
-            Label title = LabelOf(
-                "ESTADO GENERAL DE EQUIPOS",
-                9.8f,
-                Color.White,
-                true
-            );
-
-            title.Location = new Point(16, 11);
-            cardStatus.Controls.Add(title);
-
-            Panel a = MiniDonut(
-                "60%",
-                "En Almacén",
-                blue
-            );
-
-            Panel b = MiniDonut(
-                "25%",
-                "En Rodaje",
-                amber
-            );
-
-            Panel c = MiniDonut(
-                "15%",
-                "En Mantenimiento",
-                Color.FromArgb(130, 143, 158)
-            );
-
-            cardStatus.Controls.Add(a);
-            cardStatus.Controls.Add(b);
-            cardStatus.Controls.Add(c);
-
-            cardStatus.Resize += (s, e) =>
-            {
-                int w =
-                    Math.Max(
-                        130,
-                        (cardStatus.ClientSize.Width - 40) / 3
-                    );
-
-                a.SetBounds(
-                    12,
-                    35,
-                    w,
-                    74
-                );
-
-                b.SetBounds(
-                    a.Right + 8,
-                    35,
-                    w,
-                    74
-                );
-
-                c.SetBounds(
-                    b.Right + 8,
-                    35,
-                    w,
-                    74
-                );
-            };
-
-            return cardStatus;
+            Card card = new Card { Dock = DockStyle.Fill, Margin = margin };
+            Label t1 = Lbl(title, 12f, T.Ink, true);
+            t1.Location = new Point(20, 16);
+            Label t2 = Lbl(sub, 8.5f, T.Muted);
+            t2.Location = new Point(21, 42);
+            chart.Location = new Point(20, 72);
+            card.Controls.Add(t1);
+            card.Controls.Add(t2);
+            card.Controls.Add(chart);
+            Action fit = () => chart.Size = new Size(Math.Max(40, card.Width - 40), Math.Max(40, card.Height - 72 - 16));
+            card.Resize += (s, e) => fit();
+            fit();
+            return card;
         }
 
-        private Panel MiniDonut(
-            string big,
-            string small,
-            Color color)
-        {
-            Panel p = new Panel
-            {
-                BackColor = Color.Transparent
-            };
-
-            p.Paint += (s, e) =>
-            {
-                e.Graphics.SmoothingMode =
-                    SmoothingMode.AntiAlias;
-
-                Rectangle r =
-                    new Rectangle(
-                        8,
-                        8,
-                        46,
-                        46
-                    );
-
-                using (
-                    Pen basePen =
-                    new Pen(
-                        Color.FromArgb(
-                            49,
-                            64,
-                            84
-                        ),
-                        8
-                    )
-                )
-                {
-                    e.Graphics.DrawArc(
-                        basePen,
-                        r,
-                        0,
-                        360
-                    );
-                }
-
-                using (
-                    Pen accent =
-                    new Pen(
-                        color,
-                        8
-                    )
-                )
-                {
-                    e.Graphics.DrawArc(
-                        accent,
-                        r,
-                        -90,
-                        220
-                    );
-                }
-
-                using (
-                    Brush fill =
-                    new SolidBrush(
-                        canvas
-                    )
-                )
-                {
-                    e.Graphics.FillEllipse(
-                        fill,
-                        22,
-                        22,
-                        18,
-                        18
-                    );
-                }
-            };
-
-            Label lblBig =
-                LabelOf(
-                    big,
-                    11.5f,
-                    Color.White,
-                    true
-                );
-
-            lblBig.Location =
-                new Point(
-                    65,
-                    13
-                );
-
-            Label lblSmall =
-                LabelOf(
-                    small,
-                    8.2f,
-                    muted,
-                    true
-                );
-
-            lblSmall.Location =
-                new Point(
-                    65,
-                    34
-                );
-
-            p.Controls.Add(lblBig);
-            p.Controls.Add(lblSmall);
-
-            return p;
-        }
-
-        private Panel BuildWhatsAppAlertCard()
-        {
-            Card p = new Card
-            {
-                Dock = DockStyle.Fill,
-                BackColor = Color.FromArgb(22, 40, 62),
-                Margin = new Padding(0, 0, 0, 10)
-            };
-
-            Label title = LabelOf(
-                "GESTIÓN DE ALERTAS DE WHATSAPP AUTOMÁTICAS",
-                9.4f,
-                Color.White,
-                true
-            );
-            title.Location = new Point(16, 12);
-            p.Controls.Add(title);
-
-            Label general = LabelOf(
-                "Estado General",
-                8.8f,
-                Color.FromArgb(233, 241, 250),
-                true
-            );
-            general.Location = new Point(18, 48);
-
-            Label generalState = LabelOf(
-                whatsappGeneralEnabled ? "ON" : "OFF",
-                8.1f,
-                whatsappGeneralEnabled ? greenBright : Color.FromArgb(205, 216, 229),
-                true
-            );
-
-            Panel switchGeneral = new Panel
-            {
-                Size = new Size(50, 26),
-                BackColor = whatsappGeneralEnabled
-                    ? Color.FromArgb(57, 211, 110)
-                    : Color.FromArgb(76, 91, 111),
-                Cursor = Cursors.Hand
-            };
-            Rounded(switchGeneral, 13);
-
-            Panel knobGeneral = new Panel
-            {
-                Size = new Size(20, 20),
-                BackColor = Color.White,
-                Cursor = Cursors.Hand
-            };
-            Rounded(knobGeneral, 10);
-            switchGeneral.Controls.Add(knobGeneral);
-
-            Label delay = LabelOf(
-                "Activar Notificaciones de Retraso",
-                8.8f,
-                Color.FromArgb(233, 241, 250),
-                true
-            );
-            delay.Location = new Point(18, 83);
-
-            Label delayState = LabelOf(
-                whatsappDelayEnabled ? "ON" : "OFF",
-                8.1f,
-                whatsappDelayEnabled ? greenBright : Color.FromArgb(205, 216, 229),
-                true
-            );
-
-            Panel switchDelay = new Panel
-            {
-                Size = new Size(50, 26),
-                BackColor = whatsappDelayEnabled
-                    ? Color.FromArgb(57, 211, 110)
-                    : Color.FromArgb(76, 91, 111),
-                Cursor = Cursors.Hand
-            };
-            Rounded(switchDelay, 13);
-
-            Panel knobDelay = new Panel
-            {
-                Size = new Size(20, 20),
-                BackColor = Color.White,
-                Cursor = Cursors.Hand
-            };
-            Rounded(knobDelay, 10);
-            switchDelay.Controls.Add(knobDelay);
-
-            p.Controls.Add(general);
-            p.Controls.Add(generalState);
-            p.Controls.Add(delay);
-            p.Controls.Add(delayState);
-            p.Controls.Add(switchGeneral);
-            p.Controls.Add(switchDelay);
-
-            Panel gridHead = new Panel
-            {
-                BackColor = Color.FromArgb(29, 50, 76),
-                Height = 32
-            };
-            Rounded(gridHead, 7);
-
-            Label h1 = LabelOf("Regla", 7.8f, Color.White, true);
-            Label h2 = LabelOf("Disparador", 7.8f, Color.White, true);
-            Label h3 = LabelOf("Plantilla", 7.8f, Color.White, true);
-            Label h4 = LabelOf("Estado", 7.8f, Color.White, true);
-            gridHead.Controls.AddRange(new Control[] { h1, h2, h3, h4 });
-
-            Panel row1 = BuildAlertRow("Alerta 1", "1 H antes", "Default", "Activa");
-            Panel row2 = BuildAlertRow("Alerta 2", "Retraso", "Default", "Inactivo");
-
-            p.Controls.Add(gridHead);
-            p.Controls.Add(row1);
-            p.Controls.Add(row2);
-
-            Label preview = LabelOf(
-                "Previsualización de Mensaje",
-                8.6f,
-                Color.FromArgb(231, 239, 248),
-                true
-            );
-            p.Controls.Add(preview);
-
-            Panel message = new Panel
-            {
-                BackColor = Color.FromArgb(28, 49, 74)
-            };
-            Rounded(message, 9);
-
-            Label body = new Label
-            {
-                Text =
-                    "[Artemusa Alerta] Hola, [Técnico],\n" +
-                    "Tu equipo [Nombre Equipo] está retrasado.\n" +
-                    "Por favor, devuélvelo al almacén.",
-                ForeColor = Color.FromArgb(244, 248, 252),
-                Font = FontOf(8.3f),
-                BackColor = Color.Transparent,
-                AutoEllipsis = true
-            };
-            message.Controls.Add(body);
-
-            Button openWhatsApp = ButtonOf(
-                "☏  Abrir WhatsApp",
-                (s, e) => AbrirNotificacionWhatsApp(FindForm()),
-                true,
-                180
-            );
-            openWhatsApp.Height = 36;
-
-            p.Controls.Add(message);
-            p.Controls.Add(openWhatsApp);
-
-            Action updateSwitchVisuals = () =>
-            {
-                switchGeneral.BackColor = whatsappGeneralEnabled
-                    ? Color.FromArgb(57, 211, 110)
-                    : Color.FromArgb(76, 91, 111);
-
-                knobGeneral.Location = whatsappGeneralEnabled
-                    ? new Point(27, 3)
-                    : new Point(3, 3);
-
-                generalState.Text = whatsappGeneralEnabled ? "ON" : "OFF";
-                generalState.ForeColor = whatsappGeneralEnabled
-                    ? greenBright
-                    : Color.FromArgb(205, 216, 229);
-
-                switchDelay.BackColor = whatsappDelayEnabled
-                    ? Color.FromArgb(57, 211, 110)
-                    : Color.FromArgb(76, 91, 111);
-
-                knobDelay.Location = whatsappDelayEnabled
-                    ? new Point(27, 3)
-                    : new Point(3, 3);
-
-                delayState.Text = whatsappDelayEnabled ? "ON" : "OFF";
-                delayState.ForeColor = whatsappDelayEnabled
-                    ? greenBright
-                    : Color.FromArgb(205, 216, 229);
-
-                SetAlertRowState(row1, whatsappGeneralEnabled);
-                SetAlertRowState(row2, whatsappGeneralEnabled && whatsappDelayEnabled);
-
-                body.Text = whatsappGeneralEnabled
-                    ? (whatsappDelayEnabled
-                        ? "[Artemusa Alerta] Hola, [Técnico],\nTu equipo [Nombre Equipo] tiene retraso activo.\nSe enviará una notificación automática."
-                        : "[Artemusa Alerta] Hola, [Técnico],\nLas alertas generales están activas.\nActiva las notificaciones de retraso para avisos automáticos.")
-                    : "Las alertas automáticas están desactivadas.\nPuedes seguir usando el botón Abrir WhatsApp para enviar un mensaje manual.";
-            };
-
-            EventHandler toggleGeneral = (s, e) =>
-            {
-                whatsappGeneralEnabled = !whatsappGeneralEnabled;
-                if (!whatsappGeneralEnabled)
-                    whatsappDelayEnabled = false;
-                updateSwitchVisuals();
-            };
-
-            EventHandler toggleDelay = (s, e) =>
-            {
-                if (!whatsappGeneralEnabled)
-                {
-                    whatsappGeneralEnabled = true;
-                }
-                whatsappDelayEnabled = !whatsappDelayEnabled;
-                updateSwitchVisuals();
-            };
-
-            switchGeneral.Click += toggleGeneral;
-            knobGeneral.Click += toggleGeneral;
-            general.Click += toggleGeneral;
-            generalState.Click += toggleGeneral;
-
-            switchDelay.Click += toggleDelay;
-            knobDelay.Click += toggleDelay;
-            delay.Click += toggleDelay;
-            delayState.Click += toggleDelay;
-
-            general.Cursor = Cursors.Hand;
-            generalState.Cursor = Cursors.Hand;
-            delay.Cursor = Cursors.Hand;
-            delayState.Cursor = Cursors.Hand;
-
-            p.Resize += (s, e) =>
-            {
-                int right = p.ClientSize.Width - 18;
-
-                switchGeneral.Location = new Point(right - 50, 42);
-                generalState.Location = new Point(switchGeneral.Left - 38, 48);
-
-                switchDelay.Location = new Point(right - 50, 77);
-                delayState.Location = new Point(switchDelay.Left - 38, 83);
-
-                gridHead.SetBounds(16, 112, Math.Max(250, p.ClientSize.Width - 32), 32);
-
-                int gridWidth = gridHead.Width;
-                h1.Location = new Point(10, 9);
-                h2.Location = new Point((int)(gridWidth * 0.23), 9);
-                h3.Location = new Point((int)(gridWidth * 0.52), 9);
-                h4.Location = new Point(Math.Max(10, gridWidth - 68), 9);
-
-                row1.SetBounds(16, 146, gridWidth, 27);
-                row2.SetBounds(16, 173, gridWidth, 27);
-
-                preview.Location = new Point(16, 204);
-
-                message.SetBounds(
-                    16,
-                    226,
-                    Math.Max(250, p.ClientSize.Width - 32),
-                    52
-                );
-
-                body.SetBounds(11, 6, message.Width - 22, 40);
-
-                openWhatsApp.Width = Math.Max(180, p.ClientSize.Width - 32);
-                openWhatsApp.Location = new Point(16, p.ClientSize.Height - 49);
-            };
-
-            updateSwitchVisuals();
-            return p;
-        }
-
-        private Panel BuildAlertRow(
-            string rule,
-            string trigger,
-            string template,
-            string statusText)
-        {
-            Panel row = new Panel
-            {
-                BackColor = Color.Transparent
-            };
-
-            Label a = LabelOf(rule, 7.8f, Color.FromArgb(238, 244, 250));
-            Label b = LabelOf(trigger, 7.8f, Color.FromArgb(238, 244, 250));
-            Label c = LabelOf(template, 7.8f, Color.FromArgb(238, 244, 250));
-
-            Panel badge = new Panel
-            {
-                Size = new Size(62, 20),
-                BackColor = Color.FromArgb(31, 89, 56)
-            };
-            Rounded(badge, 10);
-
-            Label status = new Label
-            {
-                Text = statusText,
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleCenter,
-                Font = FontOf(7.3f, true),
-                ForeColor = Color.FromArgb(126, 255, 171),
-                BackColor = Color.Transparent,
-                Tag = "statusLabel"
-            };
-
-            badge.Tag = "statusBadge";
-            badge.Controls.Add(status);
-
-            row.Controls.Add(a);
-            row.Controls.Add(b);
-            row.Controls.Add(c);
-            row.Controls.Add(badge);
-
-            row.Resize += (s, e) =>
-            {
-                int w = row.ClientSize.Width;
-                a.Location = new Point(10, 6);
-                b.Location = new Point((int)(w * 0.23), 6);
-                c.Location = new Point((int)(w * 0.52), 6);
-                badge.Location = new Point(w - badge.Width - 6, 3);
-            };
-
-            return row;
-        }
-
-        private void SetAlertRowState(Panel row, bool active)
-        {
-            foreach (Control control in row.Controls)
-            {
-                Panel badge = control as Panel;
-                if (badge == null || Convert.ToString(badge.Tag) != "statusBadge")
-                    continue;
-
-                badge.BackColor = active
-                    ? Color.FromArgb(31, 89, 56)
-                    : Color.FromArgb(72, 55, 57);
-
-                foreach (Control inner in badge.Controls)
-                {
-                    Label label = inner as Label;
-                    if (label == null || Convert.ToString(label.Tag) != "statusLabel")
-                        continue;
-
-                    label.Text = active ? "Activo" : "Inactivo";
-                    label.ForeColor = active
-                        ? Color.FromArgb(126, 255, 171)
-                        : Color.FromArgb(255, 159, 159);
-                }
-            }
-        }
-
-        private void FillArea(
-            Graphics graphics,
-            PointF[] points,
-            int bottom,
-            Color color)
-        {
-            if (
-                points == null
-                ||
-                points.Length < 2)
-            {
-                return;
-            }
-
-            List<PointF> polygon =
-                new List<PointF>(
-                    points
-                );
-
-            polygon.Add(
-                new PointF(
-                    points[
-                        points.Length - 1
-                    ].X,
-                    bottom
-                )
-            );
-
-            polygon.Add(
-                new PointF(
-                    points[0].X,
-                    bottom
-                )
-            );
-
-            using (
-                GraphicsPath path =
-                new GraphicsPath()
-            )
-            using (
-                SolidBrush brush =
-                new SolidBrush(
-                    color
-                )
-            )
-            {
-                path.AddPolygon(
-                    polygon.ToArray()
-                );
-
-                graphics.FillPath(
-                    brush,
-                    path
-                );
-            }
-        }
-
-        private void DrawSeries(
-            Graphics graphics,
-            PointF[] points,
-            Color color)
-        {
-            using (
-                Pen pen =
-                new Pen(
-                    color,
-                    2.3f
-                )
-            )
-            {
-                pen.LineJoin =
-                    LineJoin.Round;
-
-                graphics.DrawLines(
-                    pen,
-                    points
-                );
-            }
-        }
-
-        private void DrawLegend(
-            Graphics graphics,
-            float x,
-            float y,
-            Color color,
-            string text,
-            Font font)
-        {
-            using (
-                SolidBrush brush =
-                new SolidBrush(
-                    color
-                )
-            )
-            {
-                graphics.FillRectangle(
-                    brush,
-                    x,
-                    y + 5,
-                    16,
-                    4
-                );
-            }
-
-            DrawChartText(
-                graphics,
-                text,
-                font,
-                muted,
-                x + 22,
-                y
-            );
-        }
-
-
-
+        // ---------------- Tabla ----------------
         private Control BuildTable()
         {
-            Panel p = new Card
+            tableHost = new Panel { Dock = DockStyle.Top, Height = 760, BackColor = T.Canvas, Padding = new Padding(24, 0, 24, 16) };
+            Card card = new Card { Dock = DockStyle.Fill, Padding = new Padding(1, 14, 1, 14) };
+
+            // --- cuerpo
+            Panel gridHost = new Panel { Dock = DockStyle.Fill, BackColor = T.Surface, Padding = new Padding(14, 0, 14, 0) };
+            emptyPanel = new EmptyState { Dock = DockStyle.Fill, Visible = false };
+            grid = new FlatGrid { Dock = DockStyle.Top };
+            ConfigurarGrid();
+            gridHost.Controls.Add(emptyPanel);
+            gridHost.Controls.Add(grid);
+
+            // --- pie (paginación)
+            footerPanel = new Panel { Dock = DockStyle.Bottom, Height = 64, BackColor = T.Surface };
+            Label lblMostrar = Lbl("Mostrar", 9f, T.Muted);
+            lblMostrar.Location = new Point(24, 23);
+            selPagina = new SelectBox { Size = new Size(84, 34), Location = new Point(80, 15) };
+            selPagina.SetItems(new[] { "10", "25", "50", "Todos" }, pageSize <= 0 ? 3 : (pageSize == 10 ? 0 : (pageSize == 25 ? 1 : 2)));
+            selPagina.Picked += (s, e) =>
             {
-                Dock = DockStyle.Fill,
-                BackColor = card,
-                Padding = new Padding(12, 44, 12, 8),
-                Margin = new Padding(0)
+                pageSize = selPagina.Current == "Todos" ? 0 : int.Parse(selPagina.Current, CultureInfo.InvariantCulture);
+                pagina = 1;
+                RenderPagina();
+            };
+            Label lblReg = Lbl("registros", 9f, T.Muted);
+            lblReg.Location = new Point(172, 23);
+            lblInfo = Lbl("", 9f, T.Muted);
+            lblInfo.Location = new Point(250, 23);
+            pagerHost = new Panel { BackColor = T.Surface, Size = new Size(10, 34), Location = new Point(400, 15) };
+            footerPanel.Controls.Add(lblMostrar);
+            footerPanel.Controls.Add(selPagina);
+            footerPanel.Controls.Add(lblReg);
+            footerPanel.Controls.Add(lblInfo);
+            footerPanel.Controls.Add(pagerHost);
+            footerPanel.Resize += (s, e) => pagerHost.Left = Math.Max(0, footerPanel.Width - pagerHost.Width - 24);
+
+            // --- barra superior
+            Panel top = new Panel { Dock = DockStyle.Top, Height = 84, BackColor = T.Surface };
+            lblTablaTitulo = Lbl("", 13f, T.Ink, true);
+            lblTablaTitulo.Location = new Point(24, 16);
+            lblTablaSub = Lbl("", 9f, T.Muted);
+            lblTablaSub.Location = new Point(25, 46);
+
+            btnPdf = new UiButton("PDF", 76, 40);
+            btnPdf.Click += (s, e) => SimularExportacion("PDF");
+            btnExcel = new UiButton("Excel", 84, 40);
+            btnExcel.Click += (s, e) => SimularExportacion("Excel");
+            btnPrint = new UiButton("Imprimir", 100, 40);
+            btnPrint.Click += (s, e) => SimularExportacion("impresión");
+
+            inpBusqueda = new InputBox("Búsqueda rápida…", true) { Size = new Size(250, 40) };
+            inpBusqueda.Changed += (s, e) =>
+            {
+                if (building) return;
+                busquedaRapida = inpBusqueda.Text;
+                AplicarBusquedaRapida();
             };
 
-            Label title = LabelOf(
-                "MOVIMIENTOS DE EQUIPOS Y ESTADO",
-                10.5f,
-                Color.White,
-                true
-            );
+            top.Controls.Add(lblTablaTitulo);
+            top.Controls.Add(lblTablaSub);
+            top.Controls.Add(btnPdf);
+            top.Controls.Add(btnExcel);
+            top.Controls.Add(btnPrint);
+            top.Controls.Add(inpBusqueda);
 
-            title.Location = new Point(16, 12);
-
-            p.Controls.Add(title);
-
-            detailGrid = new DataGridView
+            Action pos = () =>
             {
-                Dock = DockStyle.Fill,
-                BackgroundColor = card,
-                BorderStyle = BorderStyle.None,
-                ReadOnly = true,
-                AllowUserToAddRows = false,
-                AllowUserToDeleteRows = false,
-                RowHeadersVisible = false,
-                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-                EnableHeadersVisualStyles = false,
-                ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None,
-                GridColor = grid,
-                CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal,
-                ColumnHeadersHeight = 38,
-                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-                MultiSelect = false,
-                RowTemplate = { Height = 40 }
+                inpBusqueda.Location = new Point(Math.Max(0, top.Width - 24 - inpBusqueda.Width), 22);
+                btnPrint.Location = new Point(Math.Max(0, inpBusqueda.Left - 12 - btnPrint.Width), 22);
+                btnExcel.Location = new Point(Math.Max(0, btnPrint.Left - 8 - btnExcel.Width), 22);
+                btnPdf.Location = new Point(Math.Max(0, btnExcel.Left - 8 - btnPdf.Width), 22);
+            };
+            top.Resize += (s, e) => pos();
+            pos();
+
+            // Orden de acoplamiento: el control "Fill" primero (índice 0)
+            card.Controls.Add(gridHost);
+            card.Controls.Add(footerPanel);
+            card.Controls.Add(top);
+            tableHost.Controls.Add(card);
+            return tableHost;
+        }
+
+        private void ConfigurarGrid()
+        {
+            grid.AllowUserToAddRows = false;
+            grid.AllowUserToDeleteRows = false;
+            grid.AllowUserToResizeRows = false;
+            grid.AllowUserToResizeColumns = false;
+            grid.AllowUserToOrderColumns = false;
+            grid.ReadOnly = true;
+            grid.RowHeadersVisible = false;
+            grid.MultiSelect = false;
+            grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+            grid.BorderStyle = BorderStyle.None;
+            grid.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
+            grid.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
+            grid.EnableHeadersVisualStyles = false;
+            grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
+            grid.ColumnHeadersHeight = HeaderH;
+            grid.RowTemplate.Height = RowH;
+            grid.ScrollBars = ScrollBars.None;
+            grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+            grid.BackgroundColor = T.Surface;
+            grid.GridColor = T.Border;
+            grid.Height = HeaderH + 2;
+
+            Color sel = Mix(T.Surface, T.Accent, .13f);
+
+            grid.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle
+            {
+                BackColor = T.SurfaceAlt,
+                ForeColor = T.Muted,
+                Font = F(8f, true),
+                Alignment = DataGridViewContentAlignment.MiddleLeft,
+                Padding = new Padding(14, 0, 0, 0),
+                SelectionBackColor = T.SurfaceAlt,
+                SelectionForeColor = T.Muted
+            };
+            grid.DefaultCellStyle = new DataGridViewCellStyle
+            {
+                BackColor = T.Surface,
+                ForeColor = T.Ink,
+                Font = F(9.5f),
+                Alignment = DataGridViewContentAlignment.MiddleLeft,
+                Padding = new Padding(14, 0, 6, 0),
+                SelectionBackColor = sel,
+                SelectionForeColor = T.Ink
+            };
+            grid.AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle
+            {
+                BackColor = Mix(T.Surface, T.Ink, .028f)
             };
 
-            detailGrid.ColumnHeadersDefaultCellStyle =
-                new DataGridViewCellStyle
-                {
-                    BackColor = header,
-                    ForeColor = textMutedForGrid(),
-                    Font = FontOf(8.2f, true),
-                    Padding = new Padding(8, 0, 0, 0),
-                    SelectionBackColor = header,
-                    SelectionForeColor = textMutedForGrid()
-                };
-
-            detailGrid.DefaultCellStyle =
-                new DataGridViewCellStyle
-                {
-                    BackColor = card,
-                    ForeColor = ink,
-                    Font = FontOf(8.8f),
-                    Padding = new Padding(8, 0, 3, 0),
-                    SelectionBackColor = Color.FromArgb(42, 55, 75),
-                    SelectionForeColor = Color.White
-                };
-
-            detailGrid.AlternatingRowsDefaultCellStyle =
-                new DataGridViewCellStyle
-                {
-                    BackColor = card2,
-                    ForeColor = ink,
-                    SelectionBackColor = Color.FromArgb(58, 56, 57),
-                    SelectionForeColor = Color.White
-                };
-
-            detailGrid.CellFormatting += FormatGrid;
-
-            p.Controls.Add(detailGrid);
-
-            resultCount = LabelOf(
-                "0 registros visibles",
-                8.4f,
-                muted
-            );
-
-            resultCount.AutoSize = false;
-            resultCount.Height = 24;
-            resultCount.Dock = DockStyle.Bottom;
-            resultCount.TextAlign = ContentAlignment.MiddleLeft;
-
-            p.Controls.Add(resultCount);
-
-            search.TextChanged +=
-                (s, e) => ApplySearch();
-
-            return p;
+            grid.CellPainting += Grid_CellPainting;
+            grid.CellMouseEnter += Grid_CellMouseEnter;
+            grid.MouseLeave += (s, e) => QuitarHover();
         }
 
-        private Color textMutedForGrid()
+        private void Grid_CellMouseEnter(object sender, DataGridViewCellEventArgs e)
         {
-            return Color.FromArgb(169, 184, 204);
-        }
-
-        // ============================================================
-        // LÓGICA ORIGINAL - CONEXIÓN Y DATOS
-        // ============================================================
-
-        private MySqlConnection OpenConnection()
-        {
-            MySqlConnection c =
-                new global::SUSTENTACION.Conexion()
-                    .ObtenerConexion();
-
-            if (c == null)
-                throw new InvalidOperationException(
-                    "La conexión existente devolvió null."
-                );
-
-            if (c.State != ConnectionState.Open)
-                c.Open();
-
-            return c;
-        }
-
-        private bool TableExists(MySqlConnection c)
-        {
-            using (
-                MySqlCommand q =
-                new MySqlCommand(
-                    "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=@name",
-                    c
-                )
-            )
+            if (e.RowIndex == hoverRow) return;
+            QuitarHover();
+            if (e.RowIndex >= 0 && e.RowIndex < grid.Rows.Count)
             {
-                q.Parameters.AddWithValue(
-                    "@name",
-                    HistoryTable
-                );
-
-                return Convert.ToInt32(
-                    q.ExecuteScalar()
-                ) > 0;
+                grid.Rows[e.RowIndex].DefaultCellStyle.BackColor = Mix(T.Surface, T.Accent, .07f);
+                hoverRow = e.RowIndex;
             }
         }
 
-        private void LoadReport()
+        private void QuitarHover()
         {
-            if (loading)
-                return;
-
-            if (
-                fromDate.Value.Date
-                >
-                toDate.Value.Date)
-            {
-                Info(
-                    "La fecha inicial no puede ser posterior a la fecha final."
-                );
-
-                return;
-            }
-
-            loading = true;
-
-            try
-            {
-                using (
-                    MySqlConnection c =
-                    OpenConnection())
-                {
-                    if (!TableExists(c))
-                    {
-                        SetData(
-                            new DataTable()
-                        );
-
-                        state.Text =
-                            "●  Sin movimientos en el historial todavía.";
-
-                        state.ForeColor =
-                            muted;
-
-                        return;
-                    }
-
-                    string sql =
-                        @"SELECT id AS Registro,equipo_id AS Código,equipo_nombre AS Equipo,tipo AS Tipo,cantidad AS Cantidad,
-responsable AS Responsable,motivo AS Motivo,fecha AS Fecha FROM artemusa_movimientos_v1 WHERE fecha>=@from AND fecha<@to";
-
-                    if (
-                        typeFilter.SelectedIndex
-                        >
-                        0)
-                    {
-                        sql +=
-                            " AND tipo=@type";
-                    }
-
-                    if (
-                        responsibleFilter
-                            .SelectedIndex
-                        >
-                        0)
-                    {
-                        sql +=
-                            " AND responsable=@responsible";
-                    }
-
-                    sql +=
-                        " ORDER BY fecha DESC,id DESC LIMIT 1000";
-
-                    using (
-                        MySqlCommand command =
-                        new MySqlCommand(
-                            sql,
-                            c
-                        )
-                    )
-                    {
-                        command.Parameters
-                            .AddWithValue(
-                                "@from",
-                                fromDate.Value.Date
-                            );
-
-                        command.Parameters
-                            .AddWithValue(
-                                "@to",
-                                toDate.Value.Date
-                                    .AddDays(1)
-                            );
-
-                        if (
-                            typeFilter
-                                .SelectedIndex
-                            >
-                            0)
-                        {
-                            command.Parameters
-                                .AddWithValue(
-                                    "@type",
-                                    typeFilter
-                                        .SelectedItem
-                                        .ToString()
-                                );
-                        }
-
-                        if (
-                            responsibleFilter
-                                .SelectedIndex
-                            >
-                            0)
-                        {
-                            command.Parameters
-                                .AddWithValue(
-                                    "@responsible",
-                                    responsibleFilter
-                                        .SelectedItem
-                                        .ToString()
-                                );
-                        }
-
-                        DataTable d =
-                            new DataTable();
-
-                        using (
-                            MySqlDataAdapter a =
-                            new MySqlDataAdapter(
-                                command
-                            )
-                        )
-                        {
-                            a.Fill(d);
-                        }
-
-                        SetData(d);
-                    }
-
-                    using (
-                        MySqlCommand query =
-                        new MySqlCommand(
-                            "SELECT DISTINCT responsable FROM artemusa_movimientos_v1 WHERE responsable<>'' ORDER BY responsable",
-                            c
-                        )
-                    )
-                    {
-                        string keep =
-                            Convert.ToString(
-                                responsibleFilter
-                                    .SelectedItem
-                            );
-
-                        responsibleFilter
-                            .Items
-                            .Clear();
-
-                        responsibleFilter
-                            .Items
-                            .Add("Todos");
-
-                        using (
-                            MySqlDataReader r =
-                            query.ExecuteReader())
-                        {
-                            while (r.Read())
-                            {
-                                responsibleFilter
-                                    .Items
-                                    .Add(
-                                        Convert.ToString(
-                                            r[0]
-                                        )
-                                    );
-                            }
-                        }
-
-                        int index =
-                            responsibleFilter
-                                .Items
-                                .IndexOf(keep);
-
-                        responsibleFilter
-                            .SelectedIndex =
-                            index >= 0
-                            ? index
-                            : 0;
-                    }
-                }
-
-                state.Text =
-                    "●  Conectado · Reporte actualizado "
-                    +
-                    DateTime.Now
-                        .ToString("HH:mm:ss");
-
-                state.ForeColor =
-                    greenBright;
-            }
-            catch (Exception ex)
-            {
-                SetData(
-                    new DataTable()
-                );
-
-                state.Text =
-                    "No se pudo cargar el reporte. Revisa la conexión y pulsa Aplicar filtros.";
-
-                state.ForeColor =
-                    red;
-
-                Error(
-                    "Reporte no disponible",
-                    ex
-                );
-            }
-            finally
-            {
-                loading = false;
-                ApplySearch();
-            }
+            if (grid != null && hoverRow >= 0 && hoverRow < grid.Rows.Count)
+                grid.Rows[hoverRow].DefaultCellStyle.BackColor = Color.Empty;
+            hoverRow = -1;
         }
 
-        private void SetData(DataTable data)
+        private void Grid_CellPainting(object sender, DataGridViewCellPaintingEventArgs e)
         {
-            if (reportData != null)
-                reportData.Dispose();
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            string kind = grid.Columns[e.ColumnIndex].Tag as string;
+            if (kind != "badge" && kind != "ev") return;
 
-            reportData = data;
-            detailGrid.DataSource = data;
+            string text = Convert.ToString(e.Value) ?? "";
+            e.Paint(e.CellBounds, DataGridViewPaintParts.Background | DataGridViewPaintParts.Border | DataGridViewPaintParts.SelectionBackground);
 
-            if (data.Columns.Count > 0)
+            Graphics g = e.Graphics;
+            Rectangle cell = e.CellBounds;
+            bool selected = (e.State & DataGridViewElementStates.Selected) != 0;
+            Color rowBack = selected ? e.CellStyle.SelectionBackColor : e.CellStyle.BackColor;
+            Rectangle textRect = new Rectangle(cell.X + 14, cell.Y, Math.Max(10, cell.Width - 18), cell.Height);
+
+            Color c;
+            if (kind == "badge" && TryKind(text, out c))
             {
-                foreach (
-                    DataGridViewColumn c
-                    in detailGrid.Columns)
-                {
-                    c.MinimumWidth = 110;
-                }
-
-                if (
-                    detailGrid.Columns
-                        .Contains("Equipo"))
-                {
-                    detailGrid.Columns["Equipo"]
-                        .MinimumWidth = 220;
-                }
-
-                if (
-                    detailGrid.Columns
-                        .Contains("Motivo"))
-                {
-                    detailGrid.Columns["Motivo"]
-                        .MinimumWidth = 180;
-                }
-
-                if (
-                    detailGrid.Columns
-                        .Contains("Fecha"))
-                {
-                    detailGrid.Columns["Fecha"]
-                        .DefaultCellStyle
-                        .Format =
-                        "dd/MM/yyyy HH:mm";
-                }
+                Font f = F(8.5f, true);
+                Size ts = TextRenderer.MeasureText(text, f, new Size(int.MaxValue, int.MaxValue), TextFormatFlags.NoPadding);
+                int h = 26;
+                Rectangle pill = new Rectangle(cell.X + 14, cell.Y + (cell.Height - h) / 2, Math.Min(ts.Width + 36, Math.Max(40, cell.Width - 20)), h);
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                using (GraphicsPath path = Round(pill, 13))
+                using (SolidBrush br = new SolidBrush(Mix(rowBack, c, .16f)))
+                    g.FillPath(br, path);
+                using (SolidBrush dot = new SolidBrush(c))
+                    g.FillEllipse(dot, pill.X + 11, pill.Y + h / 2 - 3, 6, 6);
+                Txt(g, text, f, new Rectangle(pill.X + 22, pill.Y, Math.Max(4, pill.Width - 26), h), c, TL);
             }
-
-            UpdateMetrics();
-        }
-
-        private void ApplySearch()
-        {
-            if (reportData == null)
-                return;
-
-            string text =
-                search == null
-                ? ""
-                : search.Text.Trim();
-
-            if (text.Length == 0)
+            else if (kind == "ev" && text != "Sin evidencia")
             {
-                reportData
-                    .DefaultView
-                    .RowFilter =
-                    "";
+                Txt(g, "▣  " + text, F(9f, true), textRect, T.Info, TL);
             }
             else
             {
-                string safe =
-                    Escape(text);
+                Txt(g, text, F(9.5f), textRect, T.Muted, TL);
+            }
+            e.Handled = true;
+        }
 
-                List<string> terms =
-                    new List<string>();
+        private Control BuildFootnote()
+        {
+            Panel host = new Panel { Dock = DockStyle.Top, Height = 44, BackColor = T.Canvas, Padding = new Padding(26, 0, 24, 8) };
+            lblFoot = Lbl("", 8.5f, T.Muted);
+            lblFoot.Location = new Point(26, 2);
+            host.Controls.Add(lblFoot);
+            return host;
+        }
 
-                foreach (
-                    string col
-                    in new[]
+        // ============================================================
+        //  LÓGICA DE DATOS (solo datos ficticios)
+        // ============================================================
+        private IEnumerable<Equipo> EquiposFiltrados()
+        {
+            return Demo.Equipos.Where(e =>
+                (fCategoria == "Todas" || e.Categoria == fCategoria) &&
+                (fTexto.Length == 0 ||
+                 e.Codigo.IndexOf(fTexto, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                 e.Nombre.IndexOf(fTexto, StringComparison.OrdinalIgnoreCase) >= 0));
+        }
+
+        private bool EnRango(DateTime d)
+        {
+            return d.Date >= fDesde.Date && d.Date <= fHasta.Date;
+        }
+
+        private static string TituloSeccion(Seccion s)
+        {
+            switch (s)
+            {
+                case Seccion.Inventario: return "Reporte de inventario";
+                case Seccion.Movimientos: return "Reporte de movimientos";
+                case Seccion.Prestamos: return "Préstamos y devoluciones";
+                default: return "Reporte de mantenimiento";
+            }
+        }
+
+        private static string SubtituloSeccion(Seccion s)
+        {
+            switch (s)
+            {
+                case Seccion.Inventario: return "Estado operativo y condición física de cada equipo";
+                case Seccion.Movimientos: return "Historial de entradas, salidas, traslados y devoluciones · solo consulta";
+                case Seccion.Prestamos: return "Seguimiento de equipos prestados y su devolución";
+                default: return "Averías, reparaciones y evidencias fotográficas";
+            }
+        }
+
+        private static Col[] ColsDe(Seccion s)
+        {
+            switch (s)
+            {
+                case Seccion.Inventario:
+                    return new[]
                     {
-                        "Código",
-                        "Equipo",
-                        "Tipo",
-                        "Responsable",
-                        "Motivo"
-                    })
-                {
-                    if (
-                        reportData
-                            .Columns
-                            .Contains(col))
+                        new Col("CÓDIGO", 12, "m"), new Col("EQUIPO", 24, "b"), new Col("CATEGORÍA", 13),
+                        new Col("UBICACIÓN", 16), new Col("DISPONIBLE", 10), new Col("ESTADO", 15, "badge"), new Col("CONDICIÓN", 13, "badge")
+                    };
+                case Seccion.Movimientos:
+                    return new[]
                     {
-                        terms.Add(
-                            "["
-                            + col
-                            + "] LIKE '%"
-                            + safe
-                            + "%'"
-                        );
+                        new Col("CÓDIGO", 11, "m"), new Col("EQUIPO", 20, "b"), new Col("TIPO", 12, "badge"),
+                        new Col("FECHA Y HORA", 15), new Col("RESPONSABLE", 15), new Col("DESTINO", 14), new Col("OBSERVACIONES", 20)
+                    };
+                case Seccion.Prestamos:
+                    return new[]
+                    {
+                        new Col("CÓDIGO", 10, "m"), new Col("EQUIPO", 21, "b"), new Col("RESPONSABLE", 14),
+                        new Col("SALIDA", 11), new Col("PREVISTA", 11), new Col("DEVOLUCIÓN", 12),
+                        new Col("ESTADO", 12, "badge"), new Col("CONDICIÓN AL DEVOLVER", 15, "badge")
+                    };
+                default:
+                    return new[]
+                    {
+                        new Col("EQUIPO", 17, "b"), new Col("PROBLEMA", 14), new Col("INGRESO", 10),
+                        new Col("REPARACIÓN", 19), new Col("RESPONSABLE", 13), new Col("ESTADO", 13, "badge"),
+                        new Col("FINALIZACIÓN", 10), new Col("EVIDENCIA", 11, "ev")
+                    };
+            }
+        }
+
+        private List<string[]> BuildRows(Seccion s)
+        {
+            HashSet<Equipo> baseSet = new HashSet<Equipo>(EquiposFiltrados());
+            string estado = s == seccion ? fEstado : "Todos";
+            List<string[]> rows = new List<string[]>();
+
+            switch (s)
+            {
+                case Seccion.Inventario:
+                    foreach (Equipo e in Demo.Equipos)
+                    {
+                        if (!baseSet.Contains(e)) continue;
+                        if (estado != "Todos" && e.Estado != estado) continue;
+                        rows.Add(new[] { e.Codigo, e.Nombre, e.Categoria, e.Ubicacion, e.Cantidad.ToString(), e.Estado, e.Condicion });
                     }
-                }
+                    break;
 
-                if (terms.Count > 0)
-                {
-                    reportData
-                        .DefaultView
-                        .RowFilter =
-                        "("
-                        +
-                        string.Join(
-                            " OR ",
-                            terms
-                        )
-                        +
-                        ")";
-                }
-                else
-                {
-                    reportData
-                        .DefaultView
-                        .RowFilter =
-                        "";
-                }
-            }
-
-            resultCount.Text =
-                reportData
-                    .DefaultView
-                    .Count
-                    .ToString("N0")
-                +
-                " registros visibles";
-        }
-
-        private static string Escape(string s)
-        {
-            StringBuilder b =
-                new StringBuilder();
-
-            foreach (char c in s)
-            {
-                if (c == '\'')
-                    b.Append("''");
-                else if (c == '[')
-                    b.Append("[[]");
-                else if (c == ']')
-                    b.Append("[]]");
-                else if (c == '%')
-                    b.Append("[%]");
-                else if (c == '*')
-                    b.Append("[*]");
-                else
-                    b.Append(c);
-            }
-
-            return b.ToString();
-        }
-
-        private void UpdateMetrics()
-        {
-            if (values[0] == null)
-                return;
-
-            if (reportData == null)
-            {
-                foreach (Label l in values)
-                    l.Text = "—";
-
-                return;
-            }
-
-            long entries = 0;
-            long exits = 0;
-
-            foreach (
-                DataRowView row
-                in reportData.DefaultView)
-            {
-                long n =
-                    Convert.ToInt64(
-                        row["Cantidad"]
-                    );
-
-                if (
-                    Convert.ToString(
-                        row["Tipo"]
-                    )
-                    ==
-                    "Entrada")
-                {
-                    entries += n;
-                }
-                else if (
-                    Convert.ToString(
-                        row["Tipo"]
-                    )
-                    ==
-                    "Salida")
-                {
-                    exits += n;
-                }
-            }
-
-            values[0].Text =
-                entries.ToString("N0");
-
-            values[1].Text =
-                exits.ToString("N0");
-
-            try
-            {
-                using (
-                    MySqlConnection c =
-                    OpenConnection())
-                {
-                    using (
-                        MySqlCommand q =
-                        new MySqlCommand(
-                            "SELECT COUNT(*) FROM equipos WHERE stock<=5",
-                            c
-                        )
-                    )
+                case Seccion.Movimientos:
+                    foreach (Movimiento m in Demo.Movimientos)
                     {
-                        values[2].Text =
-                            Convert.ToString(
-                                q.ExecuteScalar()
-                            );
+                        if (!baseSet.Contains(m.Equipo) || !EnRango(m.Fecha)) continue;
+                        if (fTrabajador != "Todos" && m.Trabajador != fTrabajador) continue;
+                        if (fTipo != "Todos" && m.Tipo != fTipo) continue;
+                        rows.Add(new[] { m.Equipo.Codigo, m.Equipo.Nombre, m.Tipo, FechaHora(m.Fecha), m.Trabajador, m.Destino, m.Observaciones });
                     }
+                    break;
 
-                    using (
-                        MySqlCommand q =
-                        new MySqlCommand(
-                            "SELECT COALESCE(SUM(stock*precio),0) FROM equipos",
-                            c
-                        )
-                    )
+                case Seccion.Prestamos:
+                    foreach (Prestamo p in Demo.Prestamos)
                     {
-                        values[3].Text =
-                            "S/ "
-                            +
-                            Convert.ToDecimal(
-                                q.ExecuteScalar()
-                            )
-                            .ToString("N2");
-                    }
-                }
-            }
-            catch
-            {
-                values[2].Text = "—";
-                values[3].Text = "—";
-            }
-        }
-
-        // ============================================================
-        // FORMATO TABLA
-        // ============================================================
-
-        private void FormatGrid(
-            object sender,
-            DataGridViewCellFormattingEventArgs e)
-        {
-            if (
-                e.RowIndex < 0
-                ||
-                e.ColumnIndex < 0)
-            {
-                return;
-            }
-
-            if (
-                detailGrid
-                    .Columns[e.ColumnIndex]
-                    .Name
-                ==
-                "Tipo")
-            {
-                string t =
-                    Convert.ToString(
-                        e.Value
-                    );
-
-                e.CellStyle.ForeColor =
-                    t == "Entrada"
-                    ? greenBright
-                    : amber;
-
-                e.CellStyle.Font =
-                    FontOf(
-                        8.8f,
-                        true
-                    );
-            }
-
-            if (
-                detailGrid
-                    .Columns[e.ColumnIndex]
-                    .Name
-                ==
-                "Cantidad")
-            {
-                e.CellStyle.Alignment =
-                    DataGridViewContentAlignment
-                        .MiddleRight;
-            }
-        }
-
-        // ============================================================
-        // GRÁFICOS - SOLO DISEÑO
-        // ============================================================
-
-        private static void DrawChartText(
-            Graphics graphics,
-            string text,
-            Font font,
-            Color color,
-            float x,
-            float y)
-        {
-            using (
-                Brush brush =
-                new SolidBrush(color))
-            {
-                graphics.DrawString(
-                    text,
-                    font,
-                    brush,
-                    x,
-                    y
-                );
-            }
-        }
-
-        private void PaintBars(
-            object sender,
-            PaintEventArgs e)
-        {
-            ChartPanel p =
-                (ChartPanel)sender;
-
-            e.Graphics.SmoothingMode =
-                SmoothingMode.AntiAlias;
-
-            int left = 44;
-            int right = p.Width - 18;
-            int top = 78;
-            int bottom = p.Height - 30;
-
-            using (
-                Pen gridPen =
-                new Pen(
-                    Color.FromArgb(
-                        36,
-                        52,
-                        74
-                    ),
-                    1
-                )
-            )
-            {
-                for (int i = 0; i < 5; i++)
-                {
-                    int y =
-                        top
-                        +
-                        i
-                        *
-                        Math.Max(
-                            22,
-                            (bottom - top) / 4
-                        );
-
-                    e.Graphics.DrawLine(
-                        gridPen,
-                        left,
-                        y,
-                        right,
-                        y
-                    );
-                }
-            }
-
-            string[] days =
-            {
-                "Lun",
-                "Mar",
-                "Mie",
-                "Jue",
-                "Vie",
-                "Sáb",
-                "Dom"
-            };
-
-            float step =
-                (right - left) / 6f;
-
-            using (
-                Font axisFont =
-                new Font(
-                    "Segoe UI",
-                    7.4f
-                )
-            )
-            {
-                for (int i = 0; i < days.Length; i++)
-                {
-                    SizeF size =
-                        e.Graphics.MeasureString(
-                            days[i],
-                            axisFont
-                        );
-
-                    DrawChartText(
-                        e.Graphics,
-                        days[i],
-                        axisFont,
-                        muted,
-                        left
-                        +
-                        i * step
-                        -
-                        size.Width / 2f,
-                        bottom + 5
-                    );
-                }
-            }
-
-            PointF[] loan =
-            {
-                new PointF(left + 0 * step, bottom - 125),
-                new PointF(left + 1 * step, bottom - 88),
-                new PointF(left + 2 * step, bottom - 102),
-                new PointF(left + 3 * step, bottom - 68),
-                new PointF(left + 4 * step, bottom - 42),
-                new PointF(left + 5 * step, bottom - 96),
-                new PointF(left + 6 * step, bottom - 24)
-            };
-
-            PointF[] onTime =
-            {
-                new PointF(left + 0 * step, bottom - 76),
-                new PointF(left + 1 * step, bottom - 48),
-                new PointF(left + 2 * step, bottom - 70),
-                new PointF(left + 3 * step, bottom - 64),
-                new PointF(left + 4 * step, bottom - 38),
-                new PointF(left + 5 * step, bottom - 70),
-                new PointF(left + 6 * step, bottom - 34)
-            };
-
-            PointF[] late =
-            {
-                new PointF(left + 0 * step, bottom - 22),
-                new PointF(left + 1 * step, bottom - 36),
-                new PointF(left + 2 * step, bottom - 20),
-                new PointF(left + 3 * step, bottom - 24),
-                new PointF(left + 4 * step, bottom - 40),
-                new PointF(left + 5 * step, bottom - 14),
-                new PointF(left + 6 * step, bottom - 32)
-            };
-
-            FillArea(
-                e.Graphics,
-                loan,
-                bottom,
-                Color.FromArgb(70, blue)
-            );
-
-            FillArea(
-                e.Graphics,
-                onTime,
-                bottom,
-                Color.FromArgb(52, amber)
-            );
-
-            FillArea(
-                e.Graphics,
-                late,
-                bottom,
-                Color.FromArgb(35, red)
-            );
-
-            DrawSeries(
-                e.Graphics,
-                loan,
-                blue
-            );
-
-            DrawSeries(
-                e.Graphics,
-                onTime,
-                amber
-            );
-
-            DrawSeries(
-                e.Graphics,
-                late,
-                red
-            );
-
-            using (
-                Font legendFont =
-                new Font(
-                    "Segoe UI",
-                    7.7f
-                )
-            )
-            {
-                DrawLegend(
-                    e.Graphics,
-                    left + 72,
-                    46,
-                    blue,
-                    "Préstamos",
-                    legendFont
-                );
-
-                DrawLegend(
-                    e.Graphics,
-                    left + 190,
-                    46,
-                    amber,
-                    "Retornos a Tiempo",
-                    legendFont
-                );
-
-                DrawLegend(
-                    e.Graphics,
-                    left + 350,
-                    46,
-                    red,
-                    "Retornos con Atraso",
-                    legendFont
-                );
-            }
-        }
-
-        private void PaintDoughnut(
-            object sender,
-            PaintEventArgs e)
-        {
-            ChartPanel p =
-                (ChartPanel)sender;
-
-            e.Graphics.SmoothingMode =
-                SmoothingMode.AntiAlias;
-
-            int size =
-                Math.Min(
-                    120,
-                    Math.Max(
-                        78,
-                        p.Width - 60
-                    )
-                );
-
-            Rectangle r =
-                new Rectangle(
-                    p.Width / 2
-                    -
-                    size / 2,
-                    72,
-                    size,
-                    size
-                );
-
-            using (
-                Pen basePen =
-                new Pen(
-                    Color.FromArgb(
-                        49,
-                        64,
-                        84
-                    ),
-                    18
-                )
-            )
-            {
-                e.Graphics.DrawArc(
-                    basePen,
-                    r,
-                    0,
-                    360
-                );
-            }
-
-            using (
-                Pen greenPen =
-                new Pen(
-                    greenBright,
-                    18
-                )
-            )
-            {
-                e.Graphics.DrawArc(
-                    greenPen,
-                    r,
-                    -90,
-                    205
-                );
-            }
-
-            using (
-                Pen amberPen =
-                new Pen(
-                    amber,
-                    18
-                )
-            )
-            {
-                e.Graphics.DrawArc(
-                    amberPen,
-                    r,
-                    115,
-                    155
-                );
-            }
-        }
-
-        // ============================================================
-        // EXPORTACIÓN - LÓGICA ORIGINAL
-        // ============================================================
-
-        private void ExportCsv()
-        {
-            if (
-                reportData == null
-                ||
-                reportData.DefaultView.Count == 0)
-            {
-                Info(
-                    "No hay registros visibles para exportar."
-                );
-
-                return;
-            }
-
-            using (
-                SaveFileDialog d =
-                new SaveFileDialog
-                {
-                    Filter =
-                        "Archivo CSV (*.csv)|*.csv",
-
-                    FileName =
-                        "reporte_movimientos_"
-                        +
-                        DateTime.Now
-                            .ToString(
-                                "yyyyMMdd_HHmm"
-                            )
-                        +
-                        ".csv"
-                }
-            )
-            {
-                if (
-                    d.ShowDialog(
-                        FindForm()
-                    )
-                    !=
-                    DialogResult.OK)
-                {
-                    return;
-                }
-
-                using (
-                    StreamWriter w =
-                    new StreamWriter(
-                        d.FileName,
-                        false,
-                        new UTF8Encoding(true)
-                    )
-                )
-                {
-                    List<string> heads =
-                        new List<string>();
-
-                    foreach (
-                        DataColumn c
-                        in reportData.Columns)
-                    {
-                        heads.Add(
-                            Csv(
-                                c.ColumnName
-                            )
-                        );
-                    }
-
-                    w.WriteLine(
-                        string.Join(
-                            ";",
-                            heads
-                        )
-                    );
-
-                    foreach (
-                        DataRowView row
-                        in reportData
-                            .DefaultView)
-                    {
-                        List<string> cells =
-                            new List<string>();
-
-                        foreach (
-                            DataColumn c
-                            in reportData.Columns)
+                        if (!baseSet.Contains(p.Equipo)) continue;
+                        if (p.Devolucion.HasValue && !EnRango(p.Salida)) continue;
+                        if (fTrabajador != "Todos" && p.Trabajador != fTrabajador) continue;
+                        if (estado != "Todos" && p.Estado != estado) continue;
+                        rows.Add(new[]
                         {
-                            cells.Add(
-                                Csv(
-                                    Convert.ToString(
-                                        row[
-                                            c.ColumnName
-                                        ],
-                                        CultureInfo
-                                            .CurrentCulture
-                                    )
-                                )
-                            );
-                        }
-
-                        w.WriteLine(
-                            string.Join(
-                                ";",
-                                cells
-                            )
-                        );
+                            p.Equipo.Codigo, p.Equipo.Nombre, p.Trabajador, Fecha(p.Salida), Fecha(p.Prevista),
+                            p.Devolucion.HasValue ? Fecha(p.Devolucion.Value) : "—", p.Estado, p.CondicionDevolucion
+                        });
                     }
-                }
+                    break;
 
-                Info(
-                    "Reporte exportado correctamente."
-                );
+                default:
+                    foreach (Mant m in Demo.Mantenimientos)
+                    {
+                        if (!baseSet.Contains(m.Equipo)) continue;
+                        if (m.Estado == "Reparado" && !EnRango(m.Ingreso)) continue;
+                        if (estado != "Todos" && m.Estado != estado) continue;
+                        rows.Add(new[]
+                        {
+                            m.Equipo.Nombre, m.Problema, Fecha(m.Ingreso), m.Descripcion, m.Responsable, m.Estado,
+                            m.Fin.HasValue ? Fecha(m.Fin.Value) : "—",
+                            m.Fotos > 0 ? (m.Fotos == 1 ? "1 foto" : m.Fotos + " fotos") : "Sin evidencia"
+                        });
+                    }
+                    break;
             }
-        }
-
-        private static string Csv(
-            string value)
-        {
-            value = value ?? "";
-
-            return "\""
-                +
-                value.Replace(
-                    "\"",
-                    "\"\""
-                )
-                +
-                "\"";
-        }
-
-        private void Info(string text)
-        {
-            MessageBox.Show(
-                FindForm(),
-                text,
-                "Artemusa",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information
-            );
-        }
-
-        private void Error(
-            string title,
-            Exception ex)
-        {
-            MessageBox.Show(
-                FindForm(),
-                title
-                +
-                "\n\n"
-                +
-                ex.Message,
-                "Artemusa",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Warning
-            );
+            return rows;
         }
 
         // ============================================================
-        // WHATSAPP - LÓGICA ORIGINAL
+        //  ACTUALIZACIÓN DE PANTALLA
         // ============================================================
-
-        public static void AbrirNotificacionWhatsApp(
-            IWin32Window owner)
+        private void Recalcular()
         {
-            using (
-                WhatsAppDialog dialog =
-                new WhatsAppDialog())
+            if (building || grid == null) return;
+
+            Dictionary<Seccion, List<string[]>> porSeccion = new Dictionary<Seccion, List<string[]>>();
+            foreach (Seccion s in Enum.GetValues(typeof(Seccion)))
+                porSeccion[s] = BuildRows(s);
+
+            for (int i = 0; i < tabCards.Length; i++)
             {
-                dialog.ShowDialog(owner);
+                tabCards[i].Count = porSeccion[(Seccion)i].Count;
+                tabCards[i].Selected = i == (int)seccion;
+                tabCards[i].Invalidate();
             }
+
+            baseRows = porSeccion[seccion];
+
+            ActualizarKpis();
+            ActualizarGraficos();
+
+            lblRango.Text = seccion == Seccion.Inventario
+                ? "Inventario al " + Fecha(DateTime.Today)
+                : "Período:  " + Fecha(fDesde) + "  —  " + Fecha(fHasta);
+            lblTablaTitulo.Text = TituloSeccion(seccion);
+            lblTablaSub.Text = SubtituloSeccion(seccion);
+            lblFoot.Text = "Datos de demostración · Actualizado a las " + DateTime.Now.ToString("HH:mm:ss") + " · La conexión con Supabase se implementará posteriormente.";
+
+            AplicarBusquedaRapida();
         }
 
-        private sealed class WhatsAppDialog : Form
+        private void ActualizarKpis()
         {
-            private readonly Color dark =
-                Color.FromArgb(12, 24, 31);
+            HashSet<Equipo> set = new HashSet<Equipo>(EquiposFiltrados());
+            int total = set.Count;
+            int disp = set.Count(e => e.Estado == "Disponible");
+            int pres = set.Count(e => e.Estado == "Prestado");
+            int mant = set.Count(e => e.Estado == "Mantenimiento");
+            List<Prestamo> activos = Demo.Prestamos.Where(p => set.Contains(p.Equipo) && p.Estado != "Devuelto").ToList();
+            int venc = activos.Count(p => p.Estado == "Vencido");
+            int abiertas = Demo.Mantenimientos.Count(m => set.Contains(m.Equipo) && m.Estado != "Reparado");
+            int cats = set.Select(e => e.Categoria).Distinct().Count();
 
-            private readonly Color dialogCard =
-                Color.FromArgb(24, 40, 48);
+            Func<int, string> pct = n => (total == 0 ? 0 : n * 100.0 / total).ToString("0.#", CultureInfo.InvariantCulture) + "% del inventario";
 
-            private readonly Color lime =
-                Color.FromArgb(163, 230, 53);
+            kpiValue[0].Text = total.ToString();
+            kpiSub[0].Text = cats + (cats == 1 ? " categoría" : " categorías");
+            kpiValue[1].Text = disp.ToString();
+            kpiSub[1].Text = pct(disp);
+            kpiValue[2].Text = pres.ToString();
+            kpiSub[2].Text = pct(pres);
+            kpiValue[3].Text = mant.ToString();
+            kpiSub[3].Text = abiertas + (abiertas == 1 ? " orden abierta" : " órdenes abiertas");
+            kpiValue[4].Text = activos.Count.ToString();
+            kpiSub[4].Text = venc + (venc == 1 ? " vencida" : " vencidas");
+        }
 
-            private readonly Color soft =
-                Color.FromArgb(190, 207, 214);
+        private void ActualizarGraficos()
+        {
+            HashSet<Equipo> set = new HashSet<Equipo>(EquiposFiltrados());
 
-            private TextBox message;
-            private Button send;
-            private Label feedback;
+            // Dona: estado del inventario
+            string[] estados = { "Disponible", "Prestado", "Mantenimiento", "Fuera de servicio" };
+            int[] vals = estados.Select(es => set.Count(e => e.Estado == es)).ToArray();
+            donut.SetData(estados, vals, new[] { T.Ok, T.Info, T.Warn, T.Bad });
 
-            public WhatsAppDialog()
+            // Barras: movimientos de los últimos 6 meses
+            DateTime ini = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+            string[] lbl = new string[6];
+            int[] sal = new int[6];
+            int[] ing = new int[6];
+            for (int i = 0; i < 6; i++)
             {
-                Text =
-                    "Notificación WhatsApp · Artemusa";
-
-                ClientSize =
-                    new Size(
-                        560,
-                        430
-                    );
-
-                StartPosition =
-                    FormStartPosition
-                        .CenterParent;
-
-                FormBorderStyle =
-                    FormBorderStyle
-                        .FixedDialog;
-
-                MaximizeBox = false;
-                MinimizeBox = false;
-                ShowInTaskbar = false;
-
-                BackColor = dark;
-
-                Font =
-                    new Font(
-                        "Segoe UI",
-                        9f
-                    );
-
-                Build();
-            }
-
-            private void Build()
-            {
-                Label title =
-                    new Label
-                    {
-                        Text =
-                            "Enviar notificación",
-
-                        AutoSize = true,
-
-                        Font =
-                            new Font(
-                                "Segoe UI",
-                                19f,
-                                FontStyle.Bold
-                            ),
-
-                        ForeColor =
-                            Color.White,
-
-                        Location =
-                            new Point(
-                                28,
-                                24
-                            )
-                    };
-
-                Label subtitle =
-                    new Label
-                    {
-                        Text =
-                            "Redacta el mensaje que recibirá el número registrado en Artemusa.",
-
-                        AutoSize = true,
-
-                        ForeColor =
-                            soft,
-
-                        Location =
-                            new Point(
-                                30,
-                                62
-                            )
-                    };
-
-                Label number =
-                    new Label
-                    {
-                        Text =
-                            "Destino: +51 961 256 566",
-
-                        AutoSize = true,
-
-                        ForeColor =
-                            lime,
-
-                        Font =
-                            new Font(
-                                "Segoe UI",
-                                9f,
-                                FontStyle.Bold
-                            ),
-
-                        Location =
-                            new Point(
-                                30,
-                                91
-                            )
-                    };
-
-                message =
-                    new TextBox
-                    {
-                        Multiline = true,
-
-                        ScrollBars =
-                            ScrollBars.Vertical,
-
-                        AcceptsReturn = true,
-
-                        Location =
-                            new Point(
-                                28,
-                                125
-                            ),
-
-                        Size =
-                            new Size(
-                                504,
-                                150
-                            ),
-
-                        BackColor =
-                            dialogCard,
-
-                        ForeColor =
-                            Color.White,
-
-                        BorderStyle =
-                            BorderStyle.FixedSingle,
-
-                        Font =
-                            new Font(
-                                "Segoe UI",
-                                10f
-                            ),
-
-                        MaxLength =
-                            2000,
-
-                        Text =
-                            "Hola, te informamos que hay una actualización en el estado de tu inventario en Artemusa."
-                    };
-
-                feedback =
-                    new Label
-                    {
-                        AutoSize = false,
-
-                        Size =
-                            new Size(
-                                504,
-                                32
-                            ),
-
-                        Location =
-                            new Point(
-                                28,
-                                287
-                            ),
-
-                        ForeColor =
-                            soft,
-
-                        Text =
-                            "Máximo 2.000 caracteres.",
-
-                        AutoEllipsis =
-                            true
-                    };
-
-                Button cancel =
-                    new Button
-                    {
-                        Text =
-                            "Cancelar",
-
-                        Size =
-                            new Size(
-                                116,
-                                40
-                            ),
-
-                        Location =
-                            new Point(
-                                280,
-                                350
-                            ),
-
-                        BackColor =
-                            dialogCard,
-
-                        ForeColor =
-                            Color.White,
-
-                        FlatStyle =
-                            FlatStyle.Flat,
-
-                        Cursor =
-                            Cursors.Hand
-                    };
-
-                cancel
-                    .FlatAppearance
-                    .BorderColor =
-                    Color.FromArgb(
-                        58,
-                        80,
-                        89
-                    );
-
-                cancel.Click +=
-                    (s, e) =>
-                        DialogResult =
-                            DialogResult.Cancel;
-
-                send =
-                    new Button
-                    {
-                        Text =
-                            "Enviar mensaje",
-
-                        Size =
-                            new Size(
-                                146,
-                                40
-                            ),
-
-                        Location =
-                            new Point(
-                                386,
-                                350
-                            ),
-
-                        BackColor =
-                            lime,
-
-                        ForeColor =
-                            Color.FromArgb(
-                                11,
-                                22,
-                                25
-                            ),
-
-                        FlatStyle =
-                            FlatStyle.Flat,
-
-                        Font =
-                            new Font(
-                                "Segoe UI",
-                                9f,
-                                FontStyle.Bold
-                            ),
-
-                        Cursor =
-                            Cursors.Hand,
-
-                        UseVisualStyleBackColor =
-                            false
-                    };
-
-                send
-                    .FlatAppearance
-                    .BorderSize = 0;
-
-                send.Click +=
-                    SendAsync;
-
-                Controls.AddRange(
-                    new Control[]
-                    {
-                        title,
-                        subtitle,
-                        number,
-                        message,
-                        feedback,
-                        cancel,
-                        send
-                    }
-                );
-
-                CancelButton = cancel;
-                AcceptButton = send;
-            }
-
-            private async void SendAsync(
-                object sender,
-                EventArgs e)
-            {
-                string text =
-                    message.Text.Trim();
-
-                if (text.Length == 0)
+                DateTime mes = ini.AddMonths(-(5 - i));
+                string nombre = mes.ToString("MMM", ES).TrimEnd('.');
+                lbl[i] = ES.TextInfo.ToTitleCase(nombre);
+                foreach (Movimiento m in Demo.Movimientos)
                 {
-                    feedback.Text =
-                        "Escribe un mensaje antes de enviarlo.";
-
-                    feedback.ForeColor =
-                        Color.FromArgb(
-                            255,
-                            164,
-                            164
-                        );
-
-                    message.Focus();
-
-                    return;
-                }
-
-                send.Enabled =
-                    false;
-
-                feedback.ForeColor =
-                    lime;
-
-                feedback.Text =
-                    "Enviando mensaje…";
-
-                try
-                {
-                    bool sent =
-                        await
-                        global::
-                        SUSTENTACION
-                        .PanelAdministrador
-                        .GestionEquipos
-                        .EnviarNotificacionWhatsAppAsync(
-                            text
-                        );
-
-                    if (sent)
-                    {
-                        feedback.Text =
-                            "Mensaje enviado correctamente.";
-
-                        MessageBox.Show(
-                            this,
-                            "Mensaje enviado con éxito a WhatsApp.",
-                            "Artemusa",
-                            MessageBoxButtons.OK,
-                            MessageBoxIcon.Information
-                        );
-
-                        DialogResult =
-                            DialogResult.OK;
-                    }
-                    else
-                    {
-                        feedback.ForeColor =
-                            Color.FromArgb(
-                                255,
-                                194,
-                                116
-                            );
-
-                        feedback.Text =
-                            "El servicio no confirmó el envío.";
-                    }
-                }
-                catch (Exception ex)
-                {
-                    feedback.ForeColor =
-                        Color.FromArgb(
-                            255,
-                            164,
-                            164
-                        );
-
-                    feedback.Text =
-                        "No se pudo enviar el mensaje.";
-
-                    MessageBox.Show(
-                        this,
-                        ex.Message,
-                        "Error de WhatsApp",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Warning
-                    );
-                }
-                finally
-                {
-                    send.Enabled =
-                        true;
+                    if (!set.Contains(m.Equipo)) continue;
+                    if (m.Fecha.Year != mes.Year || m.Fecha.Month != mes.Month) continue;
+                    if (m.Tipo == "Salida") sal[i]++;
+                    else if (m.Tipo == "Entrada" || m.Tipo == "Devolución") ing[i]++;
                 }
             }
+            barras.SetData(lbl, sal, ing);
+
+            // Barras horizontales: órdenes de mantenimiento por estado
+            string[] ms = { "Pendiente", "En reparación", "Reparado" };
+            int[] mv = ms.Select(es => Demo.Mantenimientos.Count(m => set.Contains(m.Equipo) && m.Estado == es)).ToArray();
+            hbar.SetData(ms, mv, new[] { T.Warn, T.Info, T.Ok });
+        }
+
+        private void AplicarBusquedaRapida()
+        {
+            string q = (busquedaRapida ?? "").Trim();
+            if (q.Length == 0) viewRows = baseRows;
+            else viewRows = baseRows.Where(r => r.Any(c => c.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0)).ToList();
+            pagina = 1;
+            RenderPagina();
+        }
+
+        private void EnsureColumns()
+        {
+            if (columnsFor == (int)seccion && grid.Columns.Count > 0) return;
+            grid.Rows.Clear();
+            grid.Columns.Clear();
+            foreach (Col c in ColsDe(seccion))
+            {
+                DataGridViewTextBoxColumn col = new DataGridViewTextBoxColumn();
+                col.HeaderText = c.H;
+                col.FillWeight = c.W;
+                col.MinimumWidth = 70;
+                col.SortMode = DataGridViewColumnSortMode.NotSortable;
+                col.Tag = c.K;
+                if (c.K == "b") col.DefaultCellStyle.Font = F(9.5f, true);
+                if (c.K == "m") col.DefaultCellStyle.ForeColor = T.Muted;
+                grid.Columns.Add(col);
+            }
+            columnsFor = (int)seccion;
+        }
+
+        private void RenderPagina()
+        {
+            if (grid == null) return;
+
+            int total = viewRows.Count;
+            int size = pageSize <= 0 ? Math.Max(total, 1) : pageSize;
+            int pages = Math.Max(1, (int)Math.Ceiling(total / (double)size));
+            if (pagina > pages) pagina = pages;
+            if (pagina < 1) pagina = 1;
+            int start = (pagina - 1) * size;
+            int take = Math.Max(0, Math.Min(size, total - start));
+
+            QuitarHover();
+            EnsureColumns();
+            grid.SuspendLayout();
+            grid.Rows.Clear();
+            for (int i = 0; i < take; i++)
+                grid.Rows.Add((object[])viewRows[start + i]);
+            grid.ClearSelection();
+            grid.CurrentCell = null;
+            grid.Height = HeaderH + take * RowH + 2;
+            grid.ResumeLayout();
+
+            emptyPanel.Visible = total == 0;
+            int body = HeaderH + take * RowH + 2 + (total == 0 ? 200 : 0);
+            tableHost.Height = 192 + body;
+
+            lblInfo.Text = total == 0
+                ? "Sin registros para mostrar"
+                : "Mostrando " + (start + 1) + "–" + (start + take) + " de " + total + " registros";
+
+            BuildPager(pages);
+        }
+
+        private void BuildPager(int pages)
+        {
+            pagerHost.SuspendLayout();
+            foreach (Control c in pagerHost.Controls.Cast<Control>().ToList())
+            {
+                pagerHost.Controls.Remove(c);
+                c.Dispose();
+            }
+
+            int x = 0;
+            Action<string, int, bool, bool, int> add = (text, w, active, enabled, target) =>
+            {
+                UiButton b = new UiButton(text, w, 34) { Style = BtnStyle.Ghost, Active = active, Enabled = enabled, Location = new Point(x, 0) };
+                if (target > 0) b.Click += (s, e) => { pagina = target; RenderPagina(); };
+                pagerHost.Controls.Add(b);
+                x += w + 6;
+            };
+
+            add("‹", 36, false, pagina > 1, pagina - 1);
+
+            int last = 0;
+            for (int i = 1; i <= pages; i++)
+            {
+                bool mostrar = i == 1 || i == pages || Math.Abs(i - pagina) <= 1;
+                if (!mostrar) continue;
+                if (last != 0 && i - last > 1) add("…", 30, false, false, 0);
+                add(i.ToString(), 36, i == pagina, true, i);
+                last = i;
+            }
+
+            add("›", 36, false, pagina < pages, pagina + 1);
+
+            pagerHost.Width = Math.Max(1, x - 6);
+            pagerHost.Left = Math.Max(0, footerPanel.Width - pagerHost.Width - 24);
+            pagerHost.ResumeLayout();
         }
 
         // ============================================================
-        // CONTROLES VISUALES INTERNOS
+        //  NOTIFICACIONES Y EXPORTACIÓN SIMULADA
         // ============================================================
-
-        private sealed class ChartPanel : Card
+        private void ShowToast(string title, string msg, Color accent)
         {
-            [Browsable(false)]
-            [DesignerSerializationVisibility(
-                DesignerSerializationVisibility.Hidden)]
-            public string Title { get; set; }
-
-            [Browsable(false)]
-            [DesignerSerializationVisibility(
-                DesignerSerializationVisibility.Hidden)]
-            public string Subtitle { get; set; }
-
-            protected override void OnPaint(
-                PaintEventArgs e)
-            {
-                base.OnPaint(e);
-
-                using (
-                    Font titleFont =
-                    FontOfStatic(
-                        11.5f,
-                        true
-                    )
-                )
-                using (
-                    Font subtitleFont =
-                    FontOfStatic(
-                        8f,
-                        false
-                    )
-                )
-                using (
-                    Brush titleBrush =
-                    new SolidBrush(
-                        Color.FromArgb(
-                            239,
-                            244,
-                            250
-                        )
-                    )
-                )
-                using (
-                    Brush subtitleBrush =
-                    new SolidBrush(
-                        Color.FromArgb(
-                            156,
-                            174,
-                            198
-                        )
-                    )
-                )
-                {
-                    e.Graphics.DrawString(
-                        Title ?? "",
-                        titleFont,
-                        titleBrush,
-                        16,
-                        12
-                    );
-
-                    e.Graphics.DrawString(
-                        Subtitle ?? "",
-                        subtitleFont,
-                        subtitleBrush,
-                        17,
-                        35
-                    );
-                }
-            }
-
-            private static Font FontOfStatic(
-                float size,
-                bool bold)
-            {
-                return new Font(
-                    "Segoe UI",
-                    size,
-                    bold
-                    ? FontStyle.Bold
-                    : FontStyle.Regular
-                );
-            }
+            if (toast != null) toast.Display(title, msg, accent);
         }
 
-        private class Card : Panel
+        private void SimularExportacion(string tipo)
         {
-            public Card()
-            {
-                DoubleBuffered = true;
-                ResizeRedraw = true;
-            }
-
-            protected override void OnPaint(
-                PaintEventArgs e)
-            {
-                base.OnPaint(e);
-
-                if (
-                    Width < 20
-                    ||
-                    Height < 20)
-                {
-                    return;
-                }
-
-                Rectangle rect =
-                    new Rectangle(
-                        0,
-                        0,
-                        Width - 1,
-                        Height - 1
-                    );
-
-                using (
-                    GraphicsPath path =
-                    RoundPath(
-                        rect,
-                        10
-                    )
-                )
-                using (
-                    Pen p =
-                    new Pen(
-                        Color.FromArgb(
-                            61,
-                            82,
-                            109
-                        ),
-                        1
-                    )
-                )
-                {
-                    e.Graphics.SmoothingMode =
-                        SmoothingMode.AntiAlias;
-
-                    e.Graphics.DrawPath(
-                        p,
-                        path
-                    );
-                }
-            }
+            string titulo = tipo == "impresión" ? "Imprimir reporte" : "Exportar a " + tipo;
+            ShowToast(titulo, "Simulación del «" + TituloSeccion(seccion) + "». Esta función se implementará posteriormente.", T.Info);
         }
     }
 }

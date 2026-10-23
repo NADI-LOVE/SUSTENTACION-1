@@ -1,1354 +1,2365 @@
-﻿    // Sustituye completamente el contenido de Trabajador.cs por este archivo.
-    // Usa las tablas del esquema Artemusa: responsable y area.
-    // Las cuentas y contraseñas de acceso permanecen en usuario; este módulo no las modifica.
-    #nullable disable
-    using System;
-    using System.Collections.Generic;
-    using System.Data;
-    using System.Drawing;
-    using System.Drawing.Drawing2D;
-    using System.Globalization;
-    using System.IO;
-    using System.Net.Mail;
-    using System.Text;
-    using System.Windows.Forms;
-    using MySql.Data.MySqlClient;
+﻿#nullable disable
+using System;
+using System.Collections.Generic;
+using System.Data;
+using System.Diagnostics;
+using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.Drawing.Text;
+using System.Globalization;
+using System.IO;
+using System.Linq;
+using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Windows.Forms;
+using Npgsql;
+using SUSTENTACION.Temas;
 
-    namespace SUSTENTACION.PanelTrabajador
+namespace SUSTENTACION.PanelTrabajador
+{
+    /// <summary>
+    /// Módulo "Gestión de trabajadores" - ARTEMUSA TV · Artemusa Perú S.R.L.
+    ///
+    ///  • Trabajadores internos: administradores y encargados del sistema (tabla public.trabajadores).
+    ///  • Personal externo: técnicos nuevos o a quienes se les asigna equipo audiovisual
+    ///    (tabla public.personal_externo).
+    ///
+    /// Para sincronizar con el botón "Modo claro / oscuro" del panel principal llama a
+    /// <see cref="AplicarTema"/> (true = oscuro, false = claro).
+    /// </summary>
+    public class Trabajador : TemaUserControl
     {
-        public class Trabajador : UserControl
+        // ───────────────────────── Constantes ─────────────────────────
+        private const int AnchoMinimo = 1060;
+        private const int AltoMinimo = 720;
+        private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
+
+        private const ControlStyles EstiloPintado =
+            ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint |
+            ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw;
+
+        // ───────────────────────── Controles ─────────────────────────
+        private Panel lienzo;
+        private TableLayoutPanel main;
+        private BotonModerno btnActualizar, btnNuevo, btnLimpiar, btnExportar;
+        private TarjetaResumen cTotal, cActivos, cInactivos, cExternos;
+        private CampoTexto buscar;
+        private SelectorModerno filtroEstado, filtroRol;
+        private PestanasModernas pestanas;
+        private DataGridView tablaInternos, tablaExternos;
+        private EtiquetaTema lblVacio, lblCantidad, lblConexion;
+        private Aviso aviso;
+        private ToolTip tip;
+
+        // ───────────────────────── Datos ─────────────────────────
+        private DataTable internos, externos, departamentosDatos, rolesDatos;
+        private bool cargando;
+        private int? seleccionInterno, seleccionExterno;
+
+        // Estado del icono sobre el que está el mouse en las tablas
+        private DataGridView gridHover;
+        private int filaHover = -1, iconoHover = -1;
+
+        public Trabajador()
         {
-            private readonly Color background = Color.FromArgb(242, 246, 249);
-            private readonly Color ink = Color.FromArgb(24, 42, 55);
-            private readonly Color muted = Color.FromArgb(105, 123, 137);
-            private readonly Color green = Color.FromArgb(18, 124, 91);
-            private readonly Dictionary<string, Font> fonts = new Dictionary<string, Font>();
+            Dock = DockStyle.Fill;
+            DoubleBuffered = true;
+            Font = Tema.Fuente(9F); // Usa tu fuente local
 
-            private DataTable people;
-            private DataTable areaSummary;
-            private TextBox search;
-            private ComboBox areaFilter;
-            private ComboBox statusFilter;
-            private DataGridView grid;
-            private DataGridView summaryGrid;
-            private FlowLayoutPanel profile;
-            private Label message;
-            private Label count;
-            private Label empty;
-            private Label[] metrics = new Label[4];
-            private Button add;
-            private Button edit;
-            private Button toggle;
-            private TabControl views;
-            private bool loading;
-            private bool online;
-            private bool busy;
+            tip = new ToolTip();
+            CrearInterfaz(); // Crea las tablas y los controles
 
-            public Trabajador()
+            SizeChanged += (s, e) => PosicionarAviso();
+            Load += (s, e) => { AjustarContenedor(); ActualizarDatos(); };
+
+            // 1. Aplica el tema inicial (por si arranca en modo oscuro)
+            AplicarTema();
+
+            // 2. Escucha el evento global y actualiza el estilo de las tablas cuando cambie el tema
+            TemaApp.TemaCambiado += () =>
             {
-                Dock = DockStyle.Fill;
-                BackColor = background;
-                DoubleBuffered = true;
-                Font = UiFont(9);
-                BuildInterface();
-                Load += delegate { CargarTrabajadores(); };
+                AplicarEstiloGrid(tablaInternos);
+                AplicarEstiloGrid(tablaExternos);
+            };
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && tip != null) tip.Dispose();
+            base.Dispose(disposing);
+        }
+
+        // ═════════════════════════ API PÚBLICA ═════════════════════════
+
+        /// <summary>true = modo oscuro (por defecto), false = modo claro.</summary>
+        public bool ModoOscuro { get { return Tema.Oscuro; } }
+
+        public void AplicarTema(bool oscuro)
+        {
+            Tema.Oscuro = oscuro;
+            BackColor = Tema.Fondo;
+            AplicarTemaA(this);
+            Invalidate(true);
+        }
+
+        public void CargarTrabajadores() { ActualizarDatos(); }
+
+        private void AplicarTemaA(Control padre)
+        {
+            foreach (Control c in padre.Controls)
+            {
+                if (c is TarjetaPanel) c.BackColor = Tema.Superficie;
+                else if (c is DataGridView) AplicarEstiloGrid((DataGridView)c);
+                AplicarTemaA(c);
+            }
+        }
+
+        // ═════════════════════════ INTERFAZ ═════════════════════════
+        private void CrearInterfaz()
+        {
+            lienzo = new Panel
+            {
+                Dock = DockStyle.Fill,
+                AutoScroll = true,
+                Padding = new Padding(22, 18, 22, 18)
+            };
+            lienzo.AutoScrollMinSize = new Size(AnchoMinimo + 44, AltoMinimo + 36);
+            lienzo.SizeChanged += (s, e) => AjustarContenedor();
+
+            main = new TableLayoutPanel
+            {
+                Dock = DockStyle.None,
+                ColumnCount = 1,
+                RowCount = 5,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty
+            };
+            main.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            main.RowStyles.Add(new RowStyle(SizeType.Absolute, 76));    // encabezado
+            main.RowStyles.Add(new RowStyle(SizeType.Absolute, 124));   // tarjetas
+            main.RowStyles.Add(new RowStyle(SizeType.Absolute, 86));    // filtros
+            main.RowStyles.Add(new RowStyle(SizeType.Percent, 100));    // tabla
+            main.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));    // estado de conexión
+            lienzo.Controls.Add(main);
+            Controls.Add(lienzo);
+
+            main.Controls.Add(CrearEncabezado(), 0, 0);
+            main.Controls.Add(CrearTarjetas(), 0, 1);
+            main.Controls.Add(CrearBarraFiltros(), 0, 2);
+            main.Controls.Add(CrearTarjetaTabla(), 0, 3);
+
+            lblConexion = new EtiquetaTema("Conectando con Supabase...", 8.75F, FontStyle.Regular, RolTexto.Libre)
+            {
+                Dock = DockStyle.Fill,
+                AutoSize = false,
+                TextAlign = ContentAlignment.MiddleLeft,
+                ForeColor = Tema.Suave
+            };
+            main.Controls.Add(lblConexion, 0, 4);
+
+            // Aviso flotante (toast). Se agrega al final y se trae al frente.
+            aviso = new Aviso();
+            Controls.Add(aviso);
+            aviso.BringToFront();
+
+            ActualizarBotones();
+        }
+
+        private void AjustarContenedor()
+        {
+            if (main == null) return;
+            int w = Math.Max(lienzo.ClientSize.Width - lienzo.Padding.Horizontal, AnchoMinimo);
+            int h = Math.Max(lienzo.ClientSize.Height - lienzo.Padding.Vertical, AltoMinimo);
+            main.SetBounds(lienzo.Padding.Left + lienzo.AutoScrollPosition.X,
+                           lienzo.Padding.Top + lienzo.AutoScrollPosition.Y, w, h);
+        }
+
+        private void PosicionarAviso()
+        {
+            if (aviso == null) return;
+            aviso.Location = new Point(Math.Max(10, Width - aviso.Width - 28), Math.Max(10, Height - aviso.Height - 28));
+        }
+
+        private Control CrearEncabezado()
+        {
+            var p = new Panel { Dock = DockStyle.Fill, Margin = Padding.Empty };
+
+            var titulo = new EtiquetaTema("Gestión de trabajadores", 20F, FontStyle.Bold, RolTexto.Titulo)
+            { Location = new Point(0, 2) };
+            var subtitulo = new EtiquetaTema("Administra el personal y consulta sus actividades", 9.5F, FontStyle.Regular, RolTexto.Suave)
+            { Location = new Point(2, 44) };
+
+            btnActualizar = new BotonModerno("Actualizar", "↻", EstiloBoton.Secundario, 130);
+            btnNuevo = new BotonModerno("Nuevo técnico externo", "+", EstiloBoton.Primario, 220);
+            btnActualizar.Click += (s, e) => ActualizarDatos();
+            btnNuevo.Click += (s, e) => AbrirEditorExterno(null);
+
+            p.Controls.AddRange(new Control[] { titulo, subtitulo, btnActualizar, btnNuevo });
+            p.Resize += (s, e) =>
+            {
+                btnNuevo.Location = new Point(p.Width - btnNuevo.Width, 8);
+                btnActualizar.Location = new Point(btnNuevo.Left - btnActualizar.Width - 12, 8);
+            };
+            return p;
+        }
+
+        private Control CrearTarjetas()
+        {
+            var t = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 4,
+                RowCount = 1,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty
+            };
+            for (int i = 0; i < 4; i++) t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
+            t.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+            cTotal = new TarjetaResumen("TOTAL DE TRABAJADORES", "☺", Tema.Azul);
+            cActivos = new TarjetaResumen("TRABAJADORES ACTIVOS", "✓", Tema.Verde);
+            cInactivos = new TarjetaResumen("TRABAJADORES INACTIVOS", "⊘", Tema.Naranja);
+            cExternos = new TarjetaResumen("PERSONAL EXTERNO", "↗", Tema.Morado);
+
+            var lista = new[] { cTotal, cActivos, cInactivos, cExternos };
+            for (int i = 0; i < lista.Length; i++)
+            {
+                lista[i].Dock = DockStyle.Fill;
+                lista[i].Margin = new Padding(i == 0 ? 0 : 7, 0, i == 3 ? 0 : 7, 12);
+                t.Controls.Add(lista[i], i, 0);
+            }
+            return t;
+        }
+
+        private Control CrearBarraFiltros()
+        {
+            var tarjeta = new TarjetaPanel
+            {
+                Dock = DockStyle.Fill,
+                Margin = new Padding(0, 0, 0, 14),
+                Padding = new Padding(16, 14, 16, 14)
+            };
+
+            var t = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 5,
+                RowCount = 1,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty
+            };
+            t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 200));
+            t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 200));
+            t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 116));
+            t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
+            t.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+            buscar = new CampoTexto
+            {
+                Lupa = true,
+                Placeholder = "Buscar por nombre, DNI, contacto o correo...",
+                Dock = DockStyle.Fill,
+                Margin = new Padding(0, 0, 12, 0)
+            };
+
+            filtroEstado = new SelectorModerno { Dock = DockStyle.Fill, Margin = new Padding(0, 0, 12, 0) };
+            filtroEstado.Agregar("Todos los estados");
+            filtroEstado.Agregar("Activos");
+            filtroEstado.Agregar("Inactivos");
+            filtroEstado.SelectedIndex = 0;
+
+            filtroRol = new SelectorModerno { Dock = DockStyle.Fill, Margin = new Padding(0, 0, 12, 0) };
+            filtroRol.Agregar("Todos los roles");
+            filtroRol.SelectedIndex = 0;
+
+            btnLimpiar = new BotonModerno("Limpiar", "✕", EstiloBoton.Secundario, 100)
+            { Dock = DockStyle.Fill, Margin = new Padding(0, 0, 12, 0) };
+            btnExportar = new BotonModerno("Exportar CSV", "⇩", EstiloBoton.Secundario, 140)
+            { Dock = DockStyle.Fill, Margin = Padding.Empty };
+
+            buscar.TextoCambiado += (s, e) => Filtrar();
+            filtroEstado.CambioSeleccion += (s, e) => Filtrar();
+            filtroRol.CambioSeleccion += (s, e) => Filtrar();
+            btnLimpiar.Click += (s, e) => LimpiarFiltros();
+            btnExportar.Click += (s, e) => ExportarCsv();
+
+            t.Controls.Add(buscar, 0, 0);
+            t.Controls.Add(filtroEstado, 1, 0);
+            t.Controls.Add(filtroRol, 2, 0);
+            t.Controls.Add(btnLimpiar, 3, 0);
+            t.Controls.Add(btnExportar, 4, 0);
+            tarjeta.Controls.Add(t);
+            return tarjeta;
+        }
+
+        private Control CrearTarjetaTabla()
+        {
+            var tarjeta = new TarjetaPanel
+            {
+                Dock = DockStyle.Fill,
+                Margin = new Padding(0, 0, 0, 6),
+                Padding = new Padding(18, 14, 18, 16)
+            };
+
+            // Zona de tablas (se agrega primero porque es Dock.Fill)
+            var zonaTablas = new Panel { Dock = DockStyle.Fill, Margin = Padding.Empty };
+            tablaInternos = CrearGrid(false);
+            tablaExternos = CrearGrid(true);
+            tablaInternos.Visible = true;
+            tablaExternos.Visible = false;
+
+            lblVacio = new EtiquetaTema("", 10F, FontStyle.Regular, RolTexto.Suave)
+            {
+                Dock = DockStyle.Fill,
+                AutoSize = false,
+                TextAlign = ContentAlignment.MiddleCenter,
+                Visible = false
+            };
+            zonaTablas.Controls.Add(tablaInternos);
+            zonaTablas.Controls.Add(tablaExternos);
+            zonaTablas.Controls.Add(lblVacio);
+
+            // Barra superior: pestañas + contador
+            var barra = new Panel { Dock = DockStyle.Top, Height = 52, Margin = Padding.Empty };
+            lblCantidad = new EtiquetaTema("Sin registros", 9F, FontStyle.Regular, RolTexto.Suave)
+            {
+                Dock = DockStyle.Fill,
+                AutoSize = false,
+                TextAlign = ContentAlignment.MiddleRight
+            };
+            pestanas = new PestanasModernas { Dock = DockStyle.Left, Width = 560 };
+            pestanas.SetTextos(new[] { "Trabajadores internos", "Personal externo" }, new[] { "☺", "↗" });
+            pestanas.Indice = 1;
+            pestanas.CambioIndice += (s, e) => { Filtrar(); ActualizarBotones(); MostrarPestana(); };
+            barra.Controls.Add(lblCantidad);
+            barra.Controls.Add(pestanas);
+
+            tarjeta.Controls.Add(zonaTablas);
+            tarjeta.Controls.Add(barra);
+
+            MostrarPestana();
+            return tarjeta;
+        }
+
+        /// <summary>Muestra la tabla de la pestaña activa o el mensaje de "sin resultados".</summary>
+        private void MostrarPestana()
+        {
+            if (pestanas == null || tablaInternos == null || lblVacio == null) return;
+            bool ext = pestanas.Indice == 1;
+            DataGridView activa = ext ? tablaExternos : tablaInternos;
+            DataGridView otra = ext ? tablaInternos : tablaExternos;
+            otra.Visible = false;
+
+            bool vacio = activa.RowCount == 0;
+            activa.Visible = !vacio;
+            lblVacio.Visible = vacio;
+
+            DataTable datos = ext ? externos : internos;
+            lblVacio.Text = (datos == null || datos.Rows.Count == 0)
+                ? "Todavía no hay registros en esta sección."
+                : "No se encontraron resultados con los filtros aplicados.";
+        }
+
+        // ═════════════════════════ TABLAS ═════════════════════════
+        private DataGridView CrearGrid(bool externo)
+        {
+            var t = new DataGridView
+            {
+                Dock = DockStyle.Fill,
+                ReadOnly = true,
+                AllowUserToAddRows = false,
+                AllowUserToDeleteRows = false,
+                AllowUserToResizeRows = false,
+                AllowUserToResizeColumns = false,
+                RowHeadersVisible = false,
+                MultiSelect = false,
+                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+                AutoGenerateColumns = false,
+                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+                BorderStyle = BorderStyle.None,
+                EnableHeadersVisualStyles = false,
+                ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None,
+                ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing,
+                CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal,
+                EditMode = DataGridViewEditMode.EditProgrammatically
+            };
+            t.ColumnHeadersHeight = 44;
+            t.RowTemplate.Height = 56;
+            typeof(DataGridView).GetProperty("DoubleBuffered", BindingFlags.Instance | BindingFlags.NonPublic)
+                .SetValue(t, true, null);
+
+            var acciones = Col("acciones", "ACCIONES", null, 0);
+            acciones.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
+            acciones.Width = externo ? 176 : 140;
+
+            if (externo)
+            {
+                var fecha = Col("fecha_registro", "FECHA DE REGISTRO", "fecha_registro", 120);
+                fecha.DefaultCellStyle.Format = "dd/MM/yyyy HH:mm";
+                t.Columns.AddRange(
+                    Col("num", "N.º", null, 40),
+                    Col("nombre", "TÉCNICO EXTERNO", "nombre_completo", 190),
+                    Col("dni", "DNI", "dni", 90),
+                    Col("celular", "CELULAR", "celular", 100),
+                    Col("direccion", "DIRECCIÓN", "direccion", 170),
+                    Col("estado", "ESTADO", "estado", 100),
+                    fecha,
+                    acciones);
+            }
+            else
+            {
+                t.Columns.AddRange(
+                    Col("num", "N.º", null, 40),
+                    Col("nombre", "TRABAJADOR", "nombre", 180),
+                    Col("dni", "DNI", "dni", 90),
+                    Col("telefono", "TELÉFONO", "telefono", 100),
+                    Col("correo", "CORREO", "correo", 190),
+                    Col("departamento", "DEPARTAMENTO", "departamento", 140),
+                    Col("rol", "ROL", "rol", 120),
+                    Col("estado", "ESTADO", "estado", 100),
+                    acciones);
             }
 
-            protected override void Dispose(bool disposing)
+            AplicarEstiloGrid(t);
+
+            t.CellPainting += Grid_CellPainting;
+            t.CellFormatting += Grid_CellFormatting;
+            t.CellMouseMove += Grid_CellMouseMove;
+            t.CellMouseLeave += Grid_CellMouseLeave;
+            t.CellMouseClick += Grid_CellMouseClick;
+            t.CellDoubleClick += Grid_CellDoubleClick;
+            t.SelectionChanged += (s, e) => GuardarSeleccion(t);
+            t.DataBindingComplete += (s, e) => { t.ClearSelection(); };
+            return t;
+        }
+
+        private static DataGridViewTextBoxColumn Col(string nombre, string titulo, string propiedad, float peso)
+        {
+            return new DataGridViewTextBoxColumn
             {
-                if (disposing)
+                Name = nombre,
+                HeaderText = titulo,
+                DataPropertyName = propiedad ?? "",
+                FillWeight = Math.Max(1F, peso),
+                MinimumWidth = 60,
+                SortMode = string.IsNullOrEmpty(propiedad)
+                    ? DataGridViewColumnSortMode.NotSortable
+                    : DataGridViewColumnSortMode.Automatic
+            };
+        }
+
+        private void AplicarEstiloGrid(DataGridView t)
+        {
+            // 1. Configuración del fondo y bordes de la tabla
+            t.BackgroundColor = Tema.Superficie;
+            t.GridColor = Tema.Borde;
+            t.BorderStyle = BorderStyle.None;
+            t.EnableHeadersVisualStyles = false; // Vital para que Windows no pinte los headers de gris por defecto
+            t.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
+            t.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
+
+            // 2. Estilo de los Encabezados (Columnas)
+            t.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle
+            {
+                BackColor = Tema.Elevado,
+                ForeColor = Tema.Suave,
+                Font = Tema.Fuente(8F, FontStyle.Bold),
+                Padding = new Padding(10, 0, 0, 0),
+                SelectionBackColor = Tema.Elevado,
+                SelectionForeColor = Tema.Suave,
+                Alignment = DataGridViewContentAlignment.MiddleLeft
+            };
+
+            // 3. Estilo de las Celdas Normales
+            t.DefaultCellStyle = new DataGridViewCellStyle
+            {
+                BackColor = Tema.Superficie,
+                ForeColor = Tema.Texto,
+                Font = Tema.Fuente(9.25F),
+                SelectionBackColor = Tema.Seleccion,
+                SelectionForeColor = Tema.Texto,
+                Padding = new Padding(10, 0, 0, 0),
+                NullValue = "—"
+            };
+
+            // 4. Estilo de las Filas Alternas (Efecto cebra)
+            t.AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle
+            {
+                BackColor = Tema.FilaAlterna,
+                ForeColor = Tema.Texto,
+                SelectionBackColor = Tema.Seleccion,
+                SelectionForeColor = Tema.Texto
+            };
+
+            // 5. Detalles específicos de columnas
+            if (t.Columns.Contains("num"))
+                t.Columns["num"].DefaultCellStyle.ForeColor = Tema.Suave;
+
+            if (t.Columns.Contains("fecha_registro"))
+                t.Columns["fecha_registro"].DefaultCellStyle.Format = "dd/MM/yyyy HH:mm";
+        }
+
+        // ── Iconos de la columna Acciones ──
+        private static Icono[] AccionesDe(bool externo)
+        {
+            return externo
+                ? new[] { Icono.Ver, Icono.WhatsApp, Icono.Editar, Icono.Power }
+                : new[] { Icono.Ver, Icono.Editar, Icono.Power };
+        }
+
+        private static string TextoIcono(Icono i, bool activo)
+        {
+            switch (i)
+            {
+                case Icono.Ver: return "Ver detalles";
+                case Icono.Editar: return "Editar";
+                case Icono.WhatsApp: return "Abrir WhatsApp";
+                default: return activo ? "Desactivar" : "Reactivar";
+            }
+        }
+
+        private static Rectangle RectIcono(Rectangle celda, int i)
+        {
+            return new Rectangle(celda.X + 8 + i * 38, celda.Y + (celda.Height - 32) / 2, 32, 32);
+        }
+
+        private int IconoEn(DataGridView grid, int col, int fila, Point local)
+        {
+            Rectangle celda = grid.GetCellDisplayRectangle(col, fila, false);
+            int n = AccionesDe(grid == tablaExternos).Length;
+            for (int i = 0; i < n; i++)
+                if (RectIcono(new Rectangle(0, 0, celda.Width, celda.Height), i).Contains(local)) return i;
+            return -1;
+        }
+
+        private static bool FilaActiva(DataGridView grid, int fila)
+        {
+            if (fila < 0 || fila >= grid.RowCount) return false;
+            DataRowView v = grid.Rows[fila].DataBoundItem as DataRowView;
+            return v != null && Convert.ToString(v["estado"]) == "Activo";
+        }
+
+        private void InvalidarAcciones(DataGridView grid, int fila)
+        {
+            if (fila < 0 || fila >= grid.RowCount || !grid.Columns.Contains("acciones")) return;
+            grid.InvalidateCell(grid.Columns["acciones"].Index, fila);
+        }
+
+        // ── Eventos de las tablas ──
+        private void Grid_CellFormatting(object sender, DataGridViewCellFormattingEventArgs e)
+        {
+            var grid = (DataGridView)sender;
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            if (grid.Columns[e.ColumnIndex].Name == "num")
+            {
+                e.Value = (e.RowIndex + 1).ToString(Inv);
+                e.FormattingApplied = true;
+            }
+        }
+
+        private void Grid_CellPainting(object sender, DataGridViewCellPaintingEventArgs e)
+        {
+            var grid = (DataGridView)sender;
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            string col = grid.Columns[e.ColumnIndex].Name;
+            if (col != "nombre" && col != "estado" && col != "rol" && col != "acciones") return;
+
+            e.Paint(e.CellBounds, DataGridViewPaintParts.Background | DataGridViewPaintParts.Border |
+                                  DataGridViewPaintParts.SelectionBackground);
+            var g = e.Graphics;
+            Tema.Calidad(g);
+            var celda = e.CellBounds;
+            string texto = Convert.ToString(e.FormattedValue ?? "").Trim();
+
+            if (col == "nombre")
+            {
+                var av = new RectangleF(celda.X + 12, celda.Y + (celda.Height - 36) / 2f, 36, 36);
+                using (var b = new SolidBrush(Tema.ColorAvatar(texto))) g.FillEllipse(b, av);
+                Tema.DibujarEn(g, Tema.Iniciales(texto), Tema.Fuente(9F, FontStyle.Bold), Color.White, av,
+                    StringAlignment.Center, StringAlignment.Center);
+                Tema.DibujarEn(g, texto, Tema.Fuente(9.5F, FontStyle.Bold), Tema.Texto,
+                    new RectangleF(av.Right + 10, celda.Y, Math.Max(10, celda.Width - 36 - 12 - 10 - 8), celda.Height));
+            }
+            else if (col == "estado" || col == "rol")
+            {
+                if (texto.Length > 0 && texto != "—")
                 {
-                    if (people != null) people.Dispose();
-                    if (areaSummary != null) areaSummary.Dispose();
-                    foreach (Font font in fonts.Values) font.Dispose();
-                    fonts.Clear();
+                    bool esEstado = col == "estado";
+                    Color c = esEstado
+                        ? (texto == "Activo" ? Tema.Verde : Tema.Peligro)
+                        : Tema.ColorRol(texto);
+                    var f = Tema.Fuente(8F, FontStyle.Bold);
+                    float w = Math.Min(celda.Width - 14, Tema.AnchoTexto(g, texto, f) + (esEstado ? 38 : 28));
+                    Tema.Insignia(g, texto, c, new RectangleF(celda.X + 10, celda.Y + (celda.Height - 24) / 2f, w, 24), esEstado);
                 }
-                base.Dispose(disposing);
             }
-
-            private Font UiFont(float size, bool bold = false)
+            else // acciones
             {
-                string key = size.ToString(CultureInfo.InvariantCulture) + (bold ? "B" : "R");
-                Font font;
-                if (!fonts.TryGetValue(key, out font))
+                bool externo = grid == tablaExternos;
+                var iconos = AccionesDe(externo);
+                bool activo = FilaActiva(grid, e.RowIndex);
+                for (int i = 0; i < iconos.Length; i++)
                 {
-                    font = new Font("Segoe UI", size, bold ? FontStyle.Bold : FontStyle.Regular);
-                    fonts.Add(key, font);
-                }
-                return font;
-            }
-
-            private Label Caption(string text, float size, Color color, bool bold = false)
-            {
-                return new Label
-                {
-                    Text = text,
-                    AutoSize = true,
-                    Font = UiFont(size, bold),
-                    ForeColor = color,
-                    BackColor = Color.Transparent
-                };
-            }
-
-            private Button ActionButton(string text, EventHandler action, bool primary = false, int width = 130)
-            {
-                Button button = new Button
-                {
-                    Text = text,
-                    Width = width,
-                    Height = 40,
-                    FlatStyle = FlatStyle.Flat,
-                    BackColor = primary ? green : Color.White,
-                    ForeColor = primary ? Color.White : ink,
-                    Font = UiFont(9, true),
-                    Cursor = Cursors.Hand,
-                    Margin = new Padding(0, 0, 10, 0),
-                    UseVisualStyleBackColor = false
-                };
-                button.FlatAppearance.BorderColor = primary ? green : Color.FromArgb(219, 229, 234);
-                button.FlatAppearance.MouseOverBackColor = primary ? Color.FromArgb(14, 103, 77) : background;
-                button.Click += action;
-                return button;
-            }
-
-            private ComboBox Choice(params string[] items)
-            {
-                ComboBox box = new ComboBox
-                {
-                    DropDownStyle = ComboBoxStyle.DropDownList,
-                    FlatStyle = FlatStyle.Flat,
-                    BackColor = Color.White,
-                    ForeColor = ink,
-                    Font = UiFont(9),
-                    Width = 180
-                };
-                box.Items.AddRange(items);
-                if (items.Length > 0) box.SelectedIndex = 0;
-                return box;
-            }
-
-            private void BuildInterface()
-            {
-                SuspendLayout();
-                AutoScroll = true;
-
-                Panel page = new Panel
-                {
-                    BackColor = background,
-                    Padding = new Padding(24),
-                    Location = Point.Empty
-                };
-                Controls.Add(page);
-
-                TableLayoutPanel layout = new TableLayoutPanel
-                {
-                    Dock = DockStyle.Fill,
-                    ColumnCount = 1,
-                    RowCount = 6,
-                    Margin = new Padding(0)
-                };
-                layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-                layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 120));
-                layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 126));
-                layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 98));
-                layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
-                layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-                layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
-
-                page.Controls.Add(layout);
-                layout.Controls.Add(BuildHeader(), 0, 0);
-                layout.Controls.Add(BuildMetrics(), 0, 1);
-                layout.Controls.Add(BuildFilters(), 0, 2);
-                layout.Controls.Add(BuildActions(), 0, 3);
-                layout.Controls.Add(BuildViews(), 0, 4);
-
-                message = Caption("Conectando con la base de datos…", 8.5f, muted);
-                message.AutoSize = false;
-                message.Dock = DockStyle.Fill;
-                message.TextAlign = ContentAlignment.MiddleLeft;
-                message.AutoEllipsis = true;
-                layout.Controls.Add(message, 0, 5);
-
-                Action resize = delegate
-                {
-                    page.Size = new Size(
-                        Math.Max(1030, ClientSize.Width - SystemInformation.VerticalScrollBarWidth - 2),
-                        Math.Max(850, ClientSize.Height - 2));
-                };
-                Resize += delegate { resize(); };
-                resize();
-
-                UpdateActions();
-                ShowProfile();
-                ResumeLayout(true);
-            }
-
-            private Control BuildHeader()
-            {
-                Panel panel = new Card
-                {
-                    Dock = DockStyle.Fill,
-                    BackColor = ink,
-                    Margin = new Padding(0, 0, 0, 16)
-                };
-
-                Label brand = Caption("ARTEMUSA TV  /  GESTIÓN DE TRABAJADORES", 8, Color.FromArgb(157, 219, 196), true);
-                brand.Location = new Point(24, 14);
-                Label title = Caption("Gestión de trabajadores", 23, Color.White, true);
-                title.Location = new Point(19, 37);
-                Label subtitle = Caption("Registro y control del personal relacionado con los equipos audiovisuales", 9, Color.FromArgb(187, 204, 211));
-                subtitle.Location = new Point(24, 80);
-
-                Button refresh = ActionButton("↻  Actualizar", delegate { CargarTrabajadores(); }, false, 125);
-                add = ActionButton("+ Nuevo trabajador", delegate { OpenEditor(false); }, true, 172);
-                panel.Controls.AddRange(new Control[] { brand, title, subtitle, refresh, add });
-                panel.Resize += delegate
-                {
-                    add.Location = new Point(panel.Width - add.Width - 22, 35);
-                    refresh.Location = new Point(add.Left - refresh.Width - 10, 35);
-                };
-                return panel;
-            }
-
-            private Control BuildMetrics()
-            {
-                TableLayoutPanel row = new TableLayoutPanel
-                {
-                    Dock = DockStyle.Fill,
-                    ColumnCount = 4,
-                    RowCount = 1,
-                    Margin = new Padding(0)
-                };
-
-                string[] titles = { "TRABAJADORES REGISTRADOS", "TRABAJADORES ACTIVOS", "TRABAJADORES INACTIVOS", "ÁREAS REGISTRADAS" };
-                string[] notes = { "Personal registrado", "Estado activo", "Historial conservado", "Áreas de Artemusa TV" };
-                Color[] fills =
-                {
-                    Color.FromArgb(231, 242, 251),
-                    Color.FromArgb(226, 243, 232),
-                    Color.FromArgb(255, 243, 222),
-                    Color.FromArgb(240, 234, 251)
-                };
-                Color[] accents =
-                {
-                    Color.FromArgb(43, 103, 163),
-                    green,
-                    Color.FromArgb(165, 99, 27),
-                    Color.FromArgb(119, 79, 178)
-                };
-
-                for (int i = 0; i < 4; i++)
-                {
-                    row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
-                    Panel card = new Card
+                    var r = RectIcono(celda, i);
+                    bool hover = grid == gridHover && e.RowIndex == filaHover && iconoHover == i;
+                    using (var p = Tema.Redondo(r, 9))
                     {
-                        Dock = DockStyle.Fill,
-                        BackColor = fills[i],
-                        Margin = new Padding(0, 0, i == 3 ? 0 : 12, 16)
-                    };
-                    Label title = Caption(titles[i], 7.5f, accents[i], true);
-                    title.Location = new Point(16, 13);
-                    metrics[i] = Caption("—", 26, ink, true);
-                    metrics[i].Location = new Point(12, 34);
-                    Label note = Caption(notes[i], 8, muted);
-                    note.Location = new Point(17, 86);
-                    card.Controls.AddRange(new Control[] { title, metrics[i], note });
-                    row.Controls.Add(card, i, 0);
-                }
-                return row;
-            }
-
-            private Control BuildFilters()
-            {
-                Panel panel = new Card
-                {
-                    Dock = DockStyle.Fill,
-                    BackColor = Color.White,
-                    Padding = new Padding(16, 10, 16, 10),
-                    Margin = new Padding(0, 0, 0, 14)
-                };
-                TableLayoutPanel row = new TableLayoutPanel
-                {
-                    Dock = DockStyle.Fill,
-                    ColumnCount = 4,
-                    RowCount = 2
-                };
-                row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-                row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 220));
-                row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180));
-                row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
-                row.RowStyles.Add(new RowStyle(SizeType.Absolute, 23));
-                row.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-
-                row.Controls.Add(Caption("BUSCAR POR NOMBRE, DNI O CONTACTO", 7.5f, muted, true), 0, 0);
-                row.Controls.Add(Caption("ÁREA", 7.5f, muted, true), 1, 0);
-                row.Controls.Add(Caption("ESTADO", 7.5f, muted, true), 2, 0);
-
-                search = new TextBox
-                {
-                    Dock = DockStyle.Top,
-                    Margin = new Padding(0, 0, 14, 0),
-                    Font = UiFont(10),
-                    ForeColor = ink
-                };
-                areaFilter = Choice("Todas las áreas");
-                areaFilter.Width = 205;
-                statusFilter = Choice("Todos los estados", "Activo", "Inactivo");
-                statusFilter.Width = 166;
-                Button clear = ActionButton("Limpiar", delegate
-                {
-                    search.Clear();
-                    areaFilter.SelectedIndex = 0;
-                    statusFilter.SelectedIndex = 0;
-                }, false, 84);
-                clear.Height = 29;
-
-                row.Controls.Add(search, 0, 1);
-                row.Controls.Add(areaFilter, 1, 1);
-                row.Controls.Add(statusFilter, 2, 1);
-                row.Controls.Add(clear, 3, 1);
-                panel.Controls.Add(row);
-
-                search.TextChanged += delegate { ApplyFilters(); };
-                areaFilter.SelectedIndexChanged += delegate { ApplyFilters(); };
-                statusFilter.SelectedIndexChanged += delegate { ApplyFilters(); };
-                return panel;
-            }
-
-            private Control BuildActions()
-            {
-                FlowLayoutPanel panel = new FlowLayoutPanel
-                {
-                    Dock = DockStyle.Fill,
-                    WrapContents = false,
-                    Margin = new Padding(0)
-                };
-                edit = ActionButton("Editar trabajador", delegate { OpenEditor(true); });
-                toggle = ActionButton("Desactivar", delegate { ChangeStatus(); }, false, 136);
-                Button export = ActionButton("Exportar CSV", delegate { ExportCsv(); });
-                count = Caption("Sin registros", 9, muted);
-                count.Margin = new Padding(14, 12, 0, 0);
-                panel.Controls.AddRange(new Control[] { edit, toggle, export, count });
-                return panel;
-            }
-
-            private Control BuildViews()
-            {
-                views = new TabControl
-                {
-                    Dock = DockStyle.Fill,
-                    Font = UiFont(10, true),
-                    Padding = new Point(20, 10),
-                    Margin = new Padding(0)
-                };
-                TabPage directory = new TabPage("Lista de trabajadores") { BackColor = Color.White, Padding = new Padding(10) };
-                TabPage summary = new TabPage("Resumen por área") { BackColor = Color.White, Padding = new Padding(14) };
-
-                TableLayoutPanel split = new TableLayoutPanel
-                {
-                    Dock = DockStyle.Fill,
-                    ColumnCount = 2,
-                    RowCount = 1,
-                    Margin = new Padding(0)
-                };
-                split.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-                split.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 276));
-                split.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-
-                Panel list = new Panel { Dock = DockStyle.Fill, Margin = new Padding(0, 0, 14, 0) };
-                grid = BuildGrid();
-                grid.SelectionChanged += delegate
-                {
-                    if (!loading)
-                    {
-                        ShowProfile();
-                        UpdateActions();
+                        using (var b = new SolidBrush(hover ? Tema.Borde : Tema.Elevado)) g.FillPath(b, p);
+                        using (var pen = new Pen(hover ? Tema.AcentoTexto : Tema.Borde, 1F)) g.DrawPath(pen, p);
                     }
-                };
-                grid.CellDoubleClick += delegate (object sender, DataGridViewCellEventArgs e)
-                {
-                    if (e.RowIndex >= 0) OpenEditor(true);
-                };
-                grid.CellFormatting += FormatState;
-                empty = Caption("", 9, muted);
-                empty.AutoSize = false;
-                empty.Height = 42;
-                empty.Dock = DockStyle.Bottom;
-                empty.TextAlign = ContentAlignment.MiddleLeft;
-                list.Controls.Add(grid);
-                list.Controls.Add(empty);
-
-                profile = new FlowLayoutPanel
-                {
-                    Dock = DockStyle.Fill,
-                    FlowDirection = FlowDirection.TopDown,
-                    WrapContents = false,
-                    AutoScroll = true,
-                    BackColor = Color.FromArgb(246, 249, 251),
-                    Padding = new Padding(16)
-                };
-                split.Controls.Add(list, 0, 0);
-                split.Controls.Add(profile, 1, 0);
-                directory.Controls.Add(split);
-
-                summaryGrid = BuildGrid();
-                summary.Controls.Add(summaryGrid);
-                Label info = Caption("La distribución se calcula con los responsables que coinciden con los filtros.", 9, muted);
-                info.Dock = DockStyle.Top;
-                info.AutoSize = false;
-                info.Height = 36;
-                summary.Controls.Add(info);
-
-                views.TabPages.Add(directory);
-                views.TabPages.Add(summary);
-                views.SelectedIndexChanged += delegate { UpdateActions(); };
-                return views;
-            }
-
-            private DataGridView BuildGrid()
-            {
-                DataGridView result = new BufferedGrid
-                {
-                    Dock = DockStyle.Fill,
-                    BackgroundColor = Color.White,
-                    BorderStyle = BorderStyle.None,
-                    AllowUserToAddRows = false,
-                    AllowUserToDeleteRows = false,
-                    AllowUserToResizeRows = false,
-                    ReadOnly = true,
-                    RowHeadersVisible = false,
-                    MultiSelect = false,
-                    SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-                    AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-                    EnableHeadersVisualStyles = false,
-                    ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None,
-                    CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal,
-                    GridColor = Color.FromArgb(230, 237, 242),
-                    ColumnHeadersHeight = 42,
-                    ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing
-                };
-                result.RowTemplate.Height = 48;
-                result.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle
-                {
-                    BackColor = background,
-                    ForeColor = muted,
-                    Font = UiFont(8.5f, true),
-                    Padding = new Padding(10, 0, 0, 0),
-                    SelectionBackColor = background,
-                    SelectionForeColor = muted
-                };
-                result.DefaultCellStyle = new DataGridViewCellStyle
-                {
-                    BackColor = Color.White,
-                    ForeColor = ink,
-                    Font = UiFont(9),
-                    Padding = new Padding(10, 0, 4, 0),
-                    SelectionBackColor = Color.FromArgb(222, 242, 232),
-                    SelectionForeColor = ink
-                };
-                result.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(250, 252, 253);
-                return result;
-            }
-
-            private void FormatState(object sender, DataGridViewCellFormattingEventArgs e)
-            {
-                DataGridView source = sender as DataGridView;
-                if (source == null || e.RowIndex < 0 || e.ColumnIndex < 0) return;
-                if (source.Columns[e.ColumnIndex].Name == "estado")
-                {
-                    bool active = string.Equals(Convert.ToString(e.Value), "Activo", StringComparison.OrdinalIgnoreCase);
-                    e.CellStyle.ForeColor = active ? green : Color.FromArgb(160, 89, 32);
-                    e.CellStyle.Font = UiFont(9, true);
+                    Color cIcono = iconos[i] == Icono.Power ? (activo ? Tema.Peligro : Tema.Verde)
+                                 : iconos[i] == Icono.WhatsApp ? Tema.WhatsApp
+                                 : Tema.Suave;
+                    if (hover && iconos[i] != Icono.Power && iconos[i] != Icono.WhatsApp) cIcono = Tema.Texto;
+                    Tema.DibujarIcono(g, iconos[i], r, cIcono);
                 }
             }
+            e.Handled = true;
+        }
 
-            private MySqlConnection OpenConnection()
+        private void Grid_CellMouseMove(object sender, DataGridViewCellMouseEventArgs e)
+        {
+            var grid = (DataGridView)sender;
+            int icono = -1;
+            if (e.RowIndex >= 0 && e.ColumnIndex >= 0 && grid.Columns[e.ColumnIndex].Name == "acciones")
+                icono = IconoEn(grid, e.ColumnIndex, e.RowIndex, e.Location);
+
+            if (grid == gridHover && e.RowIndex == filaHover && icono == iconoHover) return;
+
+            if (gridHover != null && iconoHover >= 0) InvalidarAcciones(gridHover, filaHover);
+            gridHover = grid; filaHover = e.RowIndex; iconoHover = icono;
+            grid.Cursor = icono >= 0 ? Cursors.Hand : Cursors.Default;
+
+            if (icono >= 0)
             {
-                MySqlConnection connection = new global::SUSTENTACION.Conexion().ObtenerConexion();
-                if (connection == null) throw new InvalidOperationException("Conexion.ObtenerConexion() devolvió una conexión vacía.");
-                try
-                {
-                    if (connection.State != ConnectionState.Open) connection.Open();
-                    return connection;
-                }
-                catch
-                {
-                    connection.Dispose();
-                    throw;
-                }
+                var iconos = AccionesDe(grid == tablaExternos);
+                tip.SetToolTip(grid, TextoIcono(iconos[icono], FilaActiva(grid, e.RowIndex)));
+                InvalidarAcciones(grid, e.RowIndex);
             }
+            else tip.SetToolTip(grid, "");
+        }
 
-            public void CargarTrabajadores()
+        private void Grid_CellMouseLeave(object sender, DataGridViewCellEventArgs e)
+        {
+            var grid = (DataGridView)sender;
+            if (gridHover != null && iconoHover >= 0) InvalidarAcciones(gridHover, filaHover);
+            gridHover = null; filaHover = -1; iconoHover = -1;
+            grid.Cursor = Cursors.Default;
+            tip.SetToolTip(grid, "");
+        }
+
+        private void Grid_CellMouseClick(object sender, DataGridViewCellMouseEventArgs e)
+        {
+            var grid = (DataGridView)sender;
+            if (e.RowIndex < 0 || e.ColumnIndex < 0 || grid.Columns[e.ColumnIndex].Name != "acciones") return;
+            int i = IconoEn(grid, e.ColumnIndex, e.RowIndex, e.Location);
+            if (i < 0) return;
+            DataRowView v = grid.Rows[e.RowIndex].DataBoundItem as DataRowView;
+            if (v == null) return;
+            bool externo = grid == tablaExternos;
+            EjecutarAccion(externo, AccionesDe(externo)[i], v.Row);
+        }
+
+        private void Grid_CellDoubleClick(object sender, DataGridViewCellEventArgs e)
+        {
+            var grid = (DataGridView)sender;
+            if (e.RowIndex < 0 || e.ColumnIndex < 0 || grid.Columns[e.ColumnIndex].Name == "acciones") return;
+            DataRowView v = grid.Rows[e.RowIndex].DataBoundItem as DataRowView;
+            if (v == null) return;
+            if (grid == tablaExternos) VerFichaExterno(v.Row); else VerFichaInterno(v.Row);
+        }
+
+        private void EjecutarAccion(bool externo, Icono icono, DataRow fila)
+        {
+            switch (icono)
             {
-                if (loading || busy) return;
-                loading = true;
+                case Icono.Ver:
+                    if (externo) VerFichaExterno(fila); else VerFichaInterno(fila);
+                    break;
+                case Icono.Editar:
+                    if (externo) AbrirEditorExterno(fila); else AbrirEditorInterno(fila);
+                    break;
+                case Icono.WhatsApp:
+                    AbrirWhatsApp(fila);
+                    break;
+                case Icono.Power:
+                    if (externo) CambiarEstadoExterno(fila); else CambiarEstadoInterno(fila);
+                    break;
+            }
+        }
 
-                DataRow selected = SelectedRow();
-                object selectedId = selected == null ? null : selected["id"];
-                try
+        private void GuardarSeleccion(DataGridView grid)
+        {
+            if (cargando || grid.CurrentRow == null) return;
+            DataRowView v = grid.CurrentRow.DataBoundItem as DataRowView;
+            if (v == null) return;
+            if (grid == tablaExternos) seleccionExterno = Convert.ToInt32(v["id_personal"]);
+            else seleccionInterno = Convert.ToInt32(v["id"]);
+        }
+
+        private static void RestaurarSeleccion(DataGridView grid, string columnaId, int? id)
+        {
+            if (!id.HasValue) return;
+            try
+            {
+                foreach (DataGridViewRow fila in grid.Rows)
                 {
-                    DataTable fresh = new DataTable();
-                    int totalAreas;
-
-                    using (MySqlConnection connection = OpenConnection())
+                    DataRowView v = fila.DataBoundItem as DataRowView;
+                    if (v != null && Convert.ToInt32(v[columnaId]) == id.Value)
                     {
-                        const string sql = @"
-    SELECT r.id_responsable AS id,
-           r.nombre AS nombres,
-           r.apellido AS apellidos,
-           r.dni AS documento,
-           COALESCE(r.telefono, '') AS telefono,
-           COALESCE(r.correo, '') AS correo,
-           r.estado,
-           r.id_area,
-           a.nombre_area AS area,
-           a.estado AS estado_area
-    FROM responsable r
-    INNER JOIN area a ON a.id_area = r.id_area
-    ORDER BY r.apellido, r.nombre";
-                        using (MySqlDataAdapter adapter = new MySqlDataAdapter(sql, connection))
-                            adapter.Fill(fresh);
-
-                        using (MySqlCommand command = new MySqlCommand("SELECT COUNT(*) FROM area", connection))
-                            totalAreas = Convert.ToInt32(command.ExecuteScalar());
-                    }
-
-                    fresh.Columns.Add("nombre_completo", typeof(string), "nombres + ' ' + apellidos");
-                    DataTable old = people;
-                    people = fresh;
-                    grid.DataSource = fresh;
-                    if (old != null) old.Dispose();
-                    ConfigureColumns();
-                    PopulateAreaFilter(fresh);
-
-                    int active = 0;
-                    int inactive = 0;
-                    foreach (DataRow row in fresh.Rows)
-                    {
-                        if (string.Equals(Convert.ToString(row["estado"]), "Activo", StringComparison.OrdinalIgnoreCase)) active++;
-                        if (string.Equals(Convert.ToString(row["estado"]), "Inactivo", StringComparison.OrdinalIgnoreCase)) inactive++;
-                    }
-
-                    metrics[0].Text = fresh.Rows.Count.ToString("N0");
-                    metrics[1].Text = active.ToString("N0");
-                    metrics[2].Text = inactive.ToString("N0");
-                    metrics[3].Text = totalAreas.ToString("N0");
-
-                    online = true;
-                    message.Text = "●  Conectado a responsable y area · Actualizado " + DateTime.Now.ToString("HH:mm:ss")
-                        + " · Las cuentas de acceso se administran por separado.";
-                    message.ForeColor = green;
-                }
-                catch (Exception ex)
-                {
-                    online = false;
-                    grid.DataSource = null;
-                    if (people != null)
-                    {
-                        people.Dispose();
-                        people = null;
-                    }
-                    if (areaSummary != null)
-                    {
-                        areaSummary.Dispose();
-                        areaSummary = null;
-                    }
-                    summaryGrid.DataSource = null;
-                    foreach (Label metric in metrics) metric.Text = "—";
-                    message.Text = "No se pudo cargar el directorio. Revisa la conexión y las tablas responsable y area.";
-                    message.ForeColor = Color.Firebrick;
-                    Error("Directorio no disponible", ex);
-                }
-                finally
-                {
-                    loading = false;
-                    ApplyFilters();
-                    RestoreSelection(selectedId);
-                    ShowProfile();
-                    UpdateActions();
-                }
-            }
-
-            private void PopulateAreaFilter(DataTable source)
-            {
-                string current = Convert.ToString(areaFilter.SelectedItem);
-                SortedSet<string> names = new SortedSet<string>(StringComparer.CurrentCultureIgnoreCase);
-                foreach (DataRow row in source.Rows)
-                {
-                    if (!row.IsNull("area")) names.Add(Convert.ToString(row["area"]));
-                }
-
-                areaFilter.Items.Clear();
-                areaFilter.Items.Add("Todas las áreas");
-                foreach (string name in names) areaFilter.Items.Add(name);
-                int index = areaFilter.Items.IndexOf(current);
-                areaFilter.SelectedIndex = index >= 0 ? index : 0;
-            }
-
-            private void ConfigureColumns()
-            {
-                if (grid.Columns.Count == 0) return;
-                foreach (DataGridViewColumn column in grid.Columns) column.Visible = false;
-
-                string[] names = { "nombre_completo", "documento", "area", "telefono", "correo", "estado" };
-                string[] labels = { "Responsable", "Documento", "Área", "Teléfono", "Correo", "Estado" };
-                for (int i = 0; i < names.Length; i++)
-                {
-                    if (!grid.Columns.Contains(names[i])) continue;
-                    DataGridViewColumn column = grid.Columns[names[i]];
-                    column.Visible = true;
-                    column.HeaderText = labels[i];
-                    column.DisplayIndex = i;
-                    column.MinimumWidth = i == 0 ? 180 : 100;
-                    column.FillWeight = i == 0 ? 165 : 100;
-                }
-                if (grid.Columns.Contains("id")) grid.Columns["id"].Visible = false;
-            }
-
-            private DataRow SelectedRow()
-            {
-                if (grid == null || grid.CurrentRow == null) return null;
-                DataRowView row = grid.CurrentRow.DataBoundItem as DataRowView;
-                return row == null ? null : row.Row;
-            }
-
-            private void RestoreSelection(object id)
-            {
-                if (id == null || grid.DataSource == null) return;
-                foreach (DataGridViewRow row in grid.Rows)
-                {
-                    DataRowView item = row.DataBoundItem as DataRowView;
-                    if (item != null && object.Equals(item["id"], id))
-                    {
-                        if (grid.Columns.Contains("nombre_completo"))
-                        {
-                            int indiceColumna = grid.Columns["nombre_completo"].Index;
-                            if (indiceColumna >= 0 && indiceColumna < row.Cells.Count)
-                                grid.CurrentCell = row.Cells[indiceColumna];
-                        }
+                        grid.CurrentCell = fila.Cells["nombre"];
                         return;
                     }
                 }
             }
+            catch (InvalidOperationException) { /* la celda no se pudo seleccionar: se ignora */ }
+        }
 
-            private void UpdateActions()
-            {
-                if (add == null || edit == null || toggle == null) return;
-                add.Enabled = online && !busy;
-                DataRow row = SelectedRow();
-                bool selected = row != null && online && !busy && views != null && views.SelectedIndex == 0;
-                edit.Enabled = toggle.Enabled = selected;
-                toggle.Text = row != null && string.Equals(Convert.ToString(row["estado"]), "Inactivo", StringComparison.OrdinalIgnoreCase)
-                    ? "Reactivar"
-                    : "Desactivar";
-            }
+        // ═════════════════════════ DATOS (Supabase) ═════════════════════════
+        private NpgsqlConnection Conectar()
+        {
+            NpgsqlConnection c = new global::SUSTENTACION.Conexion().ObtenerConexion();
+            if (c == null) throw new InvalidOperationException("La conexión a la base de datos no está disponible.");
+            if (c.State != ConnectionState.Open) c.Open();
+            return c;
+        }
 
-            private static string EscapeLike(string value)
+        private void ActualizarDatos()
+        {
+            if (cargando) return;
+            cargando = true;
+            btnActualizar.Text = "Actualizando...";
+            btnActualizar.Enabled = false;
+            bool exito = false;
+
+            try
             {
-                StringBuilder text = new StringBuilder();
-                foreach (char c in value ?? "")
+                DataTable nuevosI = new DataTable(), nuevosE = new DataTable();
+                DataTable nuevosD = new DataTable(), nuevosR = new DataTable();
+
+                using (NpgsqlConnection c = Conectar())
                 {
-                    if (c == '\'') text.Append("''");
-                    else if (c == '[') text.Append("[[]");
-                    else if (c == ']') text.Append("[]]");
-                    else if (c == '*') text.Append("[*]");
-                    else if (c == '%') text.Append("[%]");
-                    else text.Append(c);
+                    const string qInternos = @"SELECT t.id_trabajador AS id, t.nombre AS nombre,
+                        COALESCE(t.dni,'') AS dni, COALESCE(t.telefono,'') AS telefono,
+                        t.correo, t.id_rol, t.id_departamento, COALESCE(r.nombre_rol,'Sin rol') AS rol,
+                        COALESCE(d.nombre_departamento,'Sin departamento') AS departamento,
+                        CASE WHEN t.activo THEN 'Activo' ELSE 'Inactivo' END AS estado
+                        FROM public.trabajadores t
+                        LEFT JOIN public.departamentos d ON d.id_departamento=t.id_departamento
+                        LEFT JOIN public.roles r ON r.id_rol=t.id_rol
+                        ORDER BY t.nombre";
+                    using (var a = new NpgsqlDataAdapter(qInternos, c)) a.Fill(nuevosI);
+
+                    const string qExternos = @"SELECT id_personal, nombre, apellido, dni, celular,
+                        direccion, activo, fecha_registro,
+                        CASE WHEN activo THEN 'Activo' ELSE 'Inactivo' END AS estado
+                        FROM public.personal_externo ORDER BY id_personal DESC";
+                    using (var a = new NpgsqlDataAdapter(qExternos, c)) a.Fill(nuevosE);
+
+                    using (var a = new NpgsqlDataAdapter(
+                        "SELECT id_departamento, nombre_departamento FROM public.departamentos ORDER BY nombre_departamento", c))
+                        a.Fill(nuevosD);
+                    using (var a = new NpgsqlDataAdapter(
+                        "SELECT id_rol, nombre_rol FROM public.roles ORDER BY nombre_rol", c))
+                        a.Fill(nuevosR);
                 }
-                return text.ToString();
+
+                nuevosE.Columns.Add("nombre_completo", typeof(string), "nombre + ' ' + apellido");
+
+                DataTable viejoI = internos, viejoE = externos;
+                internos = nuevosI; externos = nuevosE;
+                if (departamentosDatos != null) departamentosDatos.Dispose();
+                if (rolesDatos != null) rolesDatos.Dispose();
+                departamentosDatos = nuevosD; rolesDatos = nuevosR;
+
+                tablaInternos.DataSource = internos;
+                tablaExternos.DataSource = externos;
+                if (viejoI != null) viejoI.Dispose();
+                if (viejoE != null) viejoE.Dispose();
+
+                PoblarFiltroRol();
+                ActualizarTarjetas();
+
+                lblConexion.Text = "●  Conectado a Supabase  ·  " + DateTime.Now.ToString("HH:mm:ss", Inv);
+                lblConexion.ForeColor = Tema.Verde;
+                exito = true;
+            }
+            catch (Exception ex)
+            {
+                lblConexion.Text = "●  Error al cargar datos: " + ex.Message;
+                lblConexion.ForeColor = Tema.Peligro;
+                cTotal.Valor = cActivos.Valor = cInactivos.Valor = cExternos.Valor = "—";
+                Informar("Error al consultar Supabase", ex.Message, "!");
+            }
+            finally
+            {
+                cargando = false;
+                btnActualizar.Text = "Actualizar";
+                btnActualizar.Enabled = true;
+                Filtrar();
+                ActualizarBotones();
+                if (exito)
+                {
+                    RestaurarSeleccion(tablaInternos, "id", seleccionInterno);
+                    RestaurarSeleccion(tablaExternos, "id_personal", seleccionExterno);
+                }
+            }
+        }
+
+        private void PoblarFiltroRol()
+        {
+            string actual = filtroRol.SelectedItem as string;
+            filtroRol.LimpiarItems();
+            filtroRol.Agregar("Todos los roles");
+            foreach (DataRow r in rolesDatos.Rows) filtroRol.Agregar(Convert.ToString(r["nombre_rol"]));
+            int idx = actual == null ? 0 : filtroRol.IndexOf(actual);
+            filtroRol.SelectedIndex = idx < 0 ? 0 : idx;
+        }
+
+        private void ActualizarTarjetas()
+        {
+            int totalI = internos.Rows.Count;
+            int totalE = externos.Rows.Count;
+            int activosI = internos.Select("estado = 'Activo'").Length;
+            int activosE = externos.Select("estado = 'Activo'").Length;
+            int total = totalI + totalE;
+            int activos = activosI + activosE;
+            int inactivos = total - activos;
+
+            cTotal.Valor = total.ToString("N0");
+            cTotal.Detalle = totalI + " internos  ·  " + totalE + " externos";
+            cActivos.Valor = activos.ToString("N0");
+            cActivos.Detalle = (total == 0 ? 0 : (int)Math.Round(activos * 100.0 / total)) + "% del personal";
+            cInactivos.Valor = inactivos.ToString("N0");
+            cInactivos.Detalle = "Cuentas desactivadas";
+            cExternos.Valor = totalE.ToString("N0");
+            cExternos.Detalle = activosE + " activos con equipos";
+
+            pestanas.SetTextos(
+                new[] { "Trabajadores internos  ·  " + totalI, "Personal externo  ·  " + totalE },
+                new[] { "☺", "↗" });
+        }
+
+        // ═════════════════════════ FILTROS Y BOTONES ═════════════════════════
+        private void LimpiarFiltros()
+        {
+            buscar.Texto = "";
+            filtroEstado.SelectedIndex = 0;
+            filtroRol.SelectedIndex = 0;
+        }
+
+        private static string EscaparFiltro(string s)
+        {
+            var sb = new StringBuilder();
+            foreach (char c in s ?? "")
+            {
+                if (c == '\'') sb.Append("''");
+                else if (c == '[' || c == ']' || c == '%' || c == '*') sb.Append('[').Append(c).Append(']');
+                else sb.Append(c);
+            }
+            return sb.ToString();
+        }
+
+        private void Filtrar()
+        {
+            if (cargando || buscar == null || pestanas == null || lblCantidad == null) return;
+            bool ext = pestanas.Indice == 1;
+            DataTable datos = ext ? externos : internos;
+            if (datos == null)
+            {
+                lblCantidad.Text = "Sin registros";
+                MostrarPestana();
+                return;
             }
 
-            private void ApplyFilters()
+            var condiciones = new List<string>();
+
+            string texto = EscaparFiltro(buscar.Texto.Trim());
+            if (texto.Length > 0)
             {
-                if (loading || grid == null || count == null) return;
-                if (people == null)
+                string[] campos = ext
+                    ? new[] { "nombre", "apellido", "dni", "celular", "direccion" }
+                    : new[] { "nombre", "dni", "telefono", "correo", "departamento" };
+                var partes = campos.Select(c => "Convert([" + c + "], 'System.String') LIKE '%" + texto + "%'");
+                condiciones.Add("(" + string.Join(" OR ", partes) + ")");
+            }
+
+            if (filtroEstado.SelectedIndex == 1) condiciones.Add("[estado] = 'Activo'");
+            else if (filtroEstado.SelectedIndex == 2) condiciones.Add("[estado] = 'Inactivo'");
+
+            if (!ext && filtroRol.SelectedIndex > 0)
+                condiciones.Add("[rol] = '" + EscaparFiltro(Convert.ToString(filtroRol.SelectedItem)) + "'");
+
+            try { datos.DefaultView.RowFilter = string.Join(" AND ", condiciones); }
+            catch (EvaluateException) { datos.DefaultView.RowFilter = ""; }
+
+            lblCantidad.Text = "Mostrando " + datos.DefaultView.Count + " de " + datos.Rows.Count +
+                               (ext ? " técnicos" : " trabajadores");
+            MostrarPestana();
+        }
+
+        private void ActualizarBotones()
+        {
+            if (btnNuevo == null || pestanas == null) return;
+            bool ext = pestanas.Indice == 1;
+            btnNuevo.Enabled = ext && !cargando;
+            btnExportar.Enabled = !cargando;
+            filtroRol.Enabled = !ext;
+            tip.SetToolTip(btnNuevo, ext ? "" : "Disponible en la pestaña «Personal externo»");
+        }
+
+        // ═════════════════════════ FORMULARIO: TÉCNICO EXTERNO ═════════════════════════
+        private void AbrirEditorExterno(DataRow registro)
+        {
+            bool editar = registro != null;
+            DialogResult resultado;
+
+            using (var d = new DialogoBase(
+                editar ? "Editar técnico externo" : "Nuevo técnico externo",
+                "Persona que puede ser responsable de equipos audiovisuales.",
+                "↗", new Size(660, 470), Tema.Morado))
+            {
+                var nombre = new CampoTexto { Placeholder = "Ej. Carlos", MaxLength = 100, Texto = Valor(registro, "nombre") };
+                var apellido = new CampoTexto { Placeholder = "Ej. Ramírez Soto", MaxLength = 100, Texto = Valor(registro, "apellido") };
+                var dni = new CampoTexto { Placeholder = "8 dígitos", MaxLength = 8, SoloDigitos = true, Texto = Valor(registro, "dni") };
+                var celular = new CampoTexto { Placeholder = "9XXXXXXXX", MaxLength = 9, SoloDigitos = true, Texto = Valor(registro, "celular") };
+                var direccion = new CampoTexto { Placeholder = "Dirección (opcional)", MaxLength = 150, Texto = Valor(registro, "direccion") };
+                var activo = new InterruptorModerno("Técnico activo", "Técnico inactivo")
+                { Activo = registro == null || Convert.ToBoolean(registro["activo"]) };
+
+                var rejilla = NuevaRejilla(3);
+                rejilla.Controls.Add(Celda("Nombres *", nombre));
+                rejilla.Controls.Add(Celda("Apellidos *", apellido));
+                rejilla.Controls.Add(Celda("DNI (8 dígitos) *", dni));
+                rejilla.Controls.Add(Celda("Celular (9 dígitos) *", celular));
+                rejilla.Controls.Add(Celda("Dirección", direccion));
+                rejilla.Controls.Add(Celda("Estado", activo));
+                d.Cuerpo.Controls.Add(rejilla);
+
+                var guardar = new BotonModerno("Guardar técnico", "✓", EstiloBoton.Primario, 170) { Margin = new Padding(10, 0, 0, 0) };
+                var cancelar = new BotonModerno("Cancelar", "", EstiloBoton.Secundario, 120) { Margin = new Padding(10, 0, 0, 0) };
+                d.Pie.Controls.Add(guardar);
+                d.Pie.Controls.Add(cancelar);
+                cancelar.Click += (s, e) => { d.DialogResult = DialogResult.Cancel; d.Close(); };
+
+                guardar.Click += (s, e) =>
                 {
-                    count.Text = "Sin registros";
-                    if (empty != null) empty.Text = "No hay datos disponibles. Pulsa Actualizar para reintentar.";
-                    summaryGrid.DataSource = null;
-                    if (areaSummary != null)
+                    bool hayError = false;
+                    hayError |= Marcar(nombre, string.IsNullOrWhiteSpace(nombre.Texto));
+                    hayError |= Marcar(apellido, string.IsNullOrWhiteSpace(apellido.Texto));
+                    hayError |= Marcar(dni, !Regex.IsMatch(dni.Texto.Trim(), @"^\d{8}$"));
+                    hayError |= Marcar(celular, !Regex.IsMatch(celular.Texto.Trim(), @"^9\d{8}$"));
+                    if (hayError)
                     {
-                        areaSummary.Dispose();
-                        areaSummary = null;
+                        d.MensajeError.Text = "Revisa los campos en rojo: DNI de 8 dígitos y celular de 9 dígitos que empiece por 9.";
+                        return;
                     }
-                    ShowProfile();
-                    UpdateActions();
-                    return;
-                }
-
-                List<string> conditions = new List<string>();
-                string query = EscapeLike(search.Text.Trim());
-                if (query.Length > 0)
-                {
-                    List<string> terms = new List<string>();
-                    foreach (string column in new[] { "nombre_completo", "documento", "telefono", "correo", "area" })
-                        terms.Add("[" + column + "] LIKE '%" + query + "%'");
-                    conditions.Add("(" + string.Join(" OR ", terms) + ")");
-                }
-
-                if (areaFilter.SelectedIndex > 0)
-                {
-                    conditions.Add("[area] = '" + Convert.ToString(areaFilter.SelectedItem).Replace("'", "''") + "'");
-                }
-                if (statusFilter.SelectedIndex > 0)
-                {
-                    conditions.Add("[estado] = '" + Convert.ToString(statusFilter.SelectedItem).Replace("'", "''") + "'");
-                }
-
-                try
-                {
-                    people.DefaultView.RowFilter = string.Join(" AND ", conditions);
-                }
-                catch (EvaluateException ex)
-                {
-                    people.DefaultView.RowFilter = "";
-                    message.Text = "No se pudo aplicar el filtro: " + ex.Message;
-                }
-
-                count.Text = people.DefaultView.Count.ToString("N0") + " responsables visibles";
-                if (people.Rows.Count == 0)
-                    empty.Text = "El directorio está vacío. Empieza con + Nuevo responsable.";
-                else if (people.DefaultView.Count == 0)
-                    empty.Text = "No hay coincidencias. Cambia la búsqueda o limpia los filtros.";
-                else
-                    empty.Text = "Selecciona una fila para ver la ficha. Doble clic para editar.";
-
-                BuildSummary();
-                ShowProfile();
-                UpdateActions();
-            }
-
-            private void BuildSummary()
-            {
-                DataTable summary = new DataTable();
-                summary.Columns.Add("Área", typeof(string));
-                summary.Columns.Add("Total", typeof(int));
-                summary.Columns.Add("Activos", typeof(int));
-                summary.Columns.Add("Inactivos", typeof(int));
-
-                SortedDictionary<string, int[]> areas = new SortedDictionary<string, int[]>(StringComparer.CurrentCultureIgnoreCase);
-                foreach (DataRowView row in people.DefaultView)
-                {
-                    string name = Convert.ToString(row["area"]);
-                    if (!areas.ContainsKey(name)) areas.Add(name, new int[3]);
-                    areas[name][0]++;
-                    if (string.Equals(Convert.ToString(row["estado"]), "Activo", StringComparison.OrdinalIgnoreCase)) areas[name][1]++;
-                    if (string.Equals(Convert.ToString(row["estado"]), "Inactivo", StringComparison.OrdinalIgnoreCase)) areas[name][2]++;
-                }
-
-                foreach (KeyValuePair<string, int[]> pair in areas)
-                    summary.Rows.Add(pair.Key, pair.Value[0], pair.Value[1], pair.Value[2]);
-
-                DataTable old = areaSummary;
-                areaSummary = summary;
-                summaryGrid.DataSource = summary;
-                if (old != null) old.Dispose();
-                if (summaryGrid.Columns.Count > 0) summaryGrid.Columns[0].FillWeight = 200;
-            }
-
-            private void ProfileLine(string title, string value)
-            {
-                Label label = Caption(title.ToUpperInvariant(), 7.5f, muted, true);
-                label.Margin = new Padding(0, 10, 0, 4);
-                Label text = Caption(string.IsNullOrWhiteSpace(value) ? "No registrado" : value, 9, ink);
-                text.MaximumSize = new Size(222, 0);
-                text.Margin = new Padding(0, 0, 0, 4);
-                profile.Controls.Add(label);
-                profile.Controls.Add(text);
-            }
-
-            private void ShowProfile()
-            {
-                if (profile == null) return;
-                profile.SuspendLayout();
-                while (profile.Controls.Count > 0)
-                {
-                    Control control = profile.Controls[0];
-                    profile.Controls.RemoveAt(0);
-                    control.Dispose();
-                }
-
-                Label heading = Caption("FICHA DEL TRABAJADOR", 8, muted, true);
-                heading.Margin = new Padding(0, 0, 0, 18);
-                profile.Controls.Add(heading);
-
-                DataRow row = SelectedRow();
-                if (row == null)
-                {
-                    Label hint = Caption("Selecciona un trabajador para consultar sus datos y área asignada..", 11, ink);
-                    hint.MaximumSize = new Size(222, 0);
-                    profile.Controls.Add(hint);
-                    profile.ResumeLayout(true);
-                    return;
-                }
-
-                string names = Convert.ToString(row["nombres"]);
-                string surnames = Convert.ToString(row["apellidos"]);
-                string initials = (names.Length > 0 ? names.Substring(0, 1) : "")
-                    + (surnames.Length > 0 ? surnames.Substring(0, 1) : "");
-
-                Label avatar = Caption(initials.ToUpperInvariant(), 22, green, true);
-                avatar.AutoSize = false;
-                avatar.Size = new Size(68, 58);
-                avatar.TextAlign = ContentAlignment.MiddleCenter;
-                avatar.BackColor = Color.FromArgb(223, 239, 231);
-                profile.Controls.Add(avatar);
-
-                Label name = Caption(Convert.ToString(row["nombre_completo"]), 15, ink, true);
-                name.MaximumSize = new Size(222, 0);
-                name.Margin = new Padding(0, 12, 0, 6);
-                profile.Controls.Add(name);
-
-                bool active = string.Equals(Convert.ToString(row["estado"]), "Activo", StringComparison.OrdinalIgnoreCase);
-                Label badge = Caption(Convert.ToString(row["estado"]), 9, active ? green : Color.Sienna, true);
-                profile.Controls.Add(badge);
-
-                ProfileLine("Código interno", "RP-" + Convert.ToInt32(row["id"]).ToString("D5"));
-                ProfileLine("DNI", Convert.ToString(row["documento"]));
-                ProfileLine("Área de custodia", Convert.ToString(row["area"]));
-                ProfileLine("Teléfono", Convert.ToString(row["telefono"]));
-                ProfileLine("Correo", Convert.ToString(row["correo"]));
-                if (!string.Equals(Convert.ToString(row["estado_area"]), "Activo", StringComparison.OrdinalIgnoreCase))
-                    ProfileLine("Estado del área", Convert.ToString(row["estado_area"]));
-                profile.ResumeLayout(true);
-            }
-
-            private TextBox Field(Control parent, string label, int x, int y, int width, string value, int maxLength)
-            {
-                Label title = Caption(label, 9, muted, true);
-                title.Location = new Point(x, y);
-                parent.Controls.Add(title);
-                TextBox field = new TextBox
-                {
-                    Text = value ?? "",
-                    MaxLength = maxLength,
-                    Font = UiFont(10),
-                    Location = new Point(x, y + 25),
-                    Size = new Size(width, 28)
+                    d.MensajeError.Text = "";
+                    guardar.Enabled = false;
+                    try
+                    {
+                        using (NpgsqlConnection c = Conectar())
+                        {
+                            string sql = editar
+                                ? @"UPDATE public.personal_externo SET nombre=@nombre, apellido=@apellido,
+                                    dni=@dni, celular=@celular, direccion=@direccion, activo=@activo WHERE id_personal=@id"
+                                : @"INSERT INTO public.personal_externo (nombre, apellido, dni, celular, direccion, activo)
+                                    VALUES (@nombre, @apellido, @dni, @celular, @direccion, @activo)";
+                            using (var cmd = new NpgsqlCommand(sql, c))
+                            {
+                                cmd.Parameters.AddWithValue("@nombre", nombre.Texto.Trim());
+                                cmd.Parameters.AddWithValue("@apellido", apellido.Texto.Trim());
+                                cmd.Parameters.AddWithValue("@dni", dni.Texto.Trim());
+                                cmd.Parameters.AddWithValue("@celular", celular.Texto.Trim());
+                                cmd.Parameters.AddWithValue("@direccion", direccion.Texto.Trim());
+                                cmd.Parameters.AddWithValue("@activo", activo.Activo);
+                                if (editar) cmd.Parameters.AddWithValue("@id", Convert.ToInt32(registro["id_personal"]));
+                                if (cmd.ExecuteNonQuery() != 1)
+                                    throw new InvalidOperationException("No se guardó el registro esperado.");
+                            }
+                        }
+                        d.DialogResult = DialogResult.OK;
+                        d.Close();
+                    }
+                    catch (PostgresException ex) when (ex.SqlState == "23505")
+                    {
+                        Marcar(dni, true);
+                        d.MensajeError.Text = "Ya existe un registro con ese DNI.";
+                    }
+                    catch (Exception ex) { d.MensajeError.Text = "No se pudo guardar: " + ex.Message; }
+                    finally { guardar.Enabled = true; }
                 };
-                parent.Controls.Add(field);
-                return field;
+
+                resultado = d.ShowDialog(FindForm());
             }
 
-            private List<AreaOption> LoadAreaOptions(int? currentAreaId)
+            if (resultado == DialogResult.OK)
             {
-                List<AreaOption> result = new List<AreaOption>();
-                const string activeSql = @"
-    SELECT id_area, nombre_area, estado
-    FROM area
-    WHERE estado='Activo'
-    ORDER BY nombre_area";
-                const string editingSql = @"
-    SELECT id_area, nombre_area, estado
-    FROM area
-    WHERE estado='Activo' OR id_area=@idArea
-    ORDER BY CASE WHEN estado='Activo' THEN 0 ELSE 1 END, nombre_area";
+                aviso.Mostrar(editar ? "Técnico actualizado correctamente" : "Técnico registrado correctamente", true);
+                ActualizarDatos();
+            }
+        }
 
-                using (MySqlConnection connection = OpenConnection())
-                using (MySqlCommand command = new MySqlCommand(currentAreaId.HasValue ? editingSql : activeSql, connection))
+        // ═════════════════════════ FORMULARIO: TRABAJADOR INTERNO ═════════════════════════
+        private void AbrirEditorInterno(DataRow registro)
+        {
+            if (registro == null) return;
+            if (departamentosDatos == null || rolesDatos == null || rolesDatos.Rows.Count == 0)
+            {
+                Informar("Sin roles disponibles", "No hay roles registrados en Supabase.", "!");
+                return;
+            }
+
+            DialogResult resultado;
+            using (var d = new DialogoBase(
+                "Editar trabajador interno",
+                "Datos administrativos. La contraseña y el acceso no se modifican aquí.",
+                "☺", new Size(660, 560), Tema.AzulVivo))
+            {
+                var nombre = new CampoTexto { MaxLength = 150, Texto = Valor(registro, "nombre") };
+                var dni = new CampoTexto { Placeholder = "8 dígitos", MaxLength = 8, SoloDigitos = true, Texto = Valor(registro, "dni") };
+                var telefono = new CampoTexto { Placeholder = "9XXXXXXXX", MaxLength = 9, SoloDigitos = true, Texto = Valor(registro, "telefono") };
+                var correo = new CampoTexto { Placeholder = "correo@empresa.com", MaxLength = 150, Texto = Valor(registro, "correo") };
+
+                var departamento = new SelectorModerno();
+                departamento.Agregar(new Opcion(-1, "Sin departamento"));
+                foreach (DataRow dep in departamentosDatos.Rows)
+                    departamento.Agregar(new Opcion(Convert.ToInt32(dep["id_departamento"]), Convert.ToString(dep["nombre_departamento"])));
+                SeleccionarOpcion(departamento, registro["id_departamento"] == DBNull.Value ? -1 : Convert.ToInt32(registro["id_departamento"]));
+
+                var rol = new SelectorModerno { Placeholder = "Selecciona un rol" };
+                foreach (DataRow r in rolesDatos.Rows)
+                    rol.Agregar(new Opcion(Convert.ToInt32(r["id_rol"]), Convert.ToString(r["nombre_rol"])));
+                SeleccionarOpcion(rol, Convert.ToInt32(registro["id_rol"]));
+
+                var activo = new InterruptorModerno("Trabajador activo", "Trabajador inactivo")
+                { Activo = Convert.ToString(registro["estado"]) == "Activo" };
+
+                var rejilla = NuevaRejilla(4);
+                rejilla.Controls.Add(Celda("Nombre completo *", nombre));
+                rejilla.Controls.Add(Celda("DNI (8 dígitos)", dni));
+                rejilla.Controls.Add(Celda("Celular (9 dígitos)", telefono));
+                rejilla.Controls.Add(Celda("Correo electrónico *", correo));
+                rejilla.Controls.Add(Celda("Departamento (opcional)", departamento));
+                rejilla.Controls.Add(Celda("Rol *", rol));
+                rejilla.Controls.Add(Celda("Estado de la cuenta", activo));
+                d.Cuerpo.Controls.Add(rejilla);
+
+                var guardar = new BotonModerno("Guardar cambios", "✓", EstiloBoton.Primario, 180) { Margin = new Padding(10, 0, 0, 0) };
+                var cancelar = new BotonModerno("Cancelar", "", EstiloBoton.Secundario, 120) { Margin = new Padding(10, 0, 0, 0) };
+                d.Pie.Controls.Add(guardar);
+                d.Pie.Controls.Add(cancelar);
+                cancelar.Click += (s, e) => { d.DialogResult = DialogResult.Cancel; d.Close(); };
+
+                guardar.Click += (s, e) =>
                 {
-                    if (currentAreaId.HasValue) command.Parameters.AddWithValue("@idArea", currentAreaId.Value);
-                    using (MySqlDataReader reader = command.ExecuteReader())
+                    string doc = dni.Texto.Trim();
+                    string tel = telefono.Texto.Trim();
+                    bool hayError = false;
+                    hayError |= Marcar(nombre, string.IsNullOrWhiteSpace(nombre.Texto));
+                    hayError |= Marcar(correo, !Regex.IsMatch(correo.Texto.Trim(), @"^[^\s@]+@[^\s@]+\.[^\s@]+$"));
+                    hayError |= Marcar(dni, doc.Length > 0 && !Regex.IsMatch(doc, @"^\d{8}$"));
+                    hayError |= Marcar(telefono, tel.Length > 0 && !Regex.IsMatch(tel, @"^9\d{8}$"));
+                    if (rol.SelectedItem == null) { hayError = true; }
+                    if (hayError)
                     {
-                        while (reader.Read())
-                        {
-                            result.Add(new AreaOption(
-                                Convert.ToInt32(reader["id_area"]),
-                                Convert.ToString(reader["nombre_area"]),
-                                Convert.ToString(reader["estado"])));
-                        }
+                        d.MensajeError.Text = "Verifica nombre, correo, DNI, celular y que hayas elegido un rol.";
+                        return;
                     }
-                }
-                return result;
-            }
-
-            private void OpenEditor(bool editing)
-            {
-                if (!online || busy) return;
-                DataRow selected = editing ? SelectedRow() : null;
-                if (editing && selected == null) return;
-
-                List<AreaOption> areaOptions;
-                try
-                {
-                    int? currentAreaId = editing ? (int?)Convert.ToInt32(selected["id_area"]) : null;
-                    areaOptions = LoadAreaOptions(currentAreaId);
-                }
-                catch (Exception ex)
-                {
-                    Error("No se pudieron consultar las áreas", ex);
-                    return;
-                }
-                if (areaOptions.Count == 0)
-                {
-                    Inform("No hay áreas activas. Registra o activa un área antes de crear responsables.");
-                    return;
-                }
-
-                using (Form dialog = new Form
-                {
-                    Text = editing ? "Editar responsable" : "Nuevo responsable",
-                    ClientSize = new Size(626, 500),
-                    FormBorderStyle = FormBorderStyle.FixedDialog,
-                    StartPosition = FormStartPosition.CenterParent,
-                    MaximizeBox = false,
-                    MinimizeBox = false,
-                    ShowInTaskbar = false,
-                    BackColor = Color.White,
-                    Font = UiFont(9),
-                    AutoScaleMode = AutoScaleMode.Font
-                })
-                {
-                    Label title = Caption(editing ? "Actualizar responsable" : "Registrar responsable", 21, ink, true);
-                    title.Location = new Point(20, 16);
-                    dialog.Controls.Add(title);
-                    Label subtitle = Caption("La ficha se vincula con un área de Artemusa TV. No crea ni cambia contraseñas de acceso.", 8.5f, muted);
-                    subtitle.Location = new Point(24, 59);
-                    dialog.Controls.Add(subtitle);
-
-                    TabControl formTabs = new TabControl
-                    {
-                        Location = new Point(20, 91),
-                        Size = new Size(586, 315),
-                        Font = UiFont(9, true)
-                    };
-                    TabPage work = new TabPage("Datos personales y área") { BackColor = Color.White };
-                    TabPage contact = new TabPage("Contacto") { BackColor = Color.White };
-                    formTabs.TabPages.Add(work);
-                    formTabs.TabPages.Add(contact);
-                    dialog.Controls.Add(formTabs);
-
-                    TextBox document = Field(work, "DNI *", 16, 15, 258,
-                        editing ? Convert.ToString(selected["documento"]) : "", 20);
-                    TextBox names = Field(work, "Nombres *", 296, 15, 258,
-                        editing ? Convert.ToString(selected["nombres"]) : "", 100);
-                    TextBox surnames = Field(work, "Apellidos *", 16, 87, 258,
-                        editing ? Convert.ToString(selected["apellidos"]) : "", 100);
-
-                    Label areaTitle = Caption("Área *", 9, muted, true);
-                    areaTitle.Location = new Point(296, 87);
-                    work.Controls.Add(areaTitle);
-                    ComboBox area = new ComboBox
-                    {
-                        DropDownStyle = ComboBoxStyle.DropDownList,
-                        FlatStyle = FlatStyle.Flat,
-                        BackColor = Color.White,
-                        ForeColor = ink,
-                        Font = UiFont(9),
-                        Location = new Point(296, 112),
-                        Size = new Size(258, 28),
-                        DisplayMember = "VisibleName",
-                        ValueMember = "Id"
-                    };
-                    area.DataSource = areaOptions;
-                    work.Controls.Add(area);
-
-                    Label stateTitle = Caption("Estado del responsable *", 9, muted, true);
-                    stateTitle.Location = new Point(16, 159);
-                    work.Controls.Add(stateTitle);
-                    ComboBox state = Choice("Activo", "Inactivo");
-                    state.Location = new Point(16, 184);
-                    state.Width = 258;
-                    if (editing) state.SelectedItem = Convert.ToString(selected["estado"]);
-                    work.Controls.Add(state);
-
-                    TextBox phone = Field(contact, "Teléfono (opcional)", 16, 15, 538,
-                        editing ? Convert.ToString(selected["telefono"]) : "", 30);
-                    TextBox email = Field(contact, "Correo (opcional)", 16, 87, 538,
-                        editing ? Convert.ToString(selected["correo"]) : "", 100);
-
-                    Label contactInfo = Caption("El responsable es un contacto de custodia; la cuenta de inicio de sesión se conserva en la tabla usuario.", 9, muted);
-                    contactInfo.Location = new Point(18, 151);
-                    contactInfo.MaximumSize = new Size(520, 0);
-                    contact.Controls.Add(contactInfo);
-
-                    if (editing) area.SelectedValue = Convert.ToInt32(selected["id_area"]);
-                    else if (area.Items.Count > 0) area.SelectedIndex = 0;
-
-                    Button cancel = ActionButton("Cancelar", delegate { dialog.Close(); }, false, 112);
-                    cancel.Location = new Point(334, 432);
-                    Button save = ActionButton("Guardar ficha", delegate { }, true, 150);
-                    save.Location = new Point(456, 432);
-                    dialog.Controls.Add(cancel);
-                    dialog.Controls.Add(save);
-                    dialog.CancelButton = cancel;
-
-                    save.Click += delegate
-                    {
-                        if (document.Text.Trim().Length == 0 || names.Text.Trim().Length == 0
-                            || surnames.Text.Trim().Length == 0 || area.SelectedValue == null || state.SelectedIndex < 0)
-                        {
-                            formTabs.SelectedTab = work;
-                            Inform("Completa DNI, nombres, apellidos, área y estado.");
-                            return;
-                        }
-
-                        if (!string.IsNullOrWhiteSpace(email.Text))
-                        {
-                            try
-                            {
-                                MailAddress address = new MailAddress(email.Text.Trim());
-                                if (address.Address != email.Text.Trim()) throw new FormatException();
-                            }
-                            catch (FormatException)
-                            {
-                                formTabs.SelectedTab = contact;
-                                email.Focus();
-                                Inform("Escribe un correo válido o deja el campo vacío.");
-                                return;
-                            }
-                        }
-
-                        Dictionary<string, object> values = new Dictionary<string, object>
-                        {
-                            { "documento", document.Text.Trim() },
-                            { "nombres", names.Text.Trim() },
-                            { "apellidos", surnames.Text.Trim() },
-                            { "id_area", Convert.ToInt32(area.SelectedValue) },
-                            { "telefono", phone.Text.Trim() },
-                            { "correo", email.Text.Trim() },
-                            { "estado", Convert.ToString(state.SelectedItem) }
-                        };
-
-                        busy = true;
-                        save.Enabled = cancel.Enabled = false;
-                        UpdateActions();
-                        bool success = false;
-                        try
-                        {
-                            SaveResponsible(values, selected, editing);
-                            success = true;
-                        }
-                        catch (MySqlException ex)
-                        {
-                            if (ex.Number == 1062)
-                                Inform("Ya existe un responsable con ese DNI. Verifica el documento e inténtalo de nuevo.");
-                            else
-                                Error("No se pudo guardar la ficha", ex);
-                        }
-                        catch (Exception ex)
-                        {
-                            Error("No se pudo guardar la ficha", ex);
-                        }
-                        finally
-                        {
-                            busy = false;
-                            save.Enabled = cancel.Enabled = true;
-                            UpdateActions();
-                        }
-
-                        if (success)
-                        {
-                            dialog.DialogResult = DialogResult.OK;
-                            dialog.Close();
-                        }
-                    };
-
-                    if (dialog.ShowDialog(FindForm()) == DialogResult.OK) CargarTrabajadores();
-                }
-            }
-
-            private void SaveResponsible(Dictionary<string, object> values, DataRow original, bool editing)
-            {
-                using (MySqlConnection connection = OpenConnection())
-                using (MySqlTransaction transaction = connection.BeginTransaction(IsolationLevel.ReadCommitted))
-                {
+                    d.MensajeError.Text = "";
+                    guardar.Enabled = false;
                     try
                     {
-                        if (editing)
+                        using (NpgsqlConnection c = Conectar())
+                        using (var cmd = new NpgsqlCommand(@"
+                            UPDATE public.trabajadores
+                            SET nombre=@nombre, dni=@dni, telefono=@telefono, correo=@correo,
+                                id_departamento=@departamento, id_rol=@rol, activo=@activo,
+                                fecha_actualizacion=NOW()
+                            WHERE id_trabajador=@id", c))
                         {
-                            if (original == null) throw new InvalidOperationException("Selecciona un responsable antes de editar.");
-                            const string lockSql = @"
-    SELECT nombre, apellido, dni, telefono, correo, estado, id_area
-    FROM responsable
-    WHERE id_responsable=@id
-    FOR UPDATE";
-                            using (MySqlCommand command = new MySqlCommand(lockSql, connection, transaction))
-                            {
-                                command.Parameters.AddWithValue("@id", original["id"]);
-                                using (MySqlDataReader reader = command.ExecuteReader())
-                                {
-                                    if (!reader.Read()) throw new InvalidOperationException("El responsable ya no existe. Actualiza el directorio.");
-                                    if (!SamePerson(reader, original))
-                                        throw new InvalidOperationException("La ficha cambió en otra sesión. Cierra el formulario, actualiza el directorio y vuelve a editar.");
-                                }
-                            }
-
-                            const string updateSql = @"
-    UPDATE responsable
-    SET nombre=@nombres,
-        apellido=@apellidos,
-        dni=@documento,
-        telefono=@telefono,
-        correo=@correo,
-        estado=@estado,
-        id_area=@idArea
-    WHERE id_responsable=@id";
-                            using (MySqlCommand command = new MySqlCommand(updateSql, connection, transaction))
-                            {
-                                AddResponsibleParameters(command, values);
-                                command.Parameters.AddWithValue("@id", original["id"]);
-                                // MySQL puede devolver 0 si los valores no cambiaron; verifica el registro en vez de tratarlo como error.
-                                command.ExecuteNonQuery();
-                            }
-                            using (MySqlCommand verify = new MySqlCommand(@"
-    SELECT nombre, apellido, dni, telefono, correo, estado, id_area
-    FROM responsable
-    WHERE id_responsable=@id", connection, transaction))
-                            {
-                                verify.Parameters.AddWithValue("@id", original["id"]);
-                                using (MySqlDataReader reader = verify.ExecuteReader())
-                                {
-                                    if (!reader.Read() || !ResponsibleMatches(reader, values))
-                                        throw new InvalidOperationException("Los datos actualizados no coinciden con el formulario.");
-                                }
-                            }
+                            cmd.Parameters.AddWithValue("@nombre", nombre.Texto.Trim());
+                            cmd.Parameters.Add("@dni", NpgsqlTypes.NpgsqlDbType.Varchar).Value = doc.Length == 0 ? (object)DBNull.Value : doc;
+                            cmd.Parameters.Add("@telefono", NpgsqlTypes.NpgsqlDbType.Varchar).Value = tel.Length == 0 ? (object)DBNull.Value : tel;
+                            cmd.Parameters.AddWithValue("@correo", correo.Texto.Trim());
+                            Opcion dep = departamento.SelectedItem as Opcion;
+                            cmd.Parameters.Add("@departamento", NpgsqlTypes.NpgsqlDbType.Integer).Value =
+                                dep == null || dep.Id < 0 ? (object)DBNull.Value : dep.Id;
+                            cmd.Parameters.AddWithValue("@rol", ((Opcion)rol.SelectedItem).Id);
+                            cmd.Parameters.AddWithValue("@activo", activo.Activo);
+                            cmd.Parameters.AddWithValue("@id", Convert.ToInt32(registro["id"]));
+                            if (cmd.ExecuteNonQuery() != 1)
+                                throw new InvalidOperationException("No se actualizó el trabajador.");
                         }
-                        else
-                        {
-                            const string insertSql = @"
-    INSERT INTO responsable
-    (nombre, apellido, dni, telefono, correo, estado, id_area)
-    VALUES
-    (@nombres, @apellidos, @documento, @telefono, @correo, @estado, @idArea)";
-                            using (MySqlCommand command = new MySqlCommand(insertSql, connection, transaction))
-                            {
-                                AddResponsibleParameters(command, values);
-                                if (command.ExecuteNonQuery() != 1)
-                                    throw new InvalidOperationException("No se pudo registrar exactamente una ficha.");
-                            }
-                        }
-
-                        transaction.Commit();
+                        d.DialogResult = DialogResult.OK;
+                        d.Close();
                     }
-                    catch
+                    catch (PostgresException ex) when (ex.SqlState == "23505")
                     {
-                        try { transaction.Rollback(); } catch { }
-                        throw;
+                        d.MensajeError.Text = "El DNI o el correo ya está registrado en otro trabajador.";
                     }
+                    catch (Exception ex) { d.MensajeError.Text = "No se pudieron guardar los cambios: " + ex.Message; }
+                    finally { guardar.Enabled = true; }
+                };
+
+                resultado = d.ShowDialog(FindForm());
+            }
+
+            if (resultado == DialogResult.OK)
+            {
+                aviso.Mostrar("Trabajador actualizado correctamente", true);
+                ActualizarDatos();
+            }
+        }
+
+        // ═════════════════════════ CAMBIO DE ESTADO ═════════════════════════
+        private void CambiarEstadoExterno(DataRow r)
+        {
+            if (r == null) return;
+            bool nuevoEstado = !Convert.ToBoolean(r["activo"]);
+            string nombre = Convert.ToString(r["nombre_completo"]);
+            if (!Confirmar(nuevoEstado ? "Reactivar técnico" : "Desactivar técnico",
+                "¿" + (nuevoEstado ? "Reactivar" : "Desactivar") + " a " + nombre + "?\nEl historial se conservará.",
+                nuevoEstado ? "✓" : "!", !nuevoEstado, nuevoEstado ? "Reactivar" : "Desactivar")) return;
+            try
+            {
+                using (NpgsqlConnection c = Conectar())
+                using (var cmd = new NpgsqlCommand(
+                    "UPDATE public.personal_externo SET activo=@activo WHERE id_personal=@id AND activo=@anterior", c))
+                {
+                    cmd.Parameters.AddWithValue("@activo", nuevoEstado);
+                    cmd.Parameters.AddWithValue("@anterior", !nuevoEstado);
+                    cmd.Parameters.AddWithValue("@id", Convert.ToInt32(r["id_personal"]));
+                    if (cmd.ExecuteNonQuery() != 1)
+                        throw new InvalidOperationException("El registro cambió en otra sesión. Actualiza la lista.");
                 }
+                aviso.Mostrar(nuevoEstado ? "Técnico reactivado" : "Técnico desactivado", true);
+                ActualizarDatos();
             }
+            catch (Exception ex) { Informar("No se pudo cambiar el estado", ex.Message, "!"); }
+        }
 
-            private static void AddResponsibleParameters(MySqlCommand command, Dictionary<string, object> values)
+        private void CambiarEstadoInterno(DataRow r)
+        {
+            if (r == null) return;
+            bool estabaActivo = Convert.ToString(r["estado"]) == "Activo";
+            bool nuevoEstado = !estabaActivo;
+            string nombre = Convert.ToString(r["nombre"]);
+            if (!Confirmar(nuevoEstado ? "Reactivar trabajador" : "Desactivar trabajador",
+                "¿" + (nuevoEstado ? "Reactivar" : "Desactivar") + " la cuenta de " + nombre + "?",
+                nuevoEstado ? "✓" : "!", !nuevoEstado, nuevoEstado ? "Reactivar" : "Desactivar")) return;
+            try
             {
-                command.Parameters.AddWithValue("@nombres", values["nombres"]);
-                command.Parameters.AddWithValue("@apellidos", values["apellidos"]);
-                command.Parameters.AddWithValue("@documento", DbNullIfEmpty(Convert.ToString(values["documento"])));
-                command.Parameters.AddWithValue("@telefono", DbNullIfEmpty(Convert.ToString(values["telefono"])));
-                command.Parameters.AddWithValue("@correo", DbNullIfEmpty(Convert.ToString(values["correo"])));
-                command.Parameters.AddWithValue("@estado", values["estado"]);
-                command.Parameters.AddWithValue("@idArea", values["id_area"]);
+                using (NpgsqlConnection c = Conectar())
+                using (var cmd = new NpgsqlCommand(@"UPDATE public.trabajadores
+                    SET activo=@activo, fecha_actualizacion=NOW()
+                    WHERE id_trabajador=@id AND activo=@anterior", c))
+                {
+                    cmd.Parameters.AddWithValue("@activo", nuevoEstado);
+                    cmd.Parameters.AddWithValue("@anterior", !nuevoEstado);
+                    cmd.Parameters.AddWithValue("@id", Convert.ToInt32(r["id"]));
+                    if (cmd.ExecuteNonQuery() != 1)
+                        throw new InvalidOperationException("El registro cambió en otra sesión. Actualiza la lista.");
+                }
+                aviso.Mostrar(nuevoEstado ? "Cuenta reactivada" : "Cuenta desactivada", true);
+                ActualizarDatos();
             }
+            catch (Exception ex) { Informar("No se pudo cambiar el estado", ex.Message, "!"); }
+        }
 
-            private static bool SamePerson(MySqlDataReader reader, DataRow original)
+        // ═════════════════════════ FICHAS ═════════════════════════
+        private void VerFichaExterno(DataRow r)
+        {
+            if (r == null) return;
+            DateTime? fecha = r["fecha_registro"] == DBNull.Value ? (DateTime?)null : Convert.ToDateTime(r["fecha_registro"]);
+            var datos = new List<KeyValuePair<string, string>>
             {
-                return string.Equals(DbText(reader["nombre"]), DbText(original["nombres"]), StringComparison.Ordinal)
-                    && string.Equals(DbText(reader["apellido"]), DbText(original["apellidos"]), StringComparison.Ordinal)
-                    && string.Equals(DbText(reader["dni"]), DbText(original["documento"]), StringComparison.Ordinal)
-                    && string.Equals(DbText(reader["telefono"]), DbText(original["telefono"]), StringComparison.Ordinal)
-                    && string.Equals(DbText(reader["correo"]), DbText(original["correo"]), StringComparison.Ordinal)
-                    && string.Equals(DbText(reader["estado"]), DbText(original["estado"]), StringComparison.Ordinal)
-                    && Convert.ToInt32(reader["id_area"]) == Convert.ToInt32(original["id_area"]);
+                new KeyValuePair<string, string>("DNI", Valor(r, "dni")),
+                new KeyValuePair<string, string>("Celular", Valor(r, "celular")),
+                new KeyValuePair<string, string>("Dirección", Valor(r, "direccion")),
+                new KeyValuePair<string, string>("Fecha de registro", fecha.HasValue ? fecha.Value.ToString("dd/MM/yyyy HH:mm", Inv) : "—")
+            };
+            bool editar = MostrarFicha("Ficha del técnico", "Técnico externo", "↗", Tema.Morado,
+                Valor(r, "nombre_completo"), "Técnico externo", Convert.ToBoolean(r["activo"]), "Externo", datos);
+            if (editar) AbrirEditorExterno(r);
+        }
+
+        private void VerFichaInterno(DataRow r)
+        {
+            if (r == null) return;
+            var datos = new List<KeyValuePair<string, string>>
+            {
+                new KeyValuePair<string, string>("DNI", Valor(r, "dni")),
+                new KeyValuePair<string, string>("Teléfono", Valor(r, "telefono")),
+                new KeyValuePair<string, string>("Correo", Valor(r, "correo")),
+                new KeyValuePair<string, string>("Departamento", Valor(r, "departamento"))
+            };
+            bool editar = MostrarFicha("Ficha del trabajador", "Trabajador interno", "☺", Tema.AzulVivo,
+                Valor(r, "nombre"), "Trabajador interno del sistema", Convert.ToString(r["estado"]) == "Activo",
+                Valor(r, "rol"), datos);
+            if (editar) AbrirEditorInterno(r);
+        }
+
+        /// <summary>Muestra la ficha. Devuelve true si el usuario pulsó "Editar".</summary>
+        private bool MostrarFicha(string titulo, string subtitulo, string glifo, Color acento,
+            string nombre, string descripcion, bool activo, string rol, List<KeyValuePair<string, string>> datos)
+        {
+            bool editar = false;
+            using (var d = new DialogoBase(titulo, subtitulo, glifo, new Size(640, 560), acento))
+            {
+                var ficha = new FichaPersona
+                {
+                    Dock = DockStyle.Fill,
+                    Nombre = nombre,
+                    Subtitulo = descripcion,
+                    Activo = activo,
+                    Rol = rol,
+                    Datos = datos
+                };
+                d.Cuerpo.Controls.Add(ficha);
+
+                var cerrar = new BotonModerno("Cerrar", "", EstiloBoton.Secundario, 120) { Margin = new Padding(10, 0, 0, 0) };
+                var editarBtn = new BotonModerno("Editar", "✎", EstiloBoton.Primario, 130) { Margin = new Padding(10, 0, 0, 0) };
+                d.Pie.Controls.Add(editarBtn);
+                d.Pie.Controls.Add(cerrar);
+                cerrar.Click += (s, e) => { d.DialogResult = DialogResult.Cancel; d.Close(); };
+                editarBtn.Click += (s, e) => { editar = true; d.DialogResult = DialogResult.OK; d.Close(); };
+                d.ShowDialog(FindForm());
             }
+            return editar;
+        }
 
-            private static bool ResponsibleMatches(MySqlDataReader reader, Dictionary<string, object> values)
+        // ═════════════════════════ WHATSAPP ═════════════════════════
+        private void AbrirWhatsApp(DataRow tecnico)
+        {
+            if (tecnico == null) return;
+            string celular = Regex.Replace(Convert.ToString(tecnico["celular"]) ?? "", @"\D", "");
+            // Perú: 9 dígitos nacionales; wa.me requiere el prefijo internacional 51.
+            if (Regex.IsMatch(celular, @"^9\d{8}$")) celular = "51" + celular;
+            if (!Regex.IsMatch(celular, @"^519[0-9]{8}$"))
             {
-                return string.Equals(DbText(reader["nombre"]), DbText(values["nombres"]), StringComparison.Ordinal)
-                    && string.Equals(DbText(reader["apellido"]), DbText(values["apellidos"]), StringComparison.Ordinal)
-                    && string.Equals(DbText(reader["dni"]), DbText(values["documento"]), StringComparison.Ordinal)
-                    && string.Equals(DbText(reader["telefono"]), DbText(values["telefono"]), StringComparison.Ordinal)
-                    && string.Equals(DbText(reader["correo"]), DbText(values["correo"]), StringComparison.Ordinal)
-                    && string.Equals(DbText(reader["estado"]), DbText(values["estado"]), StringComparison.Ordinal)
-                    && Convert.ToInt32(reader["id_area"]) == Convert.ToInt32(values["id_area"]);
+                Informar("WhatsApp", "El técnico no tiene un celular peruano válido de 9 dígitos.", "!");
+                return;
             }
+            string nombre = Convert.ToString(tecnico["nombre_completo"]);
+            string mensaje = "Hola " + nombre + ", le escribimos de Artemusa TV para coordinar sobre los equipos audiovisuales. Saludos.";
+            string url = "https://wa.me/" + celular + "?text=" + Uri.EscapeDataString(mensaje);
+            try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
+            catch (Exception ex) { Informar("WhatsApp", "No se pudo abrir WhatsApp: " + ex.Message, "!"); }
+        }
 
-            private static string DbText(object value)
+        // ═════════════════════════ EXPORTAR CSV ═════════════════════════
+        private void ExportarCsv()
+        {
+            bool ext = pestanas.Indice == 1;
+            DataTable datos = ext ? externos : internos;
+            if (datos == null || datos.DefaultView.Count == 0)
             {
-                return value == null || value == DBNull.Value ? "" : Convert.ToString(value);
+                Informar("Exportar CSV", "No hay datos visibles para exportar.", "!");
+                return;
             }
+            string[] campos = ext
+                ? new[] { "id_personal", "nombre", "apellido", "dni", "celular", "direccion", "estado", "fecha_registro" }
+                : new[] { "id", "nombre", "dni", "telefono", "correo", "departamento", "rol", "estado" };
 
-            private static object DbNullIfEmpty(string value)
+            using (var dlg = new SaveFileDialog())
             {
-                return string.IsNullOrWhiteSpace(value) ? (object)DBNull.Value : value.Trim();
-            }
-
-            private void ChangeStatus()
-            {
-                DataRow row = SelectedRow();
-                if (!online || busy || row == null) return;
-
-                string current = Convert.ToString(row["estado"]);
-                string next = string.Equals(current, "Activo", StringComparison.OrdinalIgnoreCase) ? "Inactivo" : "Activo";
-                if (MessageBox.Show(FindForm(),
-                    "¿Cambiar el estado de " + row["nombre_completo"] + " a " + next + "?\nLa ficha se conservará y el historial de asignaciones no se borrará.",
-                    "Estado del responsable", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
-                    return;
-
-                busy = true;
-                UpdateActions();
+                dlg.Filter = "CSV (*.csv)|*.csv";
+                dlg.FileName = "artemusa_personal_" + DateTime.Now.ToString("yyyyMMdd_HHmm", Inv) + ".csv";
+                if (dlg.ShowDialog(FindForm()) != DialogResult.OK) return;
                 try
                 {
-                    using (MySqlConnection connection = OpenConnection())
-                    using (MySqlTransaction transaction = connection.BeginTransaction(IsolationLevel.ReadCommitted))
+                    using (var w = new StreamWriter(dlg.FileName, false, new UTF8Encoding(true)))
                     {
-                        try
+                        w.WriteLine(string.Join(";", campos));
+                        foreach (DataRowView r in datos.DefaultView)
                         {
-                            string currentDatabaseState;
-                            using (MySqlCommand find = new MySqlCommand(
-                                "SELECT estado FROM responsable WHERE id_responsable=@id FOR UPDATE", connection, transaction))
-                            {
-                                find.Parameters.AddWithValue("@id", row["id"]);
-                                object result = find.ExecuteScalar();
-                                if (result == null || result == DBNull.Value)
-                                    throw new InvalidOperationException("El responsable ya no existe.");
-                                currentDatabaseState = Convert.ToString(result);
-                            }
-                            if (!string.Equals(currentDatabaseState, current, StringComparison.Ordinal))
-                                throw new InvalidOperationException("La ficha cambió en otra sesión. Actualiza el directorio antes de reintentar.");
-
-                            using (MySqlCommand update = new MySqlCommand(
-                                "UPDATE responsable SET estado=@estado WHERE id_responsable=@id", connection, transaction))
-                            {
-                                update.Parameters.AddWithValue("@estado", next);
-                                update.Parameters.AddWithValue("@id", row["id"]);
-                                if (update.ExecuteNonQuery() != 1)
-                                    throw new InvalidOperationException("No se pudo actualizar el estado.");
-                            }
-                            transaction.Commit();
-                        }
-                        catch
-                        {
-                            try { transaction.Rollback(); } catch { }
-                            throw;
+                            var valores = new string[campos.Length];
+                            for (int i = 0; i < campos.Length; i++)
+                                valores[i] = EscaparCsv(Convert.ToString(r[campos[i]], CultureInfo.CurrentCulture));
+                            w.WriteLine(string.Join(";", valores));
                         }
                     }
+                    aviso.Mostrar("CSV exportado correctamente", true);
                 }
-                catch (Exception ex)
+                catch (Exception ex) { Informar("Error al exportar", ex.Message, "!"); }
+            }
+        }
+
+        private static string EscaparCsv(string valor)
+        {
+            valor = valor ?? "";
+            string v = valor.TrimStart();
+            if (v.Length > 0 && "=+-@".IndexOf(v[0]) >= 0) valor = "'" + valor;   // evita inyección de fórmulas
+            return "\"" + valor.Replace("\"", "\"\"") + "\"";
+        }
+
+        // ═════════════════════════ AYUDAS DE FORMULARIOS ═════════════════════════
+        private static string Valor(DataRow fila, string clave)
+        {
+            if (fila == null || !fila.Table.Columns.Contains(clave) || fila[clave] == DBNull.Value) return "";
+            return Convert.ToString(fila[clave]);
+        }
+
+        private static bool Marcar(CampoTexto campo, bool invalido)
+        {
+            campo.Error = invalido;
+            return invalido;
+        }
+
+        private static TableLayoutPanel NuevaRejilla(int filas)
+        {
+            var t = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                ColumnCount = 2,
+                RowCount = filas,
+                Height = filas * 86,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty
+            };
+            t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            for (int i = 0; i < filas; i++) t.RowStyles.Add(new RowStyle(SizeType.Absolute, 86));
+            return t;
+        }
+
+        /// <summary>Etiqueta + control, listos para colocar en la rejilla de un formulario.</summary>
+        private static Control Celda(string etiqueta, Control campo)
+        {
+            var panel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(0, 0, 14, 0), Margin = Padding.Empty };
+            campo.Dock = DockStyle.Top;
+            panel.Controls.Add(campo);      // se agrega primero: queda debajo de la etiqueta
+            panel.Controls.Add(new EtiquetaTema(etiqueta, 8.5F, FontStyle.Bold, RolTexto.Suave)
+            {
+                Dock = DockStyle.Top,
+                AutoSize = false,
+                Height = 26,
+                TextAlign = ContentAlignment.BottomLeft,
+                Padding = new Padding(2, 0, 0, 4)
+            });
+            return panel;
+        }
+
+        private static void SeleccionarOpcion(SelectorModerno lista, int id)
+        {
+            for (int i = 0; i < lista.Elementos.Count; i++)
+            {
+                Opcion o = lista.Elementos[i] as Opcion;
+                if (o != null && o.Id == id) { lista.SelectedIndex = i; return; }
+            }
+            if (lista.Elementos.Count > 0 && id == -1) lista.SelectedIndex = 0;
+        }
+
+        private bool Confirmar(string titulo, string texto, string glifo, bool peligro, string textoSi)
+        {
+            using (var d = new DialogoBase(titulo, "", glifo, new Size(480, 270), peligro ? Tema.Peligro : Tema.Acento))
+            {
+                d.Cuerpo.Controls.Add(new Label
                 {
-                    Error("No se pudo cambiar el estado", ex);
+                    Text = texto,
+                    Dock = DockStyle.Fill,
+                    ForeColor = Tema.Texto,
+                    Font = Tema.Fuente(10.5F),
+                    Padding = new Padding(2, 14, 0, 0)
+                });
+                var si = new BotonModerno(textoSi, "", peligro ? EstiloBoton.Peligro : EstiloBoton.Primario, 140) { Margin = new Padding(10, 0, 0, 0) };
+                var no = new BotonModerno("Cancelar", "", EstiloBoton.Secundario, 120) { Margin = new Padding(10, 0, 0, 0) };
+                d.Pie.Controls.Add(si);
+                d.Pie.Controls.Add(no);
+                si.Click += (s, e) => { d.DialogResult = DialogResult.OK; d.Close(); };
+                no.Click += (s, e) => { d.DialogResult = DialogResult.Cancel; d.Close(); };
+                return d.ShowDialog(FindForm()) == DialogResult.OK;
+            }
+        }
+
+        private void Informar(string titulo, string texto, string glifo)
+        {
+            using (var d = new DialogoBase(titulo, "", glifo, new Size(500, 280), Tema.Naranja))
+            {
+                d.Cuerpo.Controls.Add(new Label
+                {
+                    Text = texto,
+                    Dock = DockStyle.Fill,
+                    ForeColor = Tema.Texto,
+                    Font = Tema.Fuente(10F),
+                    Padding = new Padding(2, 14, 0, 0)
+                });
+                var ok = new BotonModerno("Entendido", "", EstiloBoton.Primario, 130) { Margin = new Padding(10, 0, 0, 0) };
+                d.Pie.Controls.Add(ok);
+                ok.Click += (s, e) => { d.DialogResult = DialogResult.OK; d.Close(); };
+                d.ShowDialog(FindForm());
+            }
+        }
+
+        // ═════════════════════════════════════════════════════════════════
+        //                              TEMA
+        // ═════════════════════════════════════════════════════════════════
+        private enum EstiloBoton { Primario, Secundario, Peligro }
+        private enum Icono { Ver, Editar, WhatsApp, Power }
+        private enum RolTexto { Titulo, Normal, Suave, Libre }
+
+        private sealed class Opcion
+        {
+            public int Id { get; private set; }
+            public string Nombre { get; private set; }
+            public Opcion(int id, string nombre) { Id = id; Nombre = nombre; }
+            public override string ToString() { return Nombre; }
+        }
+
+        private static class Tema
+        {
+            public static bool Oscuro = true;
+
+            private static Color C(int r, int g, int b) { return Color.FromArgb(r, g, b); }
+
+            public static Color Fondo { get { return Oscuro ? C(6, 11, 21) : C(240, 244, 248); } }
+            public static Color Superficie { get { return Oscuro ? C(13, 20, 35) : Color.White; } }
+            public static Color Elevado { get { return Oscuro ? C(20, 30, 50) : C(246, 248, 251); } }
+            public static Color Borde { get { return Oscuro ? C(31, 44, 70) : C(221, 228, 237); } }
+            public static Color Texto { get { return Oscuro ? C(233, 238, 247) : C(15, 23, 42); } }
+            public static Color Suave { get { return Oscuro ? C(131, 148, 175) : C(100, 116, 139); } }
+            public static Color Seleccion { get { return Oscuro ? C(20, 42, 42) : C(231, 246, 226); } }
+
+            // AQUÍ ESTÁ LA CORRECCIÓN: En modo claro usamos Color.White en lugar de un gris claro
+            public static Color FilaAlterna { get { return Oscuro ? C(11, 18, 32) : Color.White; } }
+
+            public static Color AcentoTexto { get { return Oscuro ? Acento : C(30, 140, 60); } }
+
+            public static readonly Color Acento = Color.FromArgb(132, 214, 38);
+            public static readonly Color AcentoOsc = Color.FromArgb(46, 170, 72);
+            public static readonly Color TextoSobreAcento = Color.FromArgb(8, 28, 14);
+            public static readonly Color Verde = Color.FromArgb(34, 197, 94);
+            public static readonly Color Peligro = Color.FromArgb(239, 68, 68);
+            public static readonly Color Naranja = Color.FromArgb(245, 158, 11);
+            public static readonly Color Azul = Color.FromArgb(59, 130, 246);
+            public static readonly Color AzulVivo = Color.FromArgb(59, 130, 246);
+            public static readonly Color Morado = Color.FromArgb(168, 85, 247);
+            public static readonly Color Cian = Color.FromArgb(34, 211, 238);
+            public static readonly Color WhatsApp = Color.FromArgb(37, 211, 102);
+
+            private static readonly Dictionary<string, Font> fuentes = new Dictionary<string, Font>();
+
+            public static Font Fuente(float tam, FontStyle estilo = FontStyle.Regular, string familia = "Segoe UI")
+            {
+                string k = familia + "|" + tam.ToString(CultureInfo.InvariantCulture) + "|" + (int)estilo;
+                Font f;
+                if (!fuentes.TryGetValue(k, out f))
+                {
+                    f = new Font(familia, tam, estilo);
+                    fuentes[k] = f;
                 }
-                finally
+                return f;
+            }
+
+            public static Font Simbolo(float tam) { return Fuente(tam, FontStyle.Regular, "Segoe UI Symbol"); }
+
+            public static void Calidad(Graphics g)
+            {
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
+            }
+
+            public static Color Alfa(Color c, int a) { return Color.FromArgb(a, c.R, c.G, c.B); }
+
+            public static Color FondoDe(Control c)
+            {
+                return c.Parent != null ? c.Parent.BackColor : Fondo;
+            }
+
+            public static GraphicsPath Redondo(RectangleF r, float radio)
+            {
+                var p = new GraphicsPath();
+                if (r.Width <= 1 || r.Height <= 1) return p;
+                float d = Math.Min(radio * 2, Math.Min(r.Width, r.Height));
+                p.AddArc(r.X, r.Y, d, d, 180, 90);
+                p.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+                p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+                p.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+                p.CloseFigure();
+                return p;
+            }
+
+            /// <summary>Fondo del padre + tarjeta redondeada con borde.</summary>
+            public static void Tarjeta(Graphics g, Control c, float radio = 16F)
+            {
+                g.Clear(FondoDe(c));
+                var rf = new RectangleF(0.5F, 0.5F, c.Width - 2, c.Height - 2);
+                using (var p = Redondo(rf, radio))
                 {
-                    busy = false;
-                    CargarTrabajadores();
+                    using (var b = new SolidBrush(Superficie)) g.FillPath(b, p);
+                    using (var pen = new Pen(Borde, 1F)) g.DrawPath(pen, p);
                 }
             }
 
-            private void ExportCsv()
+            public static void Dibujar(Graphics g, string t, Font f, Color c, float x, float y)
             {
-                DataTable table = views.SelectedIndex == 0 ? people : areaSummary;
-                if (table == null || table.DefaultView.Count == 0)
-                {
-                    Inform("No hay registros visibles para exportar.");
-                    return;
-                }
+                using (var b = new SolidBrush(c)) g.DrawString(t, f, b, x, y);
+            }
 
-                string[] columns = views.SelectedIndex == 0
-                    ? new[] { "id", "documento", "nombres", "apellidos", "area", "telefono", "correo", "estado" }
-                    : new[] { "Área", "Total", "Activos", "Inactivos" };
-
-                using (SaveFileDialog dialog = new SaveFileDialog
+            public static void DibujarEn(Graphics g, string t, Font f, Color c, RectangleF r,
+                StringAlignment h = StringAlignment.Near, StringAlignment v = StringAlignment.Center)
+            {
+                using (var b = new SolidBrush(c))
+                using (var sf = new StringFormat
                 {
-                    Filter = "Archivo CSV (*.csv)|*.csv",
-                    FileName = "responsables_artemusa_" + DateTime.Now.ToString("yyyyMMdd_HHmm") + ".csv"
+                    Alignment = h,
+                    LineAlignment = v,
+                    Trimming = StringTrimming.EllipsisCharacter,
+                    FormatFlags = StringFormatFlags.NoWrap
                 })
+                    g.DrawString(t, f, b, r, sf);
+            }
+
+            public static float AnchoTexto(Graphics g, string t, Font f)
+            {
+                return (float)Math.Ceiling(g.MeasureString(t, f).Width);
+            }
+
+            /// <summary>Etiqueta (badge) con fondo translúcido del color indicado.</summary>
+            public static void Insignia(Graphics g, string texto, Color color, RectangleF r, bool punto)
+            {
+                using (var p = Redondo(r, r.Height / 2f))
+                using (var b = new SolidBrush(Alfa(color, Oscuro ? 40 : 34)))
+                    g.FillPath(b, p);
+
+                float tx = r.X;
+                if (punto)
                 {
-                    if (dialog.ShowDialog(FindForm()) != DialogResult.OK) return;
-                    try
+                    using (var b = new SolidBrush(color)) g.FillEllipse(b, r.X + 11, r.Y + r.Height / 2f - 3, 6, 6);
+                    tx += 14;
+                }
+                Color txt = Oscuro ? color : ControlPaint.Dark(color, 0.25F);
+                DibujarEn(g, texto, Fuente(8F, FontStyle.Bold), txt,
+                    new RectangleF(tx, r.Y, r.Width - (tx - r.X), r.Height), StringAlignment.Center, StringAlignment.Center);
+            }
+
+            public static string Iniciales(string nombre)
+            {
+                var partes = (nombre ?? "").Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                if (partes.Length == 0) return "?";
+                if (partes.Length == 1) return partes[0].Substring(0, 1).ToUpper();
+                return (partes[0].Substring(0, 1) + partes[1].Substring(0, 1)).ToUpper();
+            }
+
+            private static readonly Color[] PaletaAvatar =
+            {
+        Color.FromArgb(37, 99, 235), Color.FromArgb(124, 58, 237), Color.FromArgb(5, 150, 105),
+        Color.FromArgb(217, 119, 6), Color.FromArgb(219, 39, 119), Color.FromArgb(8, 145, 178)
+    };
+
+            public static Color ColorAvatar(string nombre)
+            {
+                int h = 0;
+                foreach (char c in nombre ?? "") h = (h * 31 + c) & 0x7fffffff;
+                return PaletaAvatar[h % PaletaAvatar.Length];
+            }
+
+            public static Color ColorRol(string rol)
+            {
+                string r = (rol ?? "").Trim().ToLowerInvariant();
+                if (r.Contains("admin")) return Morado;
+                if (r.Contains("trabajador") || r.Contains("empleado")) return Azul;
+                if (r.Contains("encargado") || r.Contains("supervisor")) return Cian;
+                if (r.Contains("extern")) return Naranja;
+                return Suave;
+            }
+
+            public static void DibujarIcono(Graphics g, Icono ic, RectangleF r, Color c)
+            {
+                float cx = r.X + r.Width / 2f, cy = r.Y + r.Height / 2f;
+                using (var pen = new Pen(c, 1.7F) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round })
+                using (var br = new SolidBrush(c))
+                {
+                    switch (ic)
                     {
-                        using (StreamWriter writer = new StreamWriter(dialog.FileName, false, new UTF8Encoding(true)))
-                        {
-                            List<string> header = new List<string>();
-                            foreach (string column in columns) header.Add(Csv(column));
-                            writer.WriteLine(string.Join(";", header));
-
-                            foreach (DataRowView row in table.DefaultView)
-                            {
-                                List<string> fields = new List<string>();
-                                foreach (string column in columns)
-                                    fields.Add(Csv(Convert.ToString(row[column], CultureInfo.CurrentCulture)));
-                                writer.WriteLine(string.Join(";", fields));
-                            }
-                        }
-                        Inform("Exportación completada con los registros visibles.");
-                    }
-                    catch (Exception ex)
-                    {
-                        Error("No se pudo exportar el CSV", ex);
-                    }
-                }
-            }
-
-            private static string Csv(string value)
-            {
-                value = value ?? "";
-                string trimmed = value.TrimStart();
-                if (trimmed.Length > 0 && "=+-@".IndexOf(trimmed[0]) >= 0)
-                    value = "'" + value;
-                return "\"" + value.Replace("\"", "\"\"") + "\"";
-            }
-
-            private void Inform(string text)
-            {
-                MessageBox.Show(FindForm(), text, "Artemusa · Responsables",
-                    MessageBoxButtons.OK, MessageBoxIcon.Information);
-            }
-
-            private void Error(string title, Exception exception)
-            {
-                MessageBox.Show(FindForm(), title + "\n\n" + exception.Message,
-                    "Artemusa · Responsables", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            }
-
-            private sealed class AreaOption
-            {
-                public int Id { get; private set; }
-                public string Name { get; private set; }
-                public string State { get; private set; }
-                public string VisibleName
-                {
-                    get { return string.Equals(State, "Activo", StringComparison.OrdinalIgnoreCase) ? Name : Name + " (Inactiva)"; }
-                }
-
-                public AreaOption(int id, string name, string state)
-                {
-                    Id = id;
-                    Name = name;
-                    State = state;
-                }
-            }
-
-            private sealed class BufferedGrid : DataGridView
-            {
-                public BufferedGrid() { DoubleBuffered = true; }
-            }
-
-            private sealed class Card : Panel
-            {
-                public Card()
-                {
-                    DoubleBuffered = true;
-                    ResizeRedraw = true;
-                }
-
-                protected override void OnPaint(PaintEventArgs e)
-                {
-                    base.OnPaint(e);
-                    if (Width < 20 || Height < 20) return;
-
-                    using (GraphicsPath path = new GraphicsPath())
-                    using (Pen pen = new Pen(Color.FromArgb(220, 229, 235)))
-                    {
-                        const int diameter = 18;
-                        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-                        path.AddArc(0, 0, diameter, diameter, 180, 90);
-                        path.AddArc(Width - diameter - 1, 0, diameter, diameter, 270, 90);
-                        path.AddArc(Width - diameter - 1, Height - diameter - 1, diameter, diameter, 0, 90);
-                        path.AddArc(0, Height - diameter - 1, diameter, diameter, 90, 90);
-                        path.CloseFigure();
-                        e.Graphics.DrawPath(pen, path);
+                        case Icono.Ver:
+                            g.DrawEllipse(pen, cx - 8, cy - 5, 16, 10);
+                            g.FillEllipse(br, cx - 2.5F, cy - 2.5F, 5, 5);
+                            break;
+                        case Icono.Editar:
+                            using (var gruesa = new Pen(c, 3F) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+                                g.DrawLine(gruesa, cx - 4, cy + 4, cx + 4, cy - 4);
+                            g.DrawLine(pen, cx - 7, cy + 8, cx - 2, cy + 8);
+                            break;
+                        case Icono.WhatsApp:
+                            using (var verde = new SolidBrush(WhatsApp))
+                                g.FillEllipse(verde, cx - 10, cy - 10, 20, 20);
+                            DibujarEn(g, "✆", Simbolo(9F), Color.White, new RectangleF(cx - 10, cy - 10, 20, 20),
+                                StringAlignment.Center, StringAlignment.Center);
+                            break;
+                        case Icono.Power:
+                            g.DrawArc(pen, cx - 6, cy - 6, 12, 12, -55, 290);
+                            g.DrawLine(pen, cx, cy - 8, cx, cy - 1);
+                            break;
                     }
                 }
             }
         }
+        // ═════════════════════════════════════════════════════════════════
+        //                     CONTROLES PERSONALIZADOS
+        // ═════════════════════════════════════════════════════════════════
+
+        // ───────────── Etiqueta que sigue el tema ─────────────
+        private sealed class EtiquetaTema : Label
+        {
+            public RolTexto Rol;
+
+            public EtiquetaTema(string texto, float tam, FontStyle estilo, RolTexto rol)
+            {
+                Text = texto;
+                AutoSize = true;
+                BackColor = Color.Transparent;
+                Font = Tema.Fuente(tam, estilo);
+                Rol = rol;
+            }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                if (Rol != RolTexto.Libre)
+                {
+                    Color c = Rol == RolTexto.Suave ? Tema.Suave : Tema.Texto;
+                    if (ForeColor != c) ForeColor = c;
+                }
+                base.OnPaint(e);
+            }
+        }
+
+        // ───────────── Tarjeta contenedora (borde redondeado) ─────────────
+        private sealed class TarjetaPanel : Panel
+        {
+            public TarjetaPanel()
+            {
+                SetStyle(EstiloPintado, true);
+                BackColor = Tema.Superficie;
+            }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                Tema.Calidad(e.Graphics);
+                Tema.Tarjeta(e.Graphics, this);
+            }
+        }
+
+        // ───────────── Tarjeta de resumen ─────────────
+        private sealed class TarjetaResumen : Control
+        {
+            private readonly string titulo, glifo;
+            private readonly Color color;
+            private string valor = "—", detalle = "";
+
+            public string Valor { get { return valor; } set { valor = value; Invalidate(); } }
+            public string Detalle { get { return detalle; } set { detalle = value; Invalidate(); } }
+
+            public TarjetaResumen(string titulo, string glifo, Color color)
+            {
+                this.titulo = titulo; this.glifo = glifo; this.color = color;
+                SetStyle(EstiloPintado, true);
+            }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                var g = e.Graphics;
+                Tema.Calidad(g);
+                Tema.Tarjeta(g, this);
+                if (Width < 120 || Height < 80) return;
+
+                var ic = new RectangleF(18, 18, 48, 48);
+                using (var p = Tema.Redondo(ic, 14))
+                using (var b = new SolidBrush(Tema.Alfa(color, 40)))
+                    g.FillPath(b, p);
+                Tema.DibujarEn(g, glifo, Tema.Simbolo(17F), color, ic, StringAlignment.Center, StringAlignment.Center);
+
+                Tema.DibujarEn(g, titulo, Tema.Fuente(8F, FontStyle.Bold), Tema.Suave,
+                    new RectangleF(80, 16, Width - 94, 18));
+                Tema.Dibujar(g, valor, Tema.Fuente(24F, FontStyle.Bold), Tema.Texto, 77, 32);
+
+                using (var pen = new Pen(Tema.Borde, 1F))
+                    g.DrawLine(pen, 18, Height - 36, Width - 18, Height - 36);
+                Tema.DibujarEn(g, detalle, Tema.Fuente(8.25F), Tema.Suave,
+                    new RectangleF(18, Height - 34, Width - 36, 26));
+            }
+        }
+
+        // ───────────── Botón moderno ─────────────
+        private sealed class BotonModerno : Control
+        {
+            private readonly string glifo;
+            private readonly EstiloBoton estilo;
+            private bool hover, presionado;
+
+            public BotonModerno(string texto, string glifo, EstiloBoton estilo, int ancho)
+            {
+                this.glifo = glifo; this.estilo = estilo;
+                Text = texto;
+                Size = new Size(ancho, 44);
+                Cursor = Cursors.Hand;
+                SetStyle(EstiloPintado, true);
+                SetStyle(ControlStyles.Selectable, false);
+                TextChanged += (s, e) => Invalidate();
+            }
+
+            protected override void OnMouseEnter(EventArgs e) { base.OnMouseEnter(e); hover = true; Invalidate(); }
+            protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); hover = false; presionado = false; Invalidate(); }
+            protected override void OnMouseDown(MouseEventArgs e) { base.OnMouseDown(e); presionado = true; Invalidate(); }
+            protected override void OnMouseUp(MouseEventArgs e) { base.OnMouseUp(e); presionado = false; Invalidate(); }
+            protected override void OnEnabledChanged(EventArgs e) { base.OnEnabledChanged(e); Invalidate(); }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                var g = e.Graphics;
+                Tema.Calidad(g);
+                g.Clear(Tema.FondoDe(this));
+                if (Width < 30 || Height < 20) return;
+
+                var r = new RectangleF(0.5F, 0.5F, Width - 2, Height - 2);
+                Color colorTexto;
+                int alfa = Enabled ? 255 : 90;
+
+                using (var p = Tema.Redondo(r, 12))
+                {
+                    if (estilo == EstiloBoton.Primario)
+                    {
+                        Color a = Tema.AcentoOsc, b = Tema.Acento;
+                        if (hover) { a = ControlPaint.Light(a, 0.15F); b = ControlPaint.Light(b, 0.15F); }
+                        if (presionado) { a = ControlPaint.Dark(a, 0.1F); b = ControlPaint.Dark(b, 0.1F); }
+                        using (var br = new LinearGradientBrush(r, Tema.Alfa(a, alfa), Tema.Alfa(b, alfa), LinearGradientMode.Horizontal))
+                            g.FillPath(br, p);
+                        colorTexto = Tema.Alfa(Tema.TextoSobreAcento, alfa);
+                    }
+                    else if (estilo == EstiloBoton.Peligro)
+                    {
+                        Color baseC = Tema.Peligro;
+                        using (var br = new SolidBrush(Tema.Alfa(baseC, (hover ? 70 : 40) * alfa / 255)))
+                            g.FillPath(br, p);
+                        using (var pen = new Pen(Tema.Alfa(baseC, 130 * alfa / 255), 1F)) g.DrawPath(pen, p);
+                        colorTexto = Tema.Alfa(Tema.Oscuro ? baseC : ControlPaint.Dark(baseC, 0.15F), alfa);
+                    }
+                    else
+                    {
+                        using (var br = new SolidBrush(Tema.Alfa(hover ? Tema.Borde : Tema.Elevado, alfa)))
+                            g.FillPath(br, p);
+                        using (var pen = new Pen(Tema.Alfa(Tema.Borde, alfa), 1F)) g.DrawPath(pen, p);
+                        colorTexto = Tema.Alfa(Tema.Texto, alfa);
+                    }
+                }
+
+                Font f = Tema.Fuente(9.25F, FontStyle.Bold);
+                Font fg = Tema.Simbolo(10.5F);
+                bool conGlifo = !string.IsNullOrEmpty(glifo);
+                float wt = Tema.AnchoTexto(g, Text, f);
+                float wg = conGlifo ? Tema.AnchoTexto(g, glifo, fg) + 6 : 0;
+                float x = (Width - (wt + wg)) / 2f;
+                if (conGlifo)
+                    Tema.DibujarEn(g, glifo, fg, colorTexto, new RectangleF(x, 0, wg + 4, Height), StringAlignment.Near);
+                Tema.DibujarEn(g, Text, f, colorTexto, new RectangleF(x + wg, 0, wt + 8, Height), StringAlignment.Near);
+            }
+        }
+
+        // ───────────── Campo de texto redondeado ─────────────
+        private sealed class CampoTexto : Control
+        {
+            [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+            private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, string lParam);
+
+            private readonly TextBox caja;
+            private bool enfocado, error, lupa, soloDigitos;
+            private string placeholder = "";
+
+            public event EventHandler TextoCambiado;
+
+            public string Texto { get { return caja.Text; } set { caja.Text = value ?? ""; } }
+            public int MaxLength { get { return caja.MaxLength; } set { caja.MaxLength = value; } }
+            public bool SoloDigitos { get { return soloDigitos; } set { soloDigitos = value; } }
+            public bool Lupa { get { return lupa; } set { lupa = value; PerformLayout(); Invalidate(); } }
+            public bool Error { get { return error; } set { error = value; Invalidate(); } }
+
+            public string Placeholder
+            {
+                get { return placeholder; }
+                set { placeholder = value ?? ""; AplicarPlaceholder(); }
+            }
+
+            public CampoTexto()
+            {
+                SetStyle(EstiloPintado, true);
+                Height = 44;
+                Cursor = Cursors.IBeam;
+
+                caja = new TextBox { BorderStyle = BorderStyle.None, Font = Tema.Fuente(10F) };
+                caja.HandleCreated += (s, e) => AplicarPlaceholder();
+                caja.TextChanged += (s, e) =>
+                {
+                    if (error) { error = false; Invalidate(); }
+                    var h = TextoCambiado;
+                    if (h != null) h(this, EventArgs.Empty);
+                };
+                caja.KeyPress += (s, e) =>
+                {
+                    if (soloDigitos && !char.IsControl(e.KeyChar) && !char.IsDigit(e.KeyChar)) e.Handled = true;
+                };
+                caja.Enter += (s, e) => { enfocado = true; Invalidate(); };
+                caja.Leave += (s, e) => { enfocado = false; Invalidate(); };
+                Controls.Add(caja);
+            }
+
+            private void AplicarPlaceholder()
+            {
+                if (caja.IsHandleCreated) SendMessage(caja.Handle, 0x1501, (IntPtr)1, placeholder);   // EM_SETCUEBANNER
+            }
+
+            protected override void OnMouseDown(MouseEventArgs e) { base.OnMouseDown(e); caja.Focus(); }
+
+            protected override void OnLayout(LayoutEventArgs levent)
+            {
+                base.OnLayout(levent);
+
+                // AGREGA ESTA LÍNEA AQUÍ:
+                if (caja == null) return;
+
+                int izq = lupa ? 44 : 16;
+                caja.SetBounds(izq, Math.Max(0, (Height - caja.Height) / 2), Math.Max(10, Width - izq - 16), caja.Height);
+            }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                var g = e.Graphics;
+                Tema.Calidad(g);
+                g.Clear(Tema.FondoDe(this));
+
+                caja.BackColor = Tema.Elevado;
+                caja.ForeColor = Tema.Texto;
+
+                var r = new RectangleF(0.5F, 0.5F, Width - 2, Height - 2);
+                using (var p = Tema.Redondo(r, 12))
+                {
+                    using (var b = new SolidBrush(Tema.Elevado)) g.FillPath(b, p);
+                    Color borde = error ? Tema.Peligro : (enfocado ? Tema.AcentoTexto : Tema.Borde);
+                    using (var pen = new Pen(borde, error || enfocado ? 1.6F : 1F)) g.DrawPath(pen, p);
+                }
+
+                if (lupa)
+                {
+                    float cy = Height / 2f;
+                    using (var pen = new Pen(Tema.Suave, 1.8F) { EndCap = LineCap.Round })
+                    {
+                        g.DrawEllipse(pen, 17, cy - 8, 11, 11);
+                        g.DrawLine(pen, 26, cy + 1, 31, cy + 6);
+                    }
+                }
+            }
+        }
+
+        // ───────────── Selector (lista desplegable moderna) ─────────────
+        private sealed class SelectorModerno : Control
+        {
+            private readonly List<object> items = new List<object>();
+            private int indice = -1;
+            private bool hover;
+            private ToolStripDropDown popup;
+
+            public event EventHandler CambioSeleccion;
+            public string Placeholder = "Seleccionar";
+
+            public IList<object> Elementos { get { return items; } }
+            public object SelectedItem { get { return indice >= 0 && indice < items.Count ? items[indice] : null; } }
+
+            public int SelectedIndex
+            {
+                get { return indice; }
+                set
+                {
+                    indice = (value >= 0 && value < items.Count) ? value : -1;
+                    Invalidate();
+                    var h = CambioSeleccion;
+                    if (h != null) h(this, EventArgs.Empty);
+                }
+            }
+
+            public SelectorModerno()
+            {
+                SetStyle(EstiloPintado, true);
+                Height = 44;
+                Cursor = Cursors.Hand;
+            }
+
+            public void Agregar(object o) { items.Add(o); }
+            public void LimpiarItems() { items.Clear(); indice = -1; }
+            public int IndexOf(string texto) { return items.FindIndex(o => o.ToString() == texto); }
+
+            protected override void OnMouseEnter(EventArgs e) { base.OnMouseEnter(e); hover = true; Invalidate(); }
+            protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); hover = false; Invalidate(); }
+            protected override void OnEnabledChanged(EventArgs e) { base.OnEnabledChanged(e); Invalidate(); }
+            protected override void OnMouseClick(MouseEventArgs e) { base.OnMouseClick(e); MostrarLista(); }
+
+            private void MostrarLista()
+            {
+                if (!Enabled || items.Count == 0) return;
+                int resaltado = -1;
+
+                var lista = new ListBox
+                {
+                    BorderStyle = BorderStyle.None,
+                    DrawMode = DrawMode.OwnerDrawFixed,
+                    ItemHeight = 38,
+                    IntegralHeight = false,
+                    BackColor = Tema.Elevado,
+                    ForeColor = Tema.Texto
+                };
+                foreach (object o in items) lista.Items.Add(o);
+                if (indice >= 0) lista.SelectedIndex = indice;
+
+                lista.DrawItem += (s, ev) =>
+                {
+                    if (ev.Index < 0) return;
+                    bool sel = ev.Index == indice;
+                    Color fondoItem = ev.Index == resaltado ? Tema.Borde : Tema.Elevado;
+                    using (var b = new SolidBrush(fondoItem)) ev.Graphics.FillRectangle(b, ev.Bounds);
+                    TextRenderer.DrawText(ev.Graphics, lista.Items[ev.Index].ToString(),
+                        Tema.Fuente(9.5F, sel ? FontStyle.Bold : FontStyle.Regular),
+                        new Rectangle(ev.Bounds.X + 14, ev.Bounds.Y, ev.Bounds.Width - 44, ev.Bounds.Height),
+                        sel ? Tema.AcentoTexto : Tema.Texto,
+                        TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis);
+                    if (sel)
+                        TextRenderer.DrawText(ev.Graphics, "✓", Tema.Simbolo(10F),
+                            new Rectangle(ev.Bounds.Right - 30, ev.Bounds.Y, 24, ev.Bounds.Height),
+                            Tema.AcentoTexto, TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter);
+                };
+                lista.MouseMove += (s, ev) =>
+                {
+                    int i = lista.IndexFromPoint(ev.Location);
+                    if (i != resaltado) { resaltado = i; lista.Invalidate(); }
+                };
+                lista.MouseClick += (s, ev) =>
+                {
+                    int i = lista.IndexFromPoint(ev.Location);
+                    if (i < 0) return;
+                    popup.Close();
+                    SelectedIndex = i;
+                };
+
+                lista.Size = new Size(Width, Math.Min(items.Count, 7) * 38 + 2);
+                var host = new ToolStripControlHost(lista)
+                {
+                    Margin = Padding.Empty,
+                    Padding = Padding.Empty,
+                    AutoSize = false,
+                    Size = lista.Size
+                };
+                popup = new ToolStripDropDown
+                {
+                    Padding = Padding.Empty,
+                    BackColor = Tema.Elevado,
+                    AutoClose = true,
+                    DropShadowEnabled = false
+                };
+                popup.Items.Add(host);
+                popup.Show(this, new Point(0, Height + 4));
+            }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                var g = e.Graphics;
+                Tema.Calidad(g);
+                g.Clear(Tema.FondoDe(this));
+                int alfa = Enabled ? 255 : 100;
+
+                var r = new RectangleF(0.5F, 0.5F, Width - 2, Height - 2);
+                using (var p = Tema.Redondo(r, 12))
+                {
+                    using (var b = new SolidBrush(Tema.Alfa(Tema.Elevado, alfa))) g.FillPath(b, p);
+                    using (var pen = new Pen(Tema.Alfa(hover && Enabled ? Tema.AcentoTexto : Tema.Borde, alfa), 1F)) g.DrawPath(pen, p);
+                }
+
+                object sel = SelectedItem;
+                string texto = sel != null ? sel.ToString() : Placeholder;
+                Tema.DibujarEn(g, texto, Tema.Fuente(9.5F), Tema.Alfa(sel != null ? Tema.Texto : Tema.Suave, alfa),
+                    new RectangleF(16, 0, Width - 48, Height));
+
+                float cx = Width - 22, cy = Height / 2f;
+                using (var pen = new Pen(Tema.Alfa(Tema.Suave, alfa), 1.8F) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+                {
+                    g.DrawLine(pen, cx - 4, cy - 2, cx, cy + 2);
+                    g.DrawLine(pen, cx, cy + 2, cx + 4, cy - 2);
+                }
+            }
+        }
+
+        // ───────────── Interruptor Activo / Inactivo ─────────────
+        private sealed class InterruptorModerno : Control
+        {
+            private readonly string textoOn, textoOff;
+            private bool activo;
+
+            public bool Activo { get { return activo; } set { activo = value; Invalidate(); } }
+
+            public InterruptorModerno(string textoOn, string textoOff)
+            {
+                this.textoOn = textoOn; this.textoOff = textoOff;
+                SetStyle(EstiloPintado, true);
+                Height = 44;
+                Cursor = Cursors.Hand;
+            }
+
+            protected override void OnMouseClick(MouseEventArgs e) { base.OnMouseClick(e); Activo = !activo; }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                var g = e.Graphics;
+                Tema.Calidad(g);
+                g.Clear(Tema.FondoDe(this));
+
+                var pista = new RectangleF(2, (Height - 26) / 2f, 48, 26);
+                using (var p = Tema.Redondo(pista, 13))
+                using (var b = new SolidBrush(activo ? Tema.AcentoOsc : Tema.Borde))
+                    g.FillPath(b, p);
+                float d = 20;
+                float x = activo ? pista.Right - d - 3 : pista.X + 3;
+                g.FillEllipse(Brushes.White, x, pista.Y + 3, d, d);
+
+                Tema.DibujarEn(g, activo ? textoOn : textoOff, Tema.Fuente(9.5F, FontStyle.Bold),
+                    activo ? Tema.AcentoTexto : Tema.Suave, new RectangleF(62, 0, Width - 62, Height));
+            }
+        }
+
+        // ───────────── Pestañas segmentadas ─────────────
+        private sealed class PestanasModernas : Control
+        {
+            private string[] textos = new string[0], glifos = new string[0];
+            private int indice, hover = -1;
+
+            public event EventHandler CambioIndice;
+
+            public int Indice
+            {
+                get { return indice; }
+                set
+                {
+                    if (value == indice) return;
+                    indice = value;
+                    Invalidate();
+                    var h = CambioIndice;
+                    if (h != null) h(this, EventArgs.Empty);
+                }
+            }
+
+            public PestanasModernas()
+            {
+                SetStyle(EstiloPintado, true);
+                Height = 44;
+                Cursor = Cursors.Hand;
+            }
+
+            public void SetTextos(string[] t, string[] g)
+            {
+                textos = t; glifos = g;
+                Invalidate();
+            }
+
+            private int TabEn(Point p)
+            {
+                if (textos.Length == 0) return -1;
+                float w = (Width - 8f) / textos.Length;
+                int i = (int)((p.X - 4) / w);
+                return (i >= 0 && i < textos.Length) ? i : -1;
+            }
+
+            protected override void OnMouseMove(MouseEventArgs e)
+            {
+                base.OnMouseMove(e);
+                int i = TabEn(e.Location);
+                if (i != hover) { hover = i; Invalidate(); }
+            }
+
+            protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); hover = -1; Invalidate(); }
+
+            protected override void OnMouseClick(MouseEventArgs e)
+            {
+                base.OnMouseClick(e);
+                int i = TabEn(e.Location);
+                if (i >= 0) Indice = i;
+            }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                var g = e.Graphics;
+                Tema.Calidad(g);
+                g.Clear(Tema.FondoDe(this));
+
+                var caja = new RectangleF(0.5F, 0.5F, Width - 2, Height - 2);
+                using (var p = Tema.Redondo(caja, 13))
+                    using (var b = new SolidBrush(Tema.Elevado)) g.FillPath(b, p);
+
+                int n = textos.Length;
+                if (n == 0) return;
+                float w = (Width - 8f) / n;
+                for (int i = 0; i < n; i++)
+                {
+                    var r = new RectangleF(4 + i * w, 4, w - 2, Height - 8);
+                    bool sel = i == indice;
+                    if (sel)
+                    {
+                        using (var p = Tema.Redondo(r, 10))
+                        {
+                            using (var b = new SolidBrush(Tema.Superficie)) g.FillPath(b, p);
+                            using (var pen = new Pen(Tema.Alfa(Tema.Acento, 170), 1.4F)) g.DrawPath(pen, p);
+                        }
+                    }
+                    else if (i == hover)
+                    {
+                        using (var p = Tema.Redondo(r, 10))
+                        using (var b = new SolidBrush(Tema.Alfa(Tema.Borde, 120))) g.FillPath(b, p);
+                    }
+                    string g0 = i < glifos.Length ? glifos[i] + "  " : "";
+                    Tema.DibujarEn(g, g0 + textos[i], Tema.Fuente(9.25F, sel ? FontStyle.Bold : FontStyle.Regular),
+                        sel ? Tema.Texto : Tema.Suave, r, StringAlignment.Center, StringAlignment.Center);
+                }
+            }
+        }
+
+        // ───────────── Aviso flotante (toast) ─────────────
+        private sealed class Aviso : Control
+        {
+            private readonly System.Windows.Forms.Timer reloj;
+            private string texto = "", glifo = "✓";
+            private Color color = Tema.Verde;
+
+            public Aviso()
+            {
+                SetStyle(EstiloPintado, true);
+                Size = new Size(360, 56);
+                Visible = false;
+                reloj = new System.Windows.Forms.Timer { Interval = 3200 };
+                reloj.Tick += (s, e) => { reloj.Stop(); Visible = false; };
+            }
+
+            public void Mostrar(string mensaje, bool exito)
+            {
+                texto = mensaje;
+                color = exito ? Tema.Verde : Tema.Naranja;
+                glifo = exito ? "✓" : "!";
+                Visible = true;
+                BringToFront();
+                reloj.Stop();
+                reloj.Start();
+                Invalidate();
+            }
+
+            protected override void Dispose(bool disposing)
+            {
+                if (disposing) reloj.Dispose();
+                base.Dispose(disposing);
+            }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                var g = e.Graphics;
+                Tema.Calidad(g);
+                g.Clear(Tema.FondoDe(this));
+                var r = new RectangleF(0.5F, 0.5F, Width - 2, Height - 2);
+                using (var p = Tema.Redondo(r, 14))
+                {
+                    using (var b = new SolidBrush(Tema.Elevado)) g.FillPath(b, p);
+                    using (var pen = new Pen(Tema.Alfa(color, 160), 1.2F)) g.DrawPath(pen, p);
+                }
+                var ic = new RectangleF(14, (Height - 30) / 2f, 30, 30);
+                using (var b = new SolidBrush(Tema.Alfa(color, 50))) g.FillEllipse(b, ic);
+                Tema.DibujarEn(g, glifo, Tema.Fuente(11F, FontStyle.Bold), color, ic, StringAlignment.Center, StringAlignment.Center);
+                Tema.DibujarEn(g, texto, Tema.Fuente(9.5F, FontStyle.Bold), Tema.Texto,
+                    new RectangleF(56, 0, Width - 70, Height));
+            }
+        }
+
+        // ───────────── Ficha de persona (detalles) ─────────────
+        private sealed class FichaPersona : Control
+        {
+            public string Nombre = "", Subtitulo = "", Rol = "";
+            public bool Activo;
+            public List<KeyValuePair<string, string>> Datos = new List<KeyValuePair<string, string>>();
+
+            public FichaPersona() { SetStyle(EstiloPintado, true); }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                var g = e.Graphics;
+                Tema.Calidad(g);
+                g.Clear(Tema.FondoDe(this));
+
+                // Avatar y nombre
+                var av = new RectangleF(0, 6, 66, 66);
+                using (var b = new SolidBrush(Tema.ColorAvatar(Nombre))) g.FillEllipse(b, av);
+                Tema.DibujarEn(g, Tema.Iniciales(Nombre), Tema.Fuente(17F, FontStyle.Bold), Color.White, av,
+                    StringAlignment.Center, StringAlignment.Center);
+                Tema.DibujarEn(g, Nombre, Tema.Fuente(16F, FontStyle.Bold), Tema.Texto, new RectangleF(82, 6, Width - 82, 30));
+                Tema.DibujarEn(g, Subtitulo, Tema.Fuente(9.5F), Tema.Suave, new RectangleF(82, 36, Width - 82, 20));
+
+                // Insignias
+                float bx = 82;
+                string est = Activo ? "Activo" : "Inactivo";
+                float w1 = Tema.AnchoTexto(g, est, Tema.Fuente(8F, FontStyle.Bold)) + 40;
+                Tema.Insignia(g, est, Activo ? Tema.Verde : Tema.Peligro, new RectangleF(bx, 54, w1, 24), true);
+                bx += w1 + 8;
+                if (!string.IsNullOrEmpty(Rol) && Rol != "—")
+                {
+                    float w2 = Tema.AnchoTexto(g, Rol, Tema.Fuente(8F, FontStyle.Bold)) + 30;
+                    Tema.Insignia(g, Rol, Tema.ColorRol(Rol), new RectangleF(bx, 54, w2, 24), false);
+                }
+
+                // Datos en dos columnas
+                float y0 = 104;
+                float mitad = Width / 2f;
+                for (int i = 0; i < Datos.Count; i++)
+                {
+                    float x = (i % 2) * mitad;
+                    float y = y0 + (i / 2) * 58;
+                    Tema.Dibujar(g, Datos[i].Key.ToUpper(), Tema.Fuente(7.75F, FontStyle.Bold), Tema.Suave, x, y);
+                    string v = string.IsNullOrWhiteSpace(Datos[i].Value) ? "—" : Datos[i].Value;
+                    Tema.DibujarEn(g, v, Tema.Fuente(10.5F, FontStyle.Bold), Tema.Texto,
+                        new RectangleF(x, y + 16, mitad - 18, 26));
+                }
+
+                // Historial (estado vacío)
+                float yh = y0 + ((Datos.Count + 1) / 2) * 58 + 4;
+                var caja = new RectangleF(0, yh, Width - 1, Math.Max(0, Height - yh - 2));
+                if (caja.Height < 60) return;
+                using (var p = Tema.Redondo(caja, 14))
+                {
+                    using (var b = new SolidBrush(Tema.Elevado)) g.FillPath(b, p);
+                    using (var pen = new Pen(Tema.Borde, 1F)) g.DrawPath(pen, p);
+                }
+                Tema.Dibujar(g, "HISTORIAL DE MOVIMIENTOS", Tema.Fuente(7.75F, FontStyle.Bold), Tema.Suave, 18, yh + 14);
+                Tema.DibujarEn(g, "Aún no hay movimientos vinculados a este registro.", Tema.Fuente(9.5F, FontStyle.Bold), Tema.Texto,
+                    new RectangleF(18, yh + 36, Width - 36, 22));
+                Tema.DibujarEn(g, "Los retiros y devoluciones de equipos aparecerán aquí cuando se integre el módulo Movimientos.",
+                    Tema.Fuente(8.75F), Tema.Suave, new RectangleF(18, yh + 58, Width - 36, 22));
+            }
+        }
+
+        // ───────────── Ventana modal moderna ─────────────
+        private sealed class DialogoBase : Form
+        {
+            [DllImport("user32.dll")]
+            private static extern bool ReleaseCapture();
+            [DllImport("user32.dll")]
+            private static extern IntPtr SendMessage(IntPtr hWnd, int msg, int wParam, int lParam);
+
+            public readonly Panel Cuerpo = new Panel();
+            public readonly FlowLayoutPanel Pie = new FlowLayoutPanel();
+            public readonly Label MensajeError = new Label();
+
+            private readonly Panel cabecera = new Panel();
+            private readonly Panel barraPie = new Panel();
+            private readonly string titulo, subtitulo, glifo;
+            private readonly Color acento;
+
+            public DialogoBase(string titulo, string subtitulo, string glifo, Size cliente, Color acento)
+            {
+                this.titulo = titulo; this.subtitulo = subtitulo; this.glifo = glifo; this.acento = acento;
+
+                FormBorderStyle = FormBorderStyle.None;
+                StartPosition = FormStartPosition.CenterParent;
+                ShowInTaskbar = false;
+                ClientSize = cliente;
+                BackColor = Tema.Superficie;
+                Padding = new Padding(1);
+                DoubleBuffered = true;
+                Font = Tema.Fuente(9F);
+
+                Cuerpo.Dock = DockStyle.Fill;
+                Cuerpo.Padding = new Padding(26, 6, 26, 6);
+
+                cabecera.Dock = DockStyle.Top;
+                cabecera.Height = 88;
+                cabecera.Paint += PintarCabecera;
+                cabecera.MouseDown += Arrastrar;
+
+                barraPie.Dock = DockStyle.Bottom;
+                barraPie.Height = 78;
+                barraPie.Padding = new Padding(26, 16, 26, 16);
+                barraPie.Paint += (s, e) =>
+                {
+                    using (var pen = new Pen(Tema.Borde, 1F)) e.Graphics.DrawLine(pen, 0, 0, barraPie.Width, 0);
+                };
+
+                Pie.Dock = DockStyle.Right;
+                Pie.FlowDirection = FlowDirection.RightToLeft;
+                Pie.WrapContents = false;
+                Pie.AutoSize = true;
+                Pie.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+                Pie.Margin = Padding.Empty;
+
+                MensajeError.Dock = DockStyle.Fill;
+                MensajeError.ForeColor = Tema.Peligro;
+                MensajeError.Font = Tema.Fuente(9F, FontStyle.Bold);
+                MensajeError.TextAlign = ContentAlignment.MiddleLeft;
+
+                // Orden de agregado: Fill primero, luego los bordes
+                barraPie.Controls.Add(MensajeError);
+                barraPie.Controls.Add(Pie);
+                Controls.Add(Cuerpo);
+                Controls.Add(cabecera);
+                Controls.Add(barraPie);
+
+                var cerrar = new Label
+                {
+                    Text = "✕",
+                    AutoSize = false,
+                    Size = new Size(34, 34),
+                    TextAlign = ContentAlignment.MiddleCenter,
+                    Cursor = Cursors.Hand,
+                    ForeColor = Tema.Suave,
+                    Font = Tema.Simbolo(11F),
+                    BackColor = Color.Transparent
+                };
+                cerrar.MouseEnter += (s, e) => cerrar.ForeColor = Tema.Peligro;
+                cerrar.MouseLeave += (s, e) => cerrar.ForeColor = Tema.Suave;
+                cerrar.Click += (s, e) => { DialogResult = DialogResult.Cancel; Close(); };
+                cabecera.Controls.Add(cerrar);
+                cabecera.Resize += (s, e) => cerrar.Location = new Point(cabecera.Width - 34 - 18, 18);
+            }
+
+            private void PintarCabecera(object sender, PaintEventArgs e)
+            {
+                var g = e.Graphics;
+                Tema.Calidad(g);
+                var ic = new RectangleF(26, 22, 46, 46);
+                using (var p = Tema.Redondo(ic, 13))
+                using (var b = new SolidBrush(Tema.Alfa(acento, 42)))
+                    g.FillPath(b, p);
+                Color cg = acento == Tema.Acento ? Tema.AcentoTexto : acento;
+                Tema.DibujarEn(g, glifo, Tema.Simbolo(16F), cg, ic, StringAlignment.Center, StringAlignment.Center);
+
+                bool sinSub = string.IsNullOrEmpty(subtitulo);
+                Tema.DibujarEn(g, titulo, Tema.Fuente(14F, FontStyle.Bold), Tema.Texto,
+                    new RectangleF(86, sinSub ? 30 : 20, cabecera.Width - 150, 28));
+                if (!sinSub)
+                    Tema.DibujarEn(g, subtitulo, Tema.Fuente(9F), Tema.Suave, new RectangleF(86, 48, cabecera.Width - 150, 22));
+                using (var pen = new Pen(Tema.Borde, 1F))
+                    g.DrawLine(pen, 0, cabecera.Height - 1, cabecera.Width, cabecera.Height - 1);
+            }
+
+            private void Arrastrar(object sender, MouseEventArgs e)
+            {
+                if (e.Button != MouseButtons.Left) return;
+                ReleaseCapture();
+                SendMessage(Handle, 0xA1, 2, 0);   // WM_NCLBUTTONDOWN + HTCAPTION
+            }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                base.OnPaint(e);
+                using (var pen = new Pen(Tema.Borde, 1F))
+                    e.Graphics.DrawRectangle(pen, 0, 0, Width - 1, Height - 1);
+            }
+
+            protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+            {
+                if (keyData == Keys.Escape) { DialogResult = DialogResult.Cancel; Close(); return true; }
+                return base.ProcessCmdKey(ref msg, keyData);
+            }
+        }
     }
+}

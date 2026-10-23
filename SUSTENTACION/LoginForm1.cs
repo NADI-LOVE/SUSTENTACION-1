@@ -3,6 +3,8 @@ using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
+using Npgsql;
+using NpgsqlTypes;
 
 namespace SUSTENTACION
 {
@@ -337,7 +339,7 @@ namespace SUSTENTACION
 
             try
             {
-                using (MySqlConnection conn = conexionBD.ObtenerConexion())
+                using (NpgsqlConnection conn = conexionBD.ObtenerConexion())
                 {
                     // Agregamos t.id a la consulta para obtener el ID del trabajador
                     string query = @"SELECT t.id_trabajador, t.nombre, r.nombre_rol 
@@ -345,12 +347,12 @@ namespace SUSTENTACION
                                      INNER JOIN roles r ON t.id_rol = r.id_rol 
                                      WHERE t.correo = @correo AND t.password = @password";
 
-                    using (MySqlCommand cmd = new MySqlCommand(query, conn))
+                    using (NpgsqlCommand cmd = new NpgsqlCommand(query, conn))
                     {
                         cmd.Parameters.AddWithValue("@correo", email);
                         cmd.Parameters.AddWithValue("@password", password);
 
-                        using (MySqlDataReader reader = cmd.ExecuteReader())
+                        using (NpgsqlDataReader reader = cmd.ExecuteReader())
                         {
                             if (reader.Read())
                             {
