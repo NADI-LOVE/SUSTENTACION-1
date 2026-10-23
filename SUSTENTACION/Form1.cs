@@ -29,7 +29,6 @@ namespace SUSTENTACION
 
         public Form1()
         {
-            InitializeComponent();
             ConstruirInterfaz();
             CargarCredencialesGuardadas();
         }

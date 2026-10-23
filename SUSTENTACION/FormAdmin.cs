@@ -15,6 +15,7 @@ namespace SUSTENTACION
 {
     public partial class FormAdmin : Form
     {
+        public bool SesionCerrada { get; private set; } = false;
         // =========================================================
         // PANELES PRINCIPALES
         // =========================================================
@@ -881,8 +882,18 @@ namespace SUSTENTACION
 
         private void BtnCerrarSesion_Click(object? sender, EventArgs e)
         {
-            DialogResult result = MessageBox.Show("¿Estás seguro de que deseas cerrar sesión?", "Cerrar Sesión", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
-            if (result == DialogResult.Yes) this.Close();
+            DialogResult result = MessageBox.Show(
+                "¿Estás seguro de que deseas cerrar sesión?",
+                "Cerrar sesión",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question
+            );
+
+            if (result == DialogResult.Yes)
+            {
+                SesionCerrada = true;
+                this.Close();
+            }
         }
 
         protected override void OnFormClosed(FormClosedEventArgs e)
